@@ -44,8 +44,8 @@
 #' 
 #' @examples
 #' \dontrun{
-#' get_ch3_stats("example.ch3.parquet")
-#' get_ch3_stats("example.ch3.parquet", log_file = "stats.log", silently = TRUE)
+#' get_mod_stats("example.ch3.parquet")
+#' get_mod_stats("example.ch3.parquet", log_file = "stats.log", silently = TRUE)
 #' }
 #'
 #' @importFrom dplyr select summarise pull n_distinct count mutate collect
@@ -53,7 +53,7 @@
 #' 
 #' @export
 
-get_ch3_stats <- function(ch3_file, 
+get_mod_stats <- function(ch3_file, 
                           log_file = NULL,
                           min_reads = c(1, 5, 10, 15), 
                           call_prob_threshold = 0.9, 

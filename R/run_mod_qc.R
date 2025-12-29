@@ -45,25 +45,25 @@ run_mod_qc <- function(ch3_db,
   }
   
   message("calculating coverage stats...")
-  plot_ch3_cov(ch3_db, call_type, plot = plot, max_rows = max_rows)
+  plot_mod_cov(ch3_db, call_type, plot = plot, max_rows = max_rows)
   
   message("calculating mod stats...")
-  plot_ch3_modfrac(ch3_db, call_type, plot = plot, max_rows = max_rows)
+  plot_mod_modfrac(ch3_db, call_type, plot = plot, max_rows = max_rows)
   
   message("calculating correlations...")
-  do.call(calc_ch3_samplecor, list(
+  do.call(calc_mod_samplecor, list(
     ch3_db   = ch3_db,
-    call_type= call_type,
-    value    = value_col,   # <-- literal string now for argument parameter
+    call_type = call_type,
+    value    = value_sym,   # <-- literal string now for argument parameter
     plot     = plot,
     max_rows = max_rows
   ))
   
   message("running pca...")
-  do.call(plot_ch3_pca, list(
+  do.call(plot_mod_pca, list(
     ch3_db   = ch3_db,
     call_type= call_type,
-    value    = value_col,   # <-- literal string now for argument parameter
+    value    = value_sym,   # <-- literal string now for argument parameter
     max_rows = max_rows
   ))
   

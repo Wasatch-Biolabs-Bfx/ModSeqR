@@ -22,11 +22,11 @@
 #' 
 #' @examples
 #' \dontrun{
-#' make_ch3_archive("calls.tsv", "sample1", "output/", short_ids = TRUE)
+#' make_mod_archive("calls.tsv", "sample1", "output/", short_ids = TRUE)
 #' }
 #'
 #' @export
-make_ch3_archive <- function(file_name, 
+make_mod_archive <- function(file_name, 
                              sample_name,
                              out_path,
                              short_ids = TRUE) 
