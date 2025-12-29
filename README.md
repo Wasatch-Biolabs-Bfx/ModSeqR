@@ -78,29 +78,29 @@ ch3_db <- make_ch3_db(example_path, db_name = "example_db")
 
 
 ## Instructions
-Begin with .ch3 files created by Wasatch Biolabs or individually, and build a database using `make_ch3_db()`. 
-This will at first hold a calls table. If you would like to see key stats on your CH3 file, call `get_ch3_stats()`. This shows information like CpG coverage, calls by flag value, high confidence calls, high quality calls, and average read length.
+Begin with .ch3 files created by Wasatch Biolabs or individually, and build a database using `make_mod_db()`. 
+This will at first hold a calls table. If you would like to see key stats on your CH3 file, call `get_mod_stats()`. This shows information like CpG coverage, calls by flag value, high confidence calls, high quality calls, and average read length.
 
 ### Summarize Data
-After a database is created, a user can summarize their data by position (`summarize_ch3_positions()`), by regions (`summarize_ch3_regions()`), by windows (`summarize_ch3_windows()`), or by reads ((`summarize_ch3_reads()`). 
+After a database is created, a user can summarize their data by position (`summarize_mod_positions()`), by regions (`summarize_mod_regions()`), by windows (`summarize_mod_windows()`), or by reads ((`summarize_mod_reads()`). 
 
 
 
 ### Differential Methylation
-A differential methylation analysis can be conducted on positional, regional, or window data using `calc_ch3_diff()`. After calculating methylation differences between windows, use `collapse_ch3_windows()` to collapse significant windows in a methylation dataset. This merges contiguous regions that meet the specified criteria.
+A differential methylation analysis can be conducted on positional, regional, or window data using `calc_mod_diff()`. After calculating methylation differences between windows, use `collapse_mod_windows()` to collapse significant windows in a methylation dataset. This merges contiguous regions that meet the specified criteria.
 
 
 
 ### Get Database Stats
-If you would like to see key stats on your database at any time, including what unique sample names are in the data for a differential analysis, call `get_ch3_dbinfo()`. 
-To see what columns are in a table in your database and how many records (rows) there are, call `get_ch3_tableinfo()` with your database and desired table name.
+If you would like to see key stats on your database at any time, including what unique sample names are in the data for a differential analysis, call `get_mod_dbinfo()`. 
+To see what columns are in a table in your database and how many records (rows) there are, call `get_mod_tableinfo()` with your database and desired table name.
 
 
 
 ### Quality Control
-`run_ch3_qc()` can be called to visually assess any data. Running a QC can take a long time on large data, so set the argument `max_rows` to a reasonable value (ex. 1000) to assess data faster. To view and extract a table, call `export_table()` to export any data table from the database to a file, or use `get_table()` to import as a tibble into your local environment. Similarily, use `max_calls` if you are fine with a smaller, randomized set of data.
+`run_mod_qc()` can be called to visually assess any data. Running a QC can take a long time on large data, so set the argument `max_rows` to a reasonable value (ex. 1000) to assess data faster. To view and extract a table, call `export_table()` to export any data table from the database to a file, or use `get_table()` to import as a tibble into your local environment. Similarily, use `max_calls` if you are fine with a smaller, randomized set of data.
 
-If you would like to run everything in one command, call `run_ch3_analysis()`.
+If you would like to run everything in one command, call `run_mod_analysis()`.
 
 
 
@@ -110,43 +110,43 @@ You can pipe your functions together, or feel free to call each function one lin
 setwd("/home/directory/analysis")
 
 # Build database and run analysis in a pipe
-ch3_db <- make_ch3_db(
+mod_db <- make_mod_db(
   ch3_files = "../ch3_files_directory", 
              db_name = "my_data") |>
-  summarize_ch3_windows() |>
-  calc_ch3_diff(call_type = "windows",
+  summarize_mod_windows() |>
+  calc_mod_diff(call_type = "windows",
               cases =
                 c("sperm"),
               controls =
                 c("blood")) |>
-  collapse_ch3_windows() 
+  collapse_mod_windows() 
   
 # Build and analyze through separate lines
-ch3_db <- make_ch3_db(ch3_files = "../ch3_files_directory", db_name = "my_data")
-ch3_db <- summarize_ch3_windows(ch3_db)
-ch3_db <- calc_ch3_diff(ch3_db, call_type = "windows", cases = c("sperm"), controls = c("blood"))
-ch3_db <- collapse_ch3_windows(ch3_db) 
+mod_db <- make_mod_db(ch3_files = "../ch3_files_directory", db_name = "my_data")
+mod_db <- summarize_mod_windows(mod_db)
+mod_db <- calc_mod_diff(mod_db, call_type = "windows", cases = c("sperm"), controls = c("blood"))
+mod_db <- collapse_mod_windows(mod_db) 
 
 # Run entire differential methylation analysis in one function
-run_ch3_analysis(ch3_db, 
+run_mod_analysis(mod_db, 
              out_path = "/analysis",
              call_type = "windows",
              cases = c("sperm"),
              controls = c("blood"))
 
 # Check to see what's in your database at any time
-get_ch3_dbinfo(ch3_db)
+get_mod_dbinfo(mod_db)
 
 # Check to see the columns in any table 
-get_ch3_tableinfo(ch3_db, "windows")
+get_mod_tableinfo(mod_db, "windows")
 
 # Export differentially methylated data to your computer
-export_ch3_table(ch3_db, "collapsed_windows", "../results_directory")
+export_mod_table(mod_db, "collapsed_windows", "../results_directory")
 
 # OR, to work with your data locally in your R environment
-positions <- get_ch3_table(ch3_db, "positions")
-windows <- get_ch3_table(ch3_db, "windows")
-regions <- get_ch3_table(ch3_db, "regions")
+positions <- get_mod_table(mod_db, "positions")
+windows <- get_mod_table(mod_db, "windows")
+regions <- get_mod_table(mod_db, "regions")
 
 #DONE! Data has been analyzed and exported!
 
@@ -163,29 +163,29 @@ ModSeqR also provides a few helper utilities to make it easier to inspect and ma
 
 ```{r, eval=FALSE}
 # View all column names in a given table
-get_ch3_cols(ch3_db, "calls")
+get_mod_cols(mod_db, "calls")
 
 # Count unique CpG sites (based on start/end)
-get_ch3_cpg_count(ch3_db, table_name = "calls")
+get_mod_cpg_count(mod_db, table_name = "calls")
 
 # Show high-level database statistics (size, tables, sample names)
-get_ch3_dbinfo(ch3_db)
+get_mod_dbinfo(mod_db)
 
 # Get detailed information about a specific table
-get_ch3_tableinfo(ch3_db, "positions")
+get_mod_tableinfo(mod_db, "positions")
 
 # Rename sample names inside any table
-rename_ch3_samples(ch3_db, "positions",
+rename_mod_samples(mod_db, "positions",
                    samples_map = c("old_name" = "new_name"))
 
 # Remove a table from the database
-remove_ch3_table(ch3_db, "temp_table")
+remove_mod_table(mod_db, "temp_table")
 ```
 
 ## Getting Help
 To see detailed documentation on a specific function in R, call `?{function}`. Example:
 ```{r, eval = FALSE}
-?make_ch3_db()
+?make_mod_db()
 ```
 This will render development documentation for that function in the Help tab in Rstudio
 
