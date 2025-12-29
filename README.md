@@ -1,16 +1,16 @@
 <div style="display: flex; align-items: center; justify-content: center;">
-  <img src="inst/WBL_METHYLSEQR.png" alt="MethylSeqR Logo" style="width: 275px;">
+  <img src="inst/WBL_MODSEQR.png" alt="ModSeqR Logo" style="width: 275px;">
 </div>
 
 
-# MethylSeqR
+# ModSeqR
 
 ## Version 0.8.1 
 **(Updated December 16th 2025)**
 
 ***Note***: *This is an early release - changes may occur that significantly change the functionality and structure of the data and functions. The user should be aware that subsequent releases may break code written using earlier releases.*
 
-MethylSeqR is an R package managing Direct Whole Methylome Sequencing (dWMS) data. It creates a database, and processes it with unique options. Data can be summarized by positions, windows, or provided an annotation bed file, by unique genomic regions. The package also offers quality control functions, differential methylation, and a sliding window analysis.
+ModSeqR is an R package managing Direct Whole Methylome Sequencing (dWMS) data. It creates a database, and processes it with unique options. Data can be summarized by positions, windows, or provided an annotation bed file, by unique genomic regions. The package also offers quality control functions, differential methylation, and a sliding window analysis.
 
 
 
@@ -23,11 +23,11 @@ RStudio download instructions can be found [here](https://posit.co/download/rstu
 # Install the devtools package if necessary
 install.packages("devtools")
 
-# Install MethylSeqR from GitHub
-devtools::install_github("Wasatch-Biolabs-Bfx/MethylSeqR", build_vignettes = FALSE)
+# Install ModSeqR from GitHub
+devtools::install_github("Wasatch-Biolabs-Bfx/ModSeqR", build_vignettes = FALSE)
 
 # Access Package
-library(MethylSeqR)
+library(ModSeqR)
 ```
 
 ***For Linux Users:*** *System packages may need to be intalled in order to use devtools. Instructions can be found online. An example guide for this can be found [here](https://www.digitalocean.com/community/tutorials/how-to-install-r-packages-using-devtools-on-ubuntu-16-04).*
@@ -64,7 +64,7 @@ make_ch3_archive(
 
 If you’d like to test the package without generating your own .ch3 files, small example data are included with the package in:
 
-`MethylSeqR/inst/extdata/ch3_files/`
+`ModSeqR/inst/extdata/ch3_files/`
 
 You can download these example .ch3 files directly from the GitHub repository under the inst/extdata/ch3_files folder.
 
@@ -72,7 +72,7 @@ These test files can be used to practice building a database and running the ful
 
 ```{r, eval = FALSE}
 # Example: build a test database using included example files
-example_path <- system.file("extdata/ch3_files", package = "MethylSeqR")
+example_path <- system.file("extdata/ch3_files", package = "ModSeqR")
 ch3_db <- make_ch3_db(example_path, db_name = "example_db")
 ```
 
@@ -159,7 +159,7 @@ regions <- get_ch3_table(ch3_db, "regions")
 
 ### Convenience Functions
 
-MethylSeqR also provides a few helper utilities to make it easier to inspect and manage your database:
+ModSeqR also provides a few helper utilities to make it easier to inspect and manage your database:
 
 ```{r, eval=FALSE}
 # View all column names in a given table
@@ -190,16 +190,16 @@ To see detailed documentation on a specific function in R, call `?{function}`. E
 This will render development documentation for that function in the Help tab in Rstudio
 
 ### Vignette
-To get detailed instructions and help working through the package, download and view our vignette in this github repo at `docs/MethylSeqRWalkthrough.html`.
+To get detailed instructions and help working through the package, download and view our vignette in this github repo at `docs/ModSeqRWalkthrough.html`.
 
 Or, build and follow along the vignette by calling:
 ```{r, eval = FALSE}
-browseVignettes("MethylSeqR")
+browseVignettes("ModSeqR")
 ```
 in R and click on HTML in your browser. Or, to browse the vignette in your R environment, call
 
 ```{r, eval = FALSE}
-vignette("MethylSeqRWalkthrough")
+vignette("ModSeqRWalkthrough")
 ```
 
 ## License

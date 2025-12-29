@@ -1,4 +1,4 @@
-Package: MethylSeqR
+Package: ModSeqR
 Type: Package
 Title: Process and Analyze Nanopore Sequencing Methylation Data
 Version: 0.8.2
@@ -7,7 +7,7 @@ Authors@R:
       person(given = "Jonathon", family = "Hill", email = "jonathon@wasatchbiolabs.com", role = c("aut", "cre")),
       person(given = "Hailey", family = "Zimmerman", email = "hailey@renewbt.com", role = "aut")
     )
-Description: MethylSeqR creates methylation databases and processes them with customizable options.
+Description: ModSeqR creates methylation databases and processes them with customizable options.
     Data can be summarized by positions, windows, or provided genomic annotations (e.g., BED files).
     The package includes quality control, differential methylation analysis, and sliding window support.
 Depends: R (>= 4.1.0)
@@ -33,6 +33,6 @@ Suggests:
     rmarkdown,
     testthat (>= 3.0.0)
 VignetteBuilder: knitr
-URL: https://github.com/Wasatch-Biolabs-Bfx/MethylSeqR
+URL: https://github.com/Wasatch-Biolabs-Bfx/ModSeqR
 biocViews: Software, Sequencing, Epigenetics, Methylation
 Config/testthat/edition: 3
