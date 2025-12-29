@@ -1,6 +1,6 @@
-#' MethylSeqR: Methylation Data Analysis from Nanopore Sequencing
+#' ModSeqR: Methylation Data Analysis from Nanopore Sequencing
 #'
-#' MethylSeqR is an R package developed by Wasatch Biolabs for efficient
+#' ModSeqR is an R package developed by Wasatch Biolabs for efficient
 #' preprocessing, summarization, and visualization of methylation data.
 #' It supports native DNA methylation sequencing workflows and is
 #' optimized for high-throughput pipelines.
@@ -16,28 +16,28 @@
 #' Jonathon Hill \email{jonathon@wasatchbiolabs.com} (aut, cre)
 #' Hailey Zimmerman \email{hailey@renewbt.com} (aut)
 #' 
-#' @name MethylSeqR
+#' @name ModSeqR
 #'
 #' @references
-#' Wasatch Biolabs (2025). *MethylSeqR: Tools for Methylation Analysis in Clinical and Research Settings.*
+#' Wasatch Biolabs (2025). *ModSeqR: Tools for Methylation Analysis in Clinical and Research Settings.*
 #' https://www.wasatchbiolabs.com/
 #' 
 #' For bug reports and feature requests:  
-#' https://github.com/Wasatch-Biolabs-Bfx/MethylSeqR
+#' https://github.com/Wasatch-Biolabs-Bfx/ModSeqR
 "_PACKAGE"
 
 .onAttach <- function(lib, pkg)
 {
   pv <- packageVersion(pkg)
   msg1 <- 
-    glue::glue("========================================",    
-               "  ╔╦╗╔═╗╔╦╗╦ ╦╦ ╦╦  ╔═╗╔═╗╔═╗ ╦═╗       ",
-               "  ║║║║╣  ║ ╠═╣╚╦╝║  ╚═╗║╣ ║═╬╗╠╦╝       ",
-               "  ╩ ╩╚═╝ ╩ ╩ ╩ ╩ ╩═╝╚═╝╚═╝╚═╝╚╩╚═{pv}   ",
+    glue::glue("========================================",  
+               "    ╔╦╗╔═╗╔╦╗╔═╗╔═╗╔═╗ ╦═╗                ",
+               "    ║║║║ ║ ║║╚═╗║╣ ║═╬╗╠╦╝               ",
+               "    ╩ ╩╚═╝═╩╝╚═╝╚═╝╚═╝╚╩╚═{pv}              ",
                "========================================",
                .sep = "\n")
   
-  msg2 <- paste("MethylSeqR v", packageVersion(pkg))
+  msg2 <- paste("ModSeqR v", packageVersion(pkg))
   
   if (interactive()) {
     packageStartupMessage(msg1)
@@ -52,5 +52,5 @@
   packageStartupMessage("This package is licensed for personal") 
   packageStartupMessage("and internal research use only.")
   packageStartupMessage("See the LICENSE file or visit")
-  packageStartupMessage("https://github.com/Wasatch-Biolabs-Bfx/MethylSeqR/blob/main/LICENSE.")
+  packageStartupMessage("https://github.com/Wasatch-Biolabs-Bfx/ModSeqR/blob/main/LICENSE.")
 }

@@ -1,5 +1,5 @@
 ---
-title: "Using the MethylSeqR package"
+title: "Using the ModSeqR package"
 author: "Hailey Zimmerman and Jonathon T. Hill, PhD"
 date: "`r Sys.Date()`"
 output: 
@@ -9,21 +9,21 @@ output:
     toc_float: true
     css: "bioconductor2.css"
 vignette: >
-  %\VignetteIndexEntry{Using the MethylSeqR package}
+  %\VignetteIndexEntry{Using the ModSeqR package}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}  
 ---
   
 ```{r, include=FALSE}
 library(knitr, quietly=TRUE)
-library(MethylSeqR, quietly=TRUE)
+library(ModSeqR, quietly=TRUE)
 # library(Biostrings, quietly=TRUE)
 opts_chunk$set(tidy=FALSE, tidy.opts=list(width.cutoff=70))
 ```
 
 # Introduction
 
-The `MethylSeqR` package provides basic functions for importing and 
+The `ModSeqR` package provides basic functions for importing and 
 working with third-generation methylation sequencing data.
 
 This vignette will walk you through a typical workflow. If sequencing data is coming from
@@ -41,7 +41,7 @@ analyze within a single directory to get started.
 
 If your methylation calls are in a delimited text file (e.g., from a `modkit extract-calls` TSV),
 you can convert them into compressed `.ch3` archives using `make_ch3_archive()`. 
-This will dramatically reduce file size and allow use of the MethylSeqR package.
+This will dramatically reduce file size and allow use of the ModSeqR package.
 
 `make_ch3_archive()` reads a tab-delimited calls file, selects and transforms the 
 required columns, and writes a compressed Arrow dataset to `out_path` using zstd compression. 
@@ -102,7 +102,7 @@ Here is an example:
 
 ```{r eval=FALSE}
 # Example: directory of CH3 files; auto-derived sample names
-ch3_files <- system.file("TEST_DATA", package = "MethylSeqR")   # adjust as needed
+ch3_files <- system.file("TEST_DATA", package = "ModSeqR")   # adjust as needed
 ch3_db    <- tempfile("example_db")
 make_ch3_db(ch3_files, ch3_db)
 
@@ -155,7 +155,7 @@ You choose the join type via `join = "inner" | "left" | "right"`; inner keeps on
 As with positions, you specify any set of `mod_code` values (single or combined like "m + h"), `unmod_code`, `unmod_label`, and filters (`chrs`, `samples`, `min_num_calls`). Output columns include `sample_name`, `region_name`, `chrom`, `start`, `end`, `num_CpGs` (number of positions aggregated), `num_calls`, and the `<label>_counts/<label>_frac` columns for all requested labels.
 
 ```{r eval=FALSE}
-region_bed = system.file("Islands_hg38_test.csv", package = "MethylSeqR")
+region_bed = system.file("Islands_hg38_test.csv", package = "ModSeqR")
 # Minimal call
 summarize_ch3_regions(ch3_db, region_file = region_bed)
 
@@ -197,7 +197,7 @@ A table called "reads" will be built into the database.
 
 ```{r eval=FALSE}
 # Specify the path to the database
-ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
  
 # Calculate windows
 summarize_ch3_reads(ch3_db)
@@ -340,7 +340,7 @@ You can always override this behavior by explicitly setting `calc_type` yourself
 
 ```{r eval=FALSE}
 # Specify the path to the database
-ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
   
 # Get methylation statistics for the 'positions' call type without plotting
 calc_ch3_diff(ch3_db = ch3_db,
@@ -362,7 +362,7 @@ minimum absolute methylation difference required for inclusion in the analysis (
 
 ```{r, eval=FALSE}
 # Specify the path to the database
-ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
   
 # Collapse significant windows
 collapse_ch3_windows("my_data.ch3.db")
@@ -381,7 +381,7 @@ This function automates an entire workflow in one command. It identifies differe
 
 ```{r, eval=FALSE}
 # Specify the path to the database
-ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
   
 # Collapse significant windows
 run_ch3_analysis(ch3_db, 
@@ -403,7 +403,7 @@ methylation data.
 
 ```{r eval=FALSE}
 # Specify the path to the database
-ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
  
 # Get coverage statistics for the 'positions' call type
 plot_ch3_cov(ch3_db = ch3_db, call_type = "positions")
@@ -417,7 +417,7 @@ the user's preference.
 
 ```{r eval=FALSE}
 # Specify the path to the database
-ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
  
 # Get methylation statistics for the 'positions' call type without plotting
 plot_ch3_modfrac(ch3_db = ch3_db, call_type = "positions")
@@ -431,7 +431,7 @@ visualization using ggplot2.
 
 ```{r eval=FALSE}
 # Specify the path to the database
-ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
  
 # Run the correlation matrix function using the 'positions' call type and plot the results
 calc_ch3_samplecor(ch3_db = ch3_db, call_type = "positions", plot = TRUE)
@@ -443,7 +443,7 @@ retrieved from the database.It aggregates the methylation fraction data
 based on the specified call type and prepares it for PCA analysis.
 ```{r eval=FALSE}
 # Specify the path to the database
-ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
  
 # Calculate PCA
 plot_ch3_pca(ch3_db)
@@ -457,7 +457,7 @@ on methylation data at the same time.
 
 ```{r eval=FALSE}
 # Specify the path to the database
-ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
  
 # Calculate windows
 run_ch3_qc(ch3_db)
@@ -473,7 +473,7 @@ Arguments required includes the database, and name of the table to be retrieved.
 
 ```{r, eval=FALSE}
 # Specify the path to the database
-ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
  
 # Get any table in your database and create a variable in R to work with
 positions = get_ch3_table("my_data.ch3.db", "positions")
@@ -490,7 +490,7 @@ the CSV files will be saved.
 
 ```{r, eval=FALSE}
 # Specify the path to the database
-ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
  
 # Export the table to your computer
 export_ch3_table("my_data.ch3.db", 
@@ -505,6 +505,6 @@ export_ch3_table("my_data.ch3.db",
 
 # Conclusion
 In this vignette, we have walked you through the basic functions in the 
-`MethylSeqR` package. This work is a work in progress and we hope to 
+`ModSeqR` package. This work is a work in progress and we hope to 
 improve its functionality. If you have any suggestions or 
 requested features, please email Jonathon Hill at jhill@byu.edu.
