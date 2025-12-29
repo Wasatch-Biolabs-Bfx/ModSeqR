@@ -16,7 +16,7 @@
 #' unmodified class is defined by \code{unmod_code} (default \code{"-"}), named
 #' using \code{unmod_label} (default \code{"c"} → \code{c_counts}, \code{c_frac}).
 #'
-#' @param ch3_db Path to a \code{.ch3.db} DuckDB file or a \code{"ch3_db"} object.
+#' @param mod_db Path to a \code{.mod.db} DuckDB file or a \code{"mod_db"} object.
 #'   A connection is opened via internal helpers and cleaned on return.
 #' @param input_table Source table containing call-level records (default \code{"calls"}).
 #'   Must contain at least: \code{sample_name}, \code{chrom}, \code{start}, \code{end}, \code{call_code}.
@@ -57,7 +57,7 @@
 #'         \code{<label>_frac} = \code{<label>_counts / num_calls}.
 #' }
 #'
-#' @return (Invisibly) a \code{"ch3_db"} object pointing to the same DB file with
+#' @return (Invisibly) a \code{"mod_db"} object pointing to the same DB file with
 #'   \code{current_table} set to \code{output_table}. The created table has columns:
 #'   \itemize{
 #'     \item \code{sample_name}, \code{region_name}, \code{chrom}, \code{start}, \code{end},
@@ -70,13 +70,13 @@
 #' \dontrun{
 #' # Default m/h summary by regions
 #' summarize_mod_regions(
-#'   ch3_db      = "my_db.ch3.db",
+#'   mod_db      = "my_db.mod.db",
 #'   region_file = "islands_hg38.bed"
 #' )
 #'
 #' # Novel 'a' code and m+h combination, left join to keep empty regions
 #' summarize_mod_regions(
-#'   ch3_db      = "my_db.ch3.db",
+#'   mod_db      = "my_db.mod.db",
 #'   region_file = "islands_hg38.csv",
 #'   mod_code    = c("a","m + h"),
 #'   join        = "left",
@@ -85,10 +85,10 @@
 #' }
 #'
 #' @seealso
-#' \code{\link{make_ch3_db}},
-#' \code{\link{summarize_ch3_positions}},
-#' \code{\link{summarize_ch3_windows}},
-#' \code{\link{calc_ch3_diff}}
+#' \code{\link{make_mod_db}},
+#' \code{\link{summarize_mod_positions}},
+#' \code{\link{summarize_mod_windows}},
+#' \code{\link{calc_mod_diff}}
 #'
 #' @importFrom DBI dbExecute dbExistsTable dbGetQuery dbWriteTable dbQuoteIdentifier dbRemoveTable
 #' @importFrom glue glue
@@ -96,7 +96,7 @@
 #' @importFrom tools file_ext
 #' @export
 
-summarize_mod_regions <- function(ch3_db,
+summarize_mod_regions <- function(mod_db,
                                   input_table  = "calls",
                                   output_table = "regions",
                                   region_file,
@@ -146,26 +146,26 @@ summarize_mod_regions <- function(ch3_db,
   }
   
   # ---- Open DB and set resource caps ------------------------------------------
-  ch3_db <- MethylSeqR:::.ch3helper_connectDB(ch3_db)
+  mod_db <- ModSeqR:::.modhelper_connectDB(mod_db)
   
   caps <- .auto_duckdb_resource_caps(0.80)
   thr  <- if (is.null(threads)) caps$threads else threads
   mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
   
   dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA threads=%d;", thr))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", thr))
   
-  in_id  <- as.character(DBI::dbQuoteIdentifier(ch3_db$con, input_table))
-  out_id <- as.character(DBI::dbQuoteIdentifier(ch3_db$con, output_table))
+  in_id  <- as.character(DBI::dbQuoteIdentifier(mod_db$con, input_table))
+  out_id <- as.character(DBI::dbQuoteIdentifier(mod_db$con, output_table))
   
-  if (DBI::dbExistsTable(ch3_db$con, output_table) && overwrite)
-    DBI::dbRemoveTable(ch3_db$con, output_table)
+  if (DBI::dbExistsTable(mod_db$con, output_table) && overwrite)
+    DBI::dbRemoveTable(mod_db$con, output_table)
   
   # ---- Determine sample list ---------------------------------------------------
   samp_query <- sprintf("SELECT DISTINCT sample_name FROM %s WHERE sample_name IS NOT NULL", in_id)
-  all_samps <- DBI::dbGetQuery(ch3_db$con, samp_query)[,1]
+  all_samps <- DBI::dbGetQuery(mod_db$con, samp_query)[,1]
   if (!is.null(samples)) {
     all_samps <- intersect(all_samps, samples)
   }
@@ -196,18 +196,18 @@ summarize_mod_regions <- function(ch3_db,
       {frac_nulls}
     WHERE 1=0;
   ")
-  DBI::dbExecute(ch3_db$con, schema_sql)
+  DBI::dbExecute(mod_db$con, schema_sql)
   
   # ---- Upload annotation to temp table -----------------------------------------
-  DBI::dbExecute(ch3_db$con, "DROP TABLE IF EXISTS temp_annotation;")
-  DBI::dbWriteTable(ch3_db$con, "temp_annotation", annotation, temporary = TRUE)
+  DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_annotation;")
+  DBI::dbWriteTable(mod_db$con, "temp_annotation", annotation, temporary = TRUE)
   
   # ---- Chromosome filter clause ------------------------------------------------
   chr_clause <- .chrom_filter_sql(chrs)
   
   # ---- Harmonize 'chr' prefix if needed (simple heuristic) ---------------------
   # Check whether positions have 'chr' prefix
-  has_chr_positions <- DBI::dbGetQuery(ch3_db$con, sprintf("
+  has_chr_positions <- DBI::dbGetQuery(mod_db$con, sprintf("
     SELECT CASE WHEN EXISTS (
       SELECT 1 FROM %s WHERE chrom LIKE 'chr%%' LIMIT 1
     ) THEN 1 ELSE 0 END AS v
@@ -217,10 +217,10 @@ summarize_mod_regions <- function(ch3_db,
   
   if (has_chr_positions && !has_chr_annot) {
     # add 'chr' to annotation
-    DBI::dbExecute(ch3_db$con, "UPDATE temp_annotation SET chrom = 'chr' || CAST(chrom AS VARCHAR);")
+    DBI::dbExecute(mod_db$con, "UPDATE temp_annotation SET chrom = 'chr' || CAST(chrom AS VARCHAR);")
   } else if (!has_chr_positions && has_chr_annot) {
     # strip 'chr' from annotation
-    DBI::dbExecute(ch3_db$con, "UPDATE temp_annotation SET chrom = REGEXP_REPLACE(chrom, '^chr', '');")
+    DBI::dbExecute(mod_db$con, "UPDATE temp_annotation SET chrom = REGEXP_REPLACE(chrom, '^chr', '');")
   }
   
   # ---- Process per sample: position counts -> region aggregation ---------------
@@ -241,7 +241,7 @@ summarize_mod_regions <- function(ch3_db,
       WHERE sample_name = '{samp_esc}' AND start > 0{chr_clause}
       GROUP BY sample_name, chrom, start, \"end\"
     ")
-    DBI::dbExecute(ch3_db$con, pos_view)
+    DBI::dbExecute(mod_db$con, pos_view)
     
     # Build dynamic SUMs and fractions at region level
     sum_counts <- paste(sprintf("COALESCE(SUM(p.%s_counts), 0) AS %s_counts", labels, labels),
@@ -276,18 +276,18 @@ summarize_mod_regions <- function(ch3_db,
       HAVING COALESCE(SUM(p.num_calls), 0) >= {min_num_calls};
     ")
     
-    DBI::dbExecute(ch3_db$con, "DROP TABLE IF EXISTS temp_regions;")
-    DBI::dbExecute(ch3_db$con, reg_sql)
-    DBI::dbExecute(ch3_db$con, glue::glue("INSERT INTO {out_id} SELECT * FROM temp_regions;"))
-    DBI::dbExecute(ch3_db$con, "DROP TABLE IF EXISTS temp_regions;")
-    DBI::dbExecute(ch3_db$con, "DROP VIEW IF EXISTS temp_positions;")
+    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_regions;")
+    DBI::dbExecute(mod_db$con, reg_sql)
+    DBI::dbExecute(mod_db$con, glue::glue("INSERT INTO {out_id} SELECT * FROM temp_regions;"))
+    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_regions;")
+    DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_positions;")
   }
   
   # ---- Finish ------------------------------------------------------------------
   message("Regions table created as ", output_table,
           " (", round(as.numeric(Sys.time() - start_time, "secs"), 1), "s).")
   
-  ch3_db$current_table <- output_table
-  ch3_db <- MethylSeqR:::.ch3helper_cleanup(ch3_db)
-  invisible(ch3_db)
+  mod_db$current_table <- output_table
+  mod_db <- ModSeqR:::.modhelper_cleanup(mod_db)
+  invisible(mod_db)
 }

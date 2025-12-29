@@ -2,13 +2,13 @@
 % Please edit documentation in R/get_mod_cpg_count.R
 \name{get_mod_cpg_count}
 \alias{get_mod_cpg_count}
-\title{Count unique CpG sites in a CH3 database table}
+\title{Count unique CpG sites in a mod database table}
 \usage{
-get_mod_cpg_count(ch3_db, table_name = "calls")
+get_mod_cpg_count(mod_db, table_name = "calls")
 }
 \arguments{
-\item{ch3_db}{Character string giving the path to a CH3 database file,
-or an object/handle accepted by \code{.ch3helper_connectDB()}.}
+\item{mod_db}{Character string giving the path to a mod database file,
+or an object/handle accepted by \code{.modhelper_connectDB()}.}
 
 \item{table_name}{Character scalar. Name of the table to query. Defaults to
 \code{"calls"}.}
@@ -21,25 +21,25 @@ An integer (length-one) giving the number of unique CpG sites,
 }
 \description{
 Computes the number of unique CpG sites (defined by distinct pairs of
-\code{start} and \code{end} positions) in a table of calls within a CH3
-database. Accepts either a file path to a database or an existing CH3
+\code{start} and \code{end} positions) in a table of calls within a mod
+database. Accepts either a file path to a database or an existing mod
 database object.
 }
 \section{Errors}{
 
-If \code{ch3_db} is a character path and the file does not exist, an error is
+If \code{mod_db} is a character path and the file does not exist, an error is
 thrown with \code{stop()} before attempting any connection.
 }
 
 \examples{
 \dontrun{
 # Using a file path
-n <- get_ch3_cpg_count("/path/to/ch3.sqlite", table_name = "calls")
+n <- get_mod_cpg_count("/path/to/my.mod.db", table_name = "calls")
 n
 
 # Using a pre-opened handle (package-internal)
-dbh <- .ch3helper_connectDB("/path/to/ch3.sqlite")
-get_ch3_cpg_count(dbh)              # prints summary, returns value invisibly
+dbh <- .modhelper_connectDB("/path/to/my.mod.db")
+get_mod_cpg_count(dbh)              # prints summary, returns value invisibly
 }
 
 }

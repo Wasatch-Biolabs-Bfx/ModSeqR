@@ -5,7 +5,7 @@
 \title{Summarize methylation by annotated regions}
 \usage{
 summarize_mod_regions(
-  ch3_db,
+  mod_db,
   input_table = "calls",
   output_table = "regions",
   region_file,
@@ -24,7 +24,7 @@ summarize_mod_regions(
 )
 }
 \arguments{
-\item{ch3_db}{Path to a \code{.ch3.db} DuckDB file or a \code{"ch3_db"} object.
+\item{mod_db}{Path to a \code{.mod.db} DuckDB file or a \code{"mod_db"} object.
 A connection is opened via internal helpers and cleaned on return.}
 
 \item{input_table}{Source table containing call-level records (default \code{"calls"}).
@@ -66,7 +66,7 @@ If \code{NULL}, an internal heuristic (~80\% of RAM) is used.}
 \item{overwrite}{If \code{TRUE} and \code{output_table} exists, it is dropped before writing.}
 }
 \value{
-(Invisibly) a \code{"ch3_db"} object pointing to the same DB file with
+(Invisibly) a \code{"mod_db"} object pointing to the same DB file with
   \code{current_table} set to \code{output_table}. The created table has columns:
   \itemize{
     \item \code{sample_name}, \code{region_name}, \code{chrom}, \code{start}, \code{end},
@@ -112,13 +112,13 @@ using \code{unmod_label} (default \code{"c"} → \code{c_counts}, \code{c_frac})
 \dontrun{
 # Default m/h summary by regions
 summarize_mod_regions(
-  ch3_db      = "my_db.ch3.db",
+  mod_db      = "my_db.mod.db",
   region_file = "islands_hg38.bed"
 )
 
 # Novel 'a' code and m+h combination, left join to keep empty regions
 summarize_mod_regions(
-  ch3_db      = "my_db.ch3.db",
+  mod_db      = "my_db.mod.db",
   region_file = "islands_hg38.csv",
   mod_code    = c("a","m + h"),
   join        = "left",
@@ -128,8 +128,8 @@ summarize_mod_regions(
 
 }
 \seealso{
-\code{\link{make_ch3_db}},
-\code{\link{summarize_ch3_positions}},
-\code{\link{summarize_ch3_windows}},
-\code{\link{calc_ch3_diff}}
+\code{\link{make_mod_db}},
+\code{\link{summarize_mod_positions}},
+\code{\link{summarize_mod_windows}},
+\code{\link{calc_mod_diff}}
 }

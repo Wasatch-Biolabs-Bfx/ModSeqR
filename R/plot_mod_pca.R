@@ -4,7 +4,7 @@
 #' retrieved from a DuckDB database. It aggregates the chosen value column based on the
 #' specified call type and prepares it for PCA analysis.
 #'
-#' @param ch3_db A list containing the database file path. This should be a valid "ch3_db" class object.
+#' @param mod_db A list containing the database file path. This should be a valid "mod_db" class object.
 #' @param call_type A string representing the name of the table in the database from which to pull the data.
 #'   Default is "positions".
 #' @param value Column to use as the measurement for PCA (e.g., `mh_frac`, `m_frac`). Accepts a bare column
@@ -22,11 +22,11 @@
 #' @examples
 #' \dontrun{
 #' # Default (m_frac)
-#'  plot_mod_pca(ch3_db)
+#'  plot_mod_pca(mod_db)
 #'  # Use mh_frac instead
-#'  plot_mod_pca(ch3_db, call_type = "regions", value = mh_frac)
+#'  plot_mod_pca(mod_db, call_type = "regions", value = mh_frac)
 #'  # Or as a string
-#'  plot_mod_pca(ch3_db, call_type = "windows", value = "mh_frac")
+#'  plot_mod_pca(mod_db, call_type = "windows", value = "mh_frac")
 #' }
 #'
 #' @importFrom DBI dbConnect dbDisconnect dbGetQuery
@@ -37,7 +37,7 @@
 #' @importFrom ggplot2 ggplot aes geom_point theme_minimal labs ggsave
 #' @importFrom rlang ensym as_name
 #' @export
-plot_mod_pca <- function(ch3_db,
+plot_mod_pca <- function(mod_db,
                          call_type = "positions",
                          value = m_frac,
                          save_path = NULL,
@@ -45,7 +45,7 @@ plot_mod_pca <- function(ch3_db,
 {
   start_time <- Sys.time()
   # Open the database connection
-  ch3_db <- .ch3helper_connectDB(ch3_db)
+  mod_db <- .modhelper_connectDB(mod_db)
   
   # Resolve `value` (supports bare name or string)
   value_sym <- rlang::ensym(value)
@@ -53,22 +53,22 @@ plot_mod_pca <- function(ch3_db,
   
   # If max_rows is specified, check table size and sample rows randomly in SQL
   if (!is.null(max_rows)) {
-    row_count <- DBI::dbGetQuery(ch3_db$con, paste0("SELECT COUNT(*) as n FROM ", call_type))$n
+    row_count <- DBI::dbGetQuery(mod_db$con, paste0("SELECT COUNT(*) as n FROM ", call_type))$n
     if (row_count < max_rows) {
-      .ch3helper_closeDB(ch3_db)
+      .modhelper_closeDB(mod_db)
       stop(paste0("Table '", call_type, "' only has ", row_count,
                   " rows, which is fewer than max_rows = ", max_rows, ". Pick fewer rows."))
     }
     # Use SQL random sampling with ORDER BY RANDOM()
-    modseq_dat <- DBI::dbGetQuery(ch3_db$con, paste0("SELECT * FROM ", call_type, " ORDER BY RANDOM() LIMIT ", max_rows))
+    modseq_dat <- DBI::dbGetQuery(mod_db$con, paste0("SELECT * FROM ", call_type, " ORDER BY RANDOM() LIMIT ", max_rows))
   } else {
     # Retrieve full table if max_rows is not specified
-    modseq_dat <- dplyr::tbl(ch3_db$con, call_type) |> dplyr::collect()
+    modseq_dat <- dplyr::tbl(mod_db$con, call_type) |> dplyr::collect()
   }
   
   # --- Check that the requested `value` column exists ---
   if (!(value_col %in% colnames(modseq_dat))) {
-    .ch3helper_closeDB(ch3_db)
+    .modhelper_closeDB(mod_db)
     stop(paste0(
       "The specified `value` column '", value_col, "' does not exist in the '", call_type, "' table.\n",
       "Available columns: ", paste(colnames(modseq_dat), collapse = ", "), "."
@@ -101,7 +101,7 @@ plot_mod_pca <- function(ch3_db,
   
   # Ensure the collected data has the correct structure
   if (ncol(test_wide) <= 1) {
-    .ch3helper_closeDB(ch3_db)
+    .modhelper_closeDB(mod_db)
     stop("The data doesn't have enough columns for PCA after processing.")
   }
   
@@ -142,6 +142,6 @@ plot_mod_pca <- function(ch3_db,
   end_time <- Sys.time()
   message("Time elapsed: ", end_time - start_time, "\n")
   
-  .ch3helper_closeDB(ch3_db)
-  invisible(ch3_db)
+  .modhelper_closeDB(mod_db)
+  invisible(mod_db)
 }

@@ -4,7 +4,7 @@
 #' It sequentially calculates coverage statistics, modification statistics, correlation analysis,
 #' and performs principal component analysis (PCA).
 #'
-#' @param ch3_db A database connection or object containing methylation data.
+#' @param mod_db A database connection or object containing methylation data.
 #' @param call_type A character string indicating the type of call to retrieve data (e.g., "positions", "regions").
 #' @param plot Logical; whether to generate plots. Defaults to TRUE.
 #' @param max_rows Optional maximum number of rows to use (sampling) for speed on large datasets.
@@ -15,14 +15,14 @@
 #'
 #' @examples 
 #' \dontrun{
-#'  ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
-#'  run_mod_qc(ch3_db, call_type = "positions")                 # uses m_frac
-#'  run_mod_qc(ch3_db, call_type = "regions", value = mh_frac)  # use mh_frac
+#'  mod_db <- system.file("my_data.mod.db", package = "MethylSeqR")
+#'  run_mod_qc(mod_db, call_type = "positions")                 # uses m_frac
+#'  run_mod_qc(mod_db, call_type = "regions", value = mh_frac)  # use mh_frac
 #' }
 #'
 #' @importFrom rlang ensym as_name
 #' @export
-run_mod_qc <- function(ch3_db, 
+run_mod_qc <- function(mod_db, 
                        call_type = "positions", 
                        plot = TRUE, 
                        max_rows = NULL,
@@ -40,19 +40,19 @@ run_mod_qc <- function(ch3_db,
   start_time <- Sys.time()
   
   if (call_type == "calls") {
-    suppressMessages(suppressWarnings(summarize_ch3_positions(ch3_db)))
+    suppressMessages(suppressWarnings(summarize_mod_positions(mod_db)))
     call_type <- "positions"
   }
   
   message("calculating coverage stats...")
-  plot_mod_cov(ch3_db, call_type, plot = plot, max_rows = max_rows)
+  plot_mod_cov(mod_db, call_type, plot = plot, max_rows = max_rows)
   
   message("calculating mod stats...")
-  plot_mod_modfrac(ch3_db, call_type, plot = plot, max_rows = max_rows)
+  plot_mod_modfrac(mod_db, call_type, plot = plot, max_rows = max_rows)
   
   message("calculating correlations...")
   do.call(calc_mod_samplecor, list(
-    ch3_db   = ch3_db,
+    mod_db   = mod_db,
     call_type = call_type,
     value    = value_sym,   # <-- literal string now for argument parameter
     plot     = plot,
@@ -61,7 +61,7 @@ run_mod_qc <- function(ch3_db,
   
   message("running pca...")
   do.call(plot_mod_pca, list(
-    ch3_db   = ch3_db,
+    mod_db   = mod_db,
     call_type= call_type,
     value    = value_sym,   # <-- literal string now for argument parameter
     max_rows = max_rows

@@ -5,7 +5,7 @@
 \title{Collapse Windows Based on Methylation Differences}
 \usage{
 collapse_mod_windows(
-  ch3_db,
+  mod_db,
   table_name = "collapsed_windows",
   max_distance = 1000,
   sig_cutoff = 0.05,
@@ -13,7 +13,7 @@ collapse_mod_windows(
 )
 }
 \arguments{
-\item{ch3_db}{A DuckDB database connection object or path to the database.}
+\item{mod_db}{A DuckDB database connection object or path to the database.}
 
 \item{table_name}{Character. Name of the output table to store collapsed
 windows (default: "collapsed_windows").}

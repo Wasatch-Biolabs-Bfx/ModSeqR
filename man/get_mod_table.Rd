@@ -4,10 +4,10 @@
 \alias{get_mod_table}
 \title{Collect Table from DuckDB Database as Tibble}
 \usage{
-get_mod_table(ch3_db, table_name, max_rows = NULL)
+get_mod_table(mod_db, table_name, max_rows = NULL)
 }
 \arguments{
-\item{ch3_db}{A list containing the database file path. This should be a valid "ch3_db" class object.}
+\item{mod_db}{A list containing the database file path. This should be a valid "mod_db" class object.}
 
 \item{table_name}{A string representing the name of the table to collect from the database.}
 
@@ -26,8 +26,8 @@ a message with the error is displayed. The database connection is closed after r
 the data, regardless of success or failure.
 }
 \examples{
-# Assuming ch3_db is a valid database object and "positions" is a table in the database
-ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
-positions = get_mod_table(ch3_db, "positions")
+# Assuming mod_db is a valid database object and "positions" is a table in the database
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
+positions = get_mod_table(mod_db, "positions")
 
 }

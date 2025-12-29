@@ -1,9 +1,9 @@
-#' Export Tables from the ch3 Database
+#' Export Tables from the mod Database
 #'
-#' This function exports specified tables from the ch3 database to CSV files. Can export one or multiple tables as a time. It checks whether each table exists in the database 
+#' This function exports specified tables from the mod database to CSV files. Can export one or multiple tables as a time. It checks whether each table exists in the database 
 #' before exporting, and provides informative messages for any missing tables. The output CSV files are saved at the specified path.
 #'
-#' @param ch3_db A string. The path to the database containing ch3 files from nanopore data.
+#' @param mod_db A string. The path to the database containing ch3 files from nanopore data.
 #' @param table A character vector specifying the table to be exported from the database. Default is "positions".
 #' @param out_path A string. The path to the directory where the CSV files will be saved. The file will automatically be named "{table name}.csv". 
 #'
@@ -23,12 +23,12 @@
 #'
 #' @export
 
-export_mod_table <- function(ch3_db, 
+export_mod_table <- function(mod_db, 
                              table = "positions", 
                              out_path) {
   # Open DB connection
-  ch3_db <- .ch3helper_connectDB(ch3_db)
-  on.exit({ .ch3helper_closeDB(ch3_db) }, add = TRUE)
+  mod_db <- .modhelper_connectDB(mod_db)
+  on.exit({ .modhelper_closeDB(mod_db) }, add = TRUE)
   
   # Build output path
   if (!grepl("\\.csv$", out_path, ignore.case = TRUE)) {
@@ -36,13 +36,13 @@ export_mod_table <- function(ch3_db,
     out_path <- paste0(out_path, table, ".csv")
   }
   
-  if (!DBI::dbExistsTable(ch3_db$con, table)) {
+  if (!DBI::dbExistsTable(mod_db$con, table)) {
     message("Table '", table, "' does not exist.")
-    return(invisible(ch3_db))
+    return(invisible(mod_db))
   }
   
-  tbl_id  <- as.character(DBI::dbQuoteIdentifier(ch3_db$con, table))
-  file_q  <- as.character(DBI::dbQuoteString(ch3_db$con, out_path))
+  tbl_id  <- as.character(DBI::dbQuoteIdentifier(mod_db$con, table))
+  file_q  <- as.character(DBI::dbQuoteString(mod_db$con, out_path))
   
   # COPY is executed entirely inside DuckDB (fast + avoids R memory)
   sql <- sprintf(
@@ -51,8 +51,8 @@ export_mod_table <- function(ch3_db,
   )
   
   message("Exporting '", table, "' to: ", out_path)
-  n <- DBI::dbExecute(ch3_db$con, sql)
+  n <- DBI::dbExecute(mod_db$con, sql)
   message("Rows written: ", n)
   
-  invisible(ch3_db)
+  invisible(mod_db)
 }

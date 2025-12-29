@@ -5,7 +5,7 @@
 \title{Perform PCA on Methylation Data}
 \usage{
 plot_mod_pca(
-  ch3_db,
+  mod_db,
   call_type = "positions",
   value = m_frac,
   save_path = NULL,
@@ -13,7 +13,7 @@ plot_mod_pca(
 )
 }
 \arguments{
-\item{ch3_db}{A list containing the database file path. This should be a valid "ch3_db" class object.}
+\item{mod_db}{A list containing the database file path. This should be a valid "mod_db" class object.}
 
 \item{call_type}{A string representing the name of the table in the database from which to pull the data.
 Default is "positions".}
@@ -41,11 +41,11 @@ features, then runs PCA on samples (transpose before `prcomp`).
 \examples{
 \dontrun{
 # Default (m_frac)
- plot_mod_pca(ch3_db)
+ plot_mod_pca(mod_db)
  # Use mh_frac instead
- plot_mod_pca(ch3_db, call_type = "regions", value = mh_frac)
+ plot_mod_pca(mod_db, call_type = "regions", value = mh_frac)
  # Or as a string
- plot_mod_pca(ch3_db, call_type = "windows", value = "mh_frac")
+ plot_mod_pca(mod_db, call_type = "windows", value = "mh_frac")
 }
 
 }

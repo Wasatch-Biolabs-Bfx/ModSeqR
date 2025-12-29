@@ -5,7 +5,7 @@
 \title{Classify Reads as Case or Control Based on Methylation Profiles}
 \usage{
 classify_mod_reads(
-  ch3_db,
+  mod_db,
   table_name = "classified_reads",
   reads_table = "reads",
   key_table,
@@ -15,7 +15,7 @@ classify_mod_reads(
 )
 }
 \arguments{
-\item{ch3_db}{Path to a DuckDB `.db` file created by this package (e.g., from `summarize_reads()`).}
+\item{mod_db}{Path to a DuckDB `.db` file created by this package (e.g., from `summarize_reads()`).}
 
 \item{table_name}{Character. Name of the output table to store classified reads (default: "classified_reads").}
 
@@ -59,7 +59,7 @@ then classifies each read based on proximity of `mh_frac` to either `avg_mh_frac
 \examples{
 \dontrun{
 classify_mod_reads(
-  ch3_db = "my_data.ch3.db",
+  mod_db = "my_data.mod.db",
   key_table = "key_table.csv",
   case = "treated",
   control = "untreated",

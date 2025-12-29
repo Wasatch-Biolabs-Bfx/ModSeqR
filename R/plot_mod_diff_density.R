@@ -1,9 +1,9 @@
 #' Plot Case vs Control Methylation Fractions with Density-Weighted Points
 #'
 #' This function generates a scatter plot of methylation fractions in case vs control samples
-#' from a CH3 SQLite database table, with optional density shading and threshold lines.
+#' from a modification DuckDB database table, with optional density shading and threshold lines.
 #'
-#' @param ch3_db A path to the CH3 SQLite database, or an open database connection object.
+#' @param mod_db A path to the modification DuckDB database, or an open database connection object.
 #' @param table A string specifying the table name within the database, containing `mh_frac_case` and `mh_frac_control` columns.
 #' @param thresh A numeric vector of length 1 or 2 giving the positive and negative threshold values to draw as dashed red lines above and below the identity line (default is `c(0.2, 0.3)`). If `NULL`, no threshold lines are drawn.
 #' @param palette A string specifying the viridis color palette for density shading (default is `"turbo"`). Other options include `"viridis"`, `"plasma"`, `"cividis"`, etc.
@@ -28,7 +28,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' plot_mod_diff_density("my_data/ch3.sqlite", table = "chr5", thresh = c(0.25, 0.35))
+#' plot_mod_diff_density("my_data/my.mod.db", table = "chr5", thresh = c(0.25, 0.35))
 #' }
 #'
 #' @importFrom DBI dbExistsTable
@@ -37,20 +37,20 @@
 #' @importFrom ggplot2 scale_colour_viridis_c guide_colorbar
 #' @export
 
-plot_mod_diff_density <- function(ch3_db,
+plot_mod_diff_density <- function(mod_db,
                                   table,
                                   thresh   = c(0.2, 0.3),
                                   palette  = "turbo",
                                   n_kde    = 250)
 {
   
-  ch3_db <- .ch3helper_connectDB(ch3_db)
-  on.exit(ch3_db <- .ch3helper_closeDB(ch3_db), add = TRUE)
+  mod_db <- .modhelper_connectDB(mod_db)
+  on.exit(mod_db <- .modhelper_closeDB(mod_db), add = TRUE)
   
-  if (!DBI::dbExistsTable(ch3_db$con, table))
+  if (!DBI::dbExistsTable(mod_db$con, table))
     stop(table, " table does not exist.")
   
-  df <- dplyr::tbl(ch3_db$con, table) |>
+  df <- dplyr::tbl(mod_db$con, table) |>
     dplyr::select(mh_frac_case, mh_frac_control) |>
     dplyr::filter(!is.na(mh_frac_case), !is.na(mh_frac_control)) |>
     dplyr::collect()
@@ -83,5 +83,5 @@ plot_mod_diff_density <- function(ch3_db,
     ggplot2::theme_minimal()
   
   print(p)
-  invisible(ch3_db)
+  invisible(mod_db)
 }

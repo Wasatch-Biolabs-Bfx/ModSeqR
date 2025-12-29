@@ -2,10 +2,10 @@
 % Please edit documentation in R/plot_mod_modfrac.R
 \name{plot_mod_modfrac}
 \alias{plot_mod_modfrac}
-\title{Get Methylation Statistics from the ch3 Database}
+\title{Get Methylation Statistics from the Modifications Database}
 \usage{
 plot_mod_modfrac(
-  ch3_db,
+  mod_db,
   call_type = c("positions", "regions"),
   plot = TRUE,
   save_path = NULL,
@@ -13,7 +13,7 @@ plot_mod_modfrac(
 )
 }
 \arguments{
-\item{ch3_db}{A string. The path to the database containing ch3 files from nanopore data.}
+\item{mod_db}{A string. The path to the database containing mod files from nanopore data.}
 
 \item{call_type}{A character vector specifying the type of data to retrieve from the database. 
 Default is "positions". Can also be "regions".}
@@ -30,7 +30,7 @@ If `plot` is TRUE, it displays a histogram of methylation values.
 }
 \description{
 This function retrieves and calculates methylation statistics (mean methylation fractions) 
-from a specified table in the ch3 database. It can either return summary statistics or plot 
+from a specified table in the mod database. It can either return summary statistics or plot 
 a histogram of the methylation values, depending on the user's preference.
 }
 \details{
@@ -46,9 +46,9 @@ The function assumes that the database has tables named according to the `call_t
 }
 \examples{
  # Specify the path to the database
- ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+ mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
  # Get methylation statistics for the 'positions' call type without plotting
- plot_mod_modfrac(ch3_db = ch3_db, call_type = "positions")
+ plot_mod_modfrac(mod_db = mod_db, call_type = "positions")
 
 }

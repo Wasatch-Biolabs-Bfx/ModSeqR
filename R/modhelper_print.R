@@ -3,7 +3,7 @@
 #' This function connects to a DuckDB database and prints the names of all tables currently in the 
 #' database. It can also print the first few rows of specific tables.
 #'
-#' @param ch3_db A character string or an object of class ch3_db representing the DuckDB database to connect to.
+#' @param mod_db A character string or an object of class mod_db representing the DuckDB database to connect to.
 #' @param tables A character vector specifying the names of tables to print. Defaults to the last table given, which 
 #' will print all tables. If specific table names are provided, it will only print those (ex. "positions", "regions", "meth_diff").
 #' If tables ="all", the function will print out all table sin the database...
@@ -17,31 +17,31 @@
 #' 
 #' @examples 
 #' # Specify the path to the database
-#'  ch3_files <- system.file("test_data", package = "MethylSeqR")
-#'  ch3_db <- tempfile("example_db")
+#'  mod_files <- system.file("test_data", package = "MethylSeqR")
+#'  mod_db <- tempfile("example_db")
 #'  
 #'  # Print out tables in the database
-#'  make_pos_db(ch3_files, ch3_db) |> print()
+#'  make_pos_db(mod_files, mod_db) |> print()
 #'  
 #' @importFrom DBI dbListTables
 #' @importFrom dplyr tbl
 #'
 #' @export
 
-print.ch3_db <- function(ch3_db) {
-  cat("<ch3_db object>\n")
+print.mod_db <- function(mod_db) {
+  cat("<mod_db object>\n")
   
   cat("Database file:\n")
-  cat("  ", ch3_db$db_file, "\n")
+  cat("  ", mod_db$db_file, "\n")
   
   cat("Current table:\n")
-  cat("  ", ifelse(is.null(ch3_db$current_table), "NULL", ch3_db$current_table), "\n")
+  cat("  ", ifelse(is.null(mod_db$current_table), "NULL", mod_db$current_table), "\n")
   
   cat("Connection:\n")
   
-  if (is.character(ch3_db$con) && ch3_db$con == "none") {
+  if (is.character(mod_db$con) && mod_db$con == "none") {
     cat("  NULL\n")
-  } else if (!dbIsValid(ch3_db$con))
+  } else if (!dbIsValid(mod_db$con))
   {
     cat("  NULL\n")
   } else

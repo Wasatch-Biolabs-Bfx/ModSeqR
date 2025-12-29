@@ -5,7 +5,7 @@
 \title{Calculate and Plot Coverage Statistics}
 \usage{
 plot_mod_cov(
-  ch3_db,
+  mod_db,
   call_type = "positions",
   plot = TRUE,
   save_path = NULL,
@@ -13,7 +13,7 @@ plot_mod_cov(
 )
 }
 \arguments{
-\item{ch3_db}{A data base either linking to the file name or of class ch3_db.}
+\item{mod_db}{A data base either linking to the file name or of class mod_db.}
 
 \item{call_type}{Either positions or regions data to analyze coverage on.}
 
@@ -36,9 +36,9 @@ methylation data.
 }
 \examples{
  # Specify the path to the database
- ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
  # Get coverage statistics for the 'positions' call type without plotting
- plot_mod_cov(ch3_db = ch3_db, call_type = "positions")
+ plot_mod_cov(mod_db = mod_db, call_type = "positions")
 
 }

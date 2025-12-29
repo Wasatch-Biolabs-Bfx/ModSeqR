@@ -5,7 +5,7 @@
 \title{Summarize Reads in a Database}
 \usage{
 summarize_mod_reads(
-  ch3_db,
+  mod_db,
   input_calls_table = "calls",
   output_reads_table = "reads",
   regions_table = NULL,
@@ -14,7 +14,7 @@ summarize_mod_reads(
 )
 }
 \arguments{
-\item{ch3_db}{A character string specifying the path to the DuckDB database.}
+\item{mod_db}{A character string specifying the path to the DuckDB database.}
 
 \item{min_length}{An integer specifying the the minimum read_length.}
 
@@ -37,10 +37,10 @@ The function connects to the provided DuckDB database, optionally filters reads 
 }
 \examples{
 #Specify the path to the database
- ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
- region_bed = system.file("Islands_hg38_test.csv", package = "MethylSeqR")
+ mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
+ region_bed = system.file("Islands_hg38_test.csv", package = "ModSeqR")
  
  # Summarize Reads
- summarize_mod_reads(ch3_db, region_bed)
+ summarize_mod_reads(mod_db, region_bed)
 
 }

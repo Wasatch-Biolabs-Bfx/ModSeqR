@@ -1,15 +1,15 @@
 #' Get Database Statistics
 #'
-#' Prints out a summary of the ch3 database, including size, tables, and unique sample names.
+#' Prints out a summary of the mod database, including size, tables, and unique sample names.
 #'
-#' @param ch3_db Path to the `.ch3.db` file or a `ch3_db` object.
+#' @param mod_db Path to the `.mod.db` file or a `mod_db` object.
 #' 
 #' @examples
 #'  # Specify the path to the database
-#'  ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+#'  mod_db <- system.file("my_data.mod.db", package = "MethylSeqR")
 #'  
 #'  # Get database statistics
-#'  get_ch3_dbinfo(ch3_db = ch3_db)
+#'  get_mod_dbinfo(mod_db = mod_db)
 #'
 #' @return Invisibly returns a list of stats from the database.
 #' 
@@ -19,19 +19,19 @@
 #' 
 #' @export
 
-get_mod_dbinfo <- function(ch3_db) 
+get_mod_dbinfo <- function(mod_db) 
 {
   
-  if (is.character(ch3_db)) {
+  if (is.character(mod_db)) {
     # Check if the file exists
-    if (!file.exists(ch3_db)) {
-      stop(paste("The database file", ch3_db, "does not exist."))
+    if (!file.exists(mod_db)) {
+      stop(paste("The database file", mod_db, "does not exist."))
     }
     
     cat("=================================================\n",
         "               Database Statistics               \n",
         "=================================================\n", 
-        "Database: ", ch3_db, "\n",
+        "Database: ", mod_db, "\n",
         sep = "")
   } else {
     cat("=================================================\n",
@@ -41,21 +41,21 @@ get_mod_dbinfo <- function(ch3_db)
   }
   
   # Open the database connection
-  ch3_db <- .ch3helper_connectDB(ch3_db)
+  mod_db <- .modhelper_connectDB(mod_db)
   
   # Get DB size
-  size_df <- dbGetQuery(ch3_db$con, "PRAGMA database_size")
+  size_df <- dbGetQuery(mod_db$con, "PRAGMA database_size")
   size <- sum(size_df$total_blocks * size_df$block_size) / 1024 / 1024
   cat(sprintf("\nDatabase Size: %.2f MB\n", size))
   
   # What tables are in the database?
-  tables <- dbListTables(ch3_db$con)
+  tables <- dbListTables(mod_db$con)
   cat("\nTables in Database:\n")
   cat(paste(tables, collapse = "\n"), "\n")
   
   # Unique Sample Names (if "calls" table exists)
   if ("calls" %in% tables) {
-    sample_names <- tbl(ch3_db$con, "calls") |>
+    sample_names <- tbl(mod_db$con, "calls") |>
       distinct(sample_name) |>
       arrange(sample_name) |>
       collect() |>
@@ -76,7 +76,7 @@ get_mod_dbinfo <- function(ch3_db)
     num_samples = length(sample_names)
   )
   
-  ch3_db <- .ch3helper_closeDB(ch3_db)
-  return(invisible(ch3_db))
+  mod_db <- .modhelper_closeDB(mod_db)
+  return(invisible(mod_db))
   
   }

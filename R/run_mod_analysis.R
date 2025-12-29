@@ -5,7 +5,7 @@
 #' The function handles the summarization of methylation data and performs differential modification analysis
 #' based on case-control comparisons.
 #'
-#' @param ch3_db A `ch3_db` object representing the DuckDB database containing methylation data.
+#' @param mod_db A `mod_db` object representing the DuckDB database containing methylation data.
 #'   The database should include necessary tables for the analysis, such as positions, regions, or windows.
 #' @param out_path The directory in which the "Mod_Diff_Analysis_Results" directory containing result data will be written out too. 
 #' If the user does not provide a directory, the working directory will be used.
@@ -46,7 +46,7 @@
 #'
 #' @export
 
-run_mod_analysis <- function(ch3_db,
+run_mod_analysis <- function(mod_db,
                          out_path,
                          call_type,
                          region_file = NULL,
@@ -76,23 +76,23 @@ run_mod_analysis <- function(ch3_db,
   
   # First, summarize by call type requested
   if (call_type == "positions") { 
-    summarize_mod_positions(ch3_db)
+    summarize_mod_positions(mod_db)
     diff_table_name = "mod_diff_positions"
   } else if (call_type == "regions") {
     if (is.null(region_file)) { # check to make sure user included an annotation file
       stop(paste("Error: region annotation file missing.\n
                  Please include path to annotation file in the region_file argument of this function.\n"))
     }
-    summarize_mod_regions(ch3_db, region_file = region_file)
+    summarize_mod_regions(mod_db, region_file = region_file)
     diff_table_name = "mod_diff_regions"
   } else if (call_type == "windows") {
-    summarize_mod_windows(ch3_db, window_size = window_size, step_size = step_size)
+    summarize_mod_windows(mod_db, window_size = window_size, step_size = step_size)
     diff_table_name = "mod_diff_windows"
   }
   
   # Second, run differential modification analysis...
   cat("\nBeginning Differential Analysis...\n")
-  calc_mod_diff(ch3_db,
+  calc_mod_diff(mod_db,
                 call_type,
                 cases,
                 controls,
@@ -116,10 +116,10 @@ run_mod_analysis <- function(ch3_db,
   mod_diff_path <- file.path(new_dir, "mod_diff.csv")
   # Write the data frame to a CSV file DIRECTLY from the database
   # Connect to the database
-  ch3_db <- .ch3helper_connectDB(ch3_db)
+  mod_db <- .modhelper_connectDB(mod_db)
 
   dbExecute(
-    ch3_db$con,
+    mod_db$con,
     glue("COPY {diff_table_name} TO '{mod_diff_path}' (HEADER, DELIMITER ',')")
   )
   
@@ -129,11 +129,11 @@ run_mod_analysis <- function(ch3_db,
   all_CGs_path <- file.path(new_dir, "All_CpGs.csv")
   
   dbExecute(
-    ch3_db$con,
+    mod_db$con,
     glue("COPY {call_type} TO '{all_CGs_path}' (HEADER, DELIMITER ',')")
   )
   
-  # data = get_table(ch3_db, call_type)
+  # data = get_table(mod_db, call_type)
   # 
   # cat("\nWriting out all CpG data...\n")
   # df_wide <- data |>
@@ -156,10 +156,10 @@ run_mod_analysis <- function(ch3_db,
   
   # automatically collapse if windows is selected
   if (call_type == "windows") {
-    collapse_ch3_windows(ch3_db)
+    collapse_mod_windows(mod_db)
     
     dbExecute(
-      ch3_db$con,
+      mod_db$con,
       glue("COPY collapsed_windows TO '{Sig_CGs_path}' (HEADER, DELIMITER ',')")
     )
   } else{
@@ -175,7 +175,7 @@ run_mod_analysis <- function(ch3_db,
     ) TO '{Sig_CGs_path}' (HEADER, DELIMITER ',')
   ")
     
-    dbExecute(ch3_db$con, sql)
+    dbExecute(mod_db$con, sql)
   }
 
   # sig = mod_diff |>
@@ -193,7 +193,7 @@ run_mod_analysis <- function(ch3_db,
   # Record the end time
   end_time <- Sys.time()
   
-  ch3_db <- .ch3helper_closeDB(ch3_db)
+  mod_db <- .modhelper_closeDB(mod_db)
   total_time_difftime <- end_time - start_time
   
   # Convert the total_time_difftime object to numeric seconds for a reliable comparison
@@ -208,5 +208,5 @@ run_mod_analysis <- function(ch3_db,
     message("Time elapsed: ", round(total_seconds, 2), " seconds\n")
   }
   
-  invisible(ch3_db)
+  invisible(mod_db)
 }

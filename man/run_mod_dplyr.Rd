@@ -5,7 +5,7 @@
 \title{Execute an Expression on a DuckDB Table with Optional Materialization}
 \usage{
 run_mod_dplyr(
-  ch3_db,
+  mod_db,
   table_name,
   expr,
   mode = c("collect", "compute"),
@@ -13,7 +13,7 @@ run_mod_dplyr(
 )
 }
 \arguments{
-\item{ch3_db}{Path to the DuckDB database file (e.g., `"my_data.ch3.db"`).}
+\item{mod_db}{Path to the DuckDB database file (e.g., `"my_data.mod.db"`).}
 
 \item{table_name}{Name of the table in the database to operate on.}
 
@@ -37,7 +37,7 @@ and either collects the result into R or computes and stores it as a new table i
 \dontrun{
 # Collect results of a filtered table into R
 run_mod_dplyr(
-  ch3_db = "my_data.ch3.db",
+  mod_db = "my_data.mod.db",
   table_name = "methylation_data",
   expr = function(tbl_ref) dplyr::filter(tbl_ref, score > 0.5),
   mode = "collect"
@@ -45,7 +45,7 @@ run_mod_dplyr(
 
 # Store the filtered result in a new table inside the database
 run_mod_dplyr(
-  ch3_db = "my_data.ch3.db",
+  mod_db = "my_data.mod.db",
   table_name = "methylation_data",
   expr = function(tbl_ref) dplyr::filter(tbl_ref, score > 0.5),
   mode = "compute",

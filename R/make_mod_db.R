@@ -1,4 +1,4 @@
-#' Create a CH3 DuckDB from Parquet CH3 files (with optional sample naming)
+#' Create a Modifications DuckDB from Parquet CH3 files (with optional sample naming)
 #'
 #' Build a DuckDB database containing filtered modification call data from one or
 #' more \code{.ch3} parquet files. Inputs may be individual files, directories
@@ -18,8 +18,8 @@
 #'   May be a \emph{named} vector to assign \code{sample_name}s explicitly; any
 #'   entry of the form \code{NAME=PATH} is also accepted. Directories are scanned
 #'   (non-recursively) for \code{*.ch3} files. Must not be empty.
-#' @param db_name Path (without or with \code{.ch3.db} extension) for the DuckDB
-#'   database to be created; \code{.ch3.db} is appended if missing.
+#' @param db_name Path (without or with \code{.mod.db} extension) for the DuckDB
+#'   database to be created; \code{.mod.db} is appended if missing.
 #' @param chrom Optional chromosome filter. Either a single string (e.g.,
 #'   \code{"chr1"}) or a character vector (e.g., \code{c("chr1","chr2","chrX")}).
 #'   If \code{NULL}, all chromosomes are included.
@@ -52,7 +52,7 @@
 #'   \item A temporary in-memory table \code{file_map} may be created for input mapping.
 #' }
 #'
-#' @return (Invisibly) a list of class \code{"ch3_db"} with elements:
+#' @return (Invisibly) a list of class \code{"mod_db"} with elements:
 #'   \itemize{
 #'     \item \code{db_file}: path to the created DuckDB file,
 #'     \item \code{current_table}: \code{NULL} (set by downstream functions),
@@ -68,15 +68,14 @@
 #'
 #' # 2) Explicit files (auto-sample names from stems)
 #' make_mod_db(ch3_files = c("A.ch3", "B.ch3"),
-#'             db_name   = "two_samples.ch3.db",
+#'             db_name   = "two_samples.mod.db",
 #'             min_read_length = 100, min_base_qual = 10)
 #'
 #' # 3) Named inputs (sample_name set from names)
 #' make_mod_db(
 #'   ch3_files = c(
 #'     Sample1      = "../CH3/Sample1.ch3",
-#'     Sample2  = "../CH3/Sample2.ch3",
-#'     Sample3   = "../CH3/Sample3.combined.ch3"
+#'     Sample2  = "../CH3/Sample2.ch3"
 #'   ),
 #'   db_name = "My_DB",
 #'   min_base_qual = 10,
@@ -85,16 +84,16 @@
 #'
 #' # 4) Filter to specific chromosomes
 #' make_mod_db(
-#'   ch3_files = c(S1 = "A.ch3", S2 = "B.ch3"),
+#'   ch3_files = c(S1 = "A.mod", S2 = "B.mod"),
 #'   db_name   = "chr1_chrX_only",
 #'   chrom     = c("chr1","chrX")
 #' )
 #' }
 #'
 #' @seealso
-#' \code{\link{summarize_ch3_positions}}, \code{\link{summarize_ch3_regions}},
-#' \code{\link{summarize_ch3_windows}}, \code{\link{get_ch3_dbinfo}},
-#' \code{\link{get_ch3_tableinfo}}, \code{\link{calc_ch3_diff}}
+#' \code{\link{summarize_mod_positions}}, \code{\link{summarize_mod_regions}},
+#' \code{\link{summarize_mod_windows}}, \code{\link{get_mod_dbinfo}},
+#' \code{\link{get_mod_tableinfo}}, \code{\link{calc_mod_diff}}
 #'
 #' @importFrom DBI dbConnect dbExecute dbListTables dbWriteTable dbQuoteIdentifier
 #' @importFrom duckdb duckdb
@@ -140,7 +139,7 @@ make_mod_db <- function(ch3_files,
   expand_paths <- function(nm, p) {
     if (!file.exists(p)) stop("Path does not exist: ", p)
     if (dir.exists(p)) {
-      fs <- list.files(p, pattern = "\\.ch3$", full.names = TRUE, recursive = FALSE)
+      fs <- list.files(p, pattern = "\\.mod$", full.names = TRUE, recursive = FALSE)
       if (length(fs) == 0) stop("No .ch3 files in directory: ", p)
       data.frame(sample_name = if (!is.na(nm)) nm else NA_character_,
                  file = normalizePath(fs, winslash = "/"),
@@ -161,8 +160,8 @@ make_mod_db <- function(ch3_files,
   # --- derive robust fallback names in R (not SQL) -------------------------------
   derive_sample_from_path <- function(p) {
     b <- basename(p)
-    # strip case-insensitive ".ch3"
-    stem <- sub("(?i)\\.ch3$", "", b, perl = TRUE)
+    # strip case-insensitive ".mod"
+    stem <- sub("(?i)\\.mod$", "", b, perl = TRUE)
     # then strip a trailing "-<digits>" if present
     stem <- sub("-[0-9]+$", "", stem, perl = TRUE)
     stem
@@ -175,12 +174,12 @@ make_mod_db <- function(ch3_files,
   df_files$base <- basename(df_files$file)
   
   # --- DB setup -------------------------------------------------------------------
-  if (!grepl("\\.ch3\\.db$", db_name)) db_name <- paste0(db_name, ".ch3.db")
+  if (!grepl("\\.mod\\.db$", db_name)) db_name <- paste0(db_name, ".mod.db")
   cat("Building Database...\n")
   
-  ch3_db <- list(db_file = db_name, current_table = NULL, con = NULL)
-  class(ch3_db) <- "ch3_db"
-  ch3_db$con <- DBI::dbConnect(duckdb::duckdb(ch3_db$db_file), read_only = FALSE)
+  mod_db <- list(db_file = db_name, current_table = NULL, con = NULL)
+  class(mod_db) <- "mod_db"
+  mod_db$con <- DBI::dbConnect(duckdb::duckdb(mod_db$db_file), read_only = FALSE)
   
   # Resource caps: fast spill dir, all-but-one cores, ~50% RAM (absolute units)
   detect_caps <- function(frac = 0.80) {
@@ -211,17 +210,17 @@ make_mod_db <- function(ch3_files,
   
   tmp_dir <- file.path(tempdir(), "duckdb_tmp")
   dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA temp_directory='%s';", tmp_dir))
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA threads=%d;", caps$threads))
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA memory_limit='%s';", caps$memory_limit))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", tmp_dir))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", caps$threads))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", caps$memory_limit))
   
   # Drop existing tables
-  for (tbl in DBI::dbListTables(ch3_db$con)) {
-    DBI::dbExecute(ch3_db$con, paste0("DROP TABLE ", DBI::dbQuoteIdentifier(ch3_db$con, tbl)))
+  for (tbl in DBI::dbListTables(mod_db$con)) {
+    DBI::dbExecute(mod_db$con, paste0("DROP TABLE ", DBI::dbQuoteIdentifier(mod_db$con, tbl)))
   }
   
   # --- small mapping table (path -> optional sample_name) -------------------------
-  DBI::dbWriteTable(ch3_db$con, "file_map", df_files, temporary = TRUE, overwrite = TRUE)
+  DBI::dbWriteTable(mod_db$con, "file_map", df_files, temporary = TRUE, overwrite = TRUE)
   
   # --- filters & columns (pushdown) ----------------------------------------------
   esc <- function(x) gsub("'", "''", x)
@@ -244,7 +243,7 @@ make_mod_db <- function(ch3_files,
   
   # Get the schema of the parquet files (no data, just column names)
   schema <- DBI::dbGetQuery(
-    ch3_db$con,
+    mod_db$con,
     sprintf("SELECT * FROM read_parquet(%s, filename = TRUE) LIMIT 0", file_list_sql)
   )
   
@@ -292,18 +291,18 @@ make_mod_db <- function(ch3_files,
     FROM tagged
     {where_clause}
   ")
-  DBI::dbExecute(ch3_db$con, sql)
+  DBI::dbExecute(mod_db$con, sql)
   
   # --- finish --------------------------------------------------------------------
   total_seconds <- as.numeric(Sys.time() - start_time, units = "secs")
   if (total_seconds > 60) {
-    message("Database created at ", ch3_db$db_file,
+    message("Database created at ", mod_db$db_file,
             "\nTime elapsed: ", round(total_seconds/60, 2), " minutes\n")
   } else {
-    message("Database created at ", ch3_db$db_file,
+    message("Database created at ", mod_db$db_file,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
   
-  ch3_db <- MethylSeqR:::.ch3helper_closeDB(ch3_db)
-  invisible(ch3_db)
+  mod_db <- MethylSeqR:::.modhelper_closeDB(mod_db)
+  invisible(mod_db)
 }

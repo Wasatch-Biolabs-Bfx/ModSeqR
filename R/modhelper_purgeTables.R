@@ -3,7 +3,7 @@
 #' This internal function connects to a DuckDB database and removes tables that are not specified in the 
 #' `keep_tables` list. It retains only the tables that you want to keep in the database.
 #'
-#' @param ch3_db A character string or an object of class `ch3_db` representing the DuckDB database to connect to.
+#' @param mod_db A character string or an object of class `mod_db` representing the DuckDB database to connect to.
 #'
 #' @details
 #' The function connects to the specified database, lists all tables, and removes those not included in 
@@ -15,7 +15,7 @@
 #'
 #' @keywords internal
 
-.ch3helper_purgeTables <- function(db_con)
+.modhelper_purgeTables <- function(db_con)
 {
   # List all tables in the database
   all_tables <- dbListTables(db_con)

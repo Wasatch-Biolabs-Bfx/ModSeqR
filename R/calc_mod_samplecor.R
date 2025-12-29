@@ -4,7 +4,7 @@
 #' modification fraction data from genomic positions. It supports position-based, region-based,
 #' and window-based calls and provides visualization using ggplot2.
 #'
-#' @param ch3_db A string. The path to the database containing ch3 files from nanopore data.
+#' @param mod_db A string. The path to the database containing ch3 files from nanopore data.
 #' @param call_type A character vector specifying the type of data to retrieve from the database.
 #'   Options are "positions", "regions", or "windows". Default is "positions".
 #' @param value Column in the table to use as the measurement (e.g., mh_frac, m_frac).
@@ -18,7 +18,7 @@
 #' @param max_rows Optional integer to randomly sample rows from the table for faster runs.
 #'
 #' @details
-#' The function connects to the ch3 database, pulls data for the selected `call_type`, reshapes
+#' The function connects to the mod database, pulls data for the selected `call_type`, reshapes
 #' to a samples x samples matrix, and computes Pearson correlations using
 #' `use = "pairwise.complete.obs"`. The `value` column controls which measurement is used.
 #'
@@ -28,11 +28,11 @@
 #' @examples
 #' \dontrun{
 #' # Use mh_frac (default)
-#' calc_mod_samplecor(ch3_db = "my_data.ch3.db", call_type = "positions")
+#' calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "positions")
 #' # Use m_frac
-#' calc_mod_samplecor(ch3_db = "my_data.ch3.db", call_type = "regions", value = m_frac)
+#' calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "regions", value = m_frac)
 #' # Or as a string
-#' calc_mod_samplecor(ch3_db = "my_data.ch3.db", call_type = "windows", value = "m_frac")
+#' calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "windows", value = "m_frac")
 #' }
 #'
 #' @importFrom DBI dbConnect dbDisconnect dbExistsTable dbGetQuery
@@ -43,7 +43,7 @@
 #' @importFrom rlang enquo quo_is_symbol as_name sym is_string
 #' @importFrom stats cor
 #' @export
-calc_mod_samplecor <- function(ch3_db,
+calc_mod_samplecor <- function(mod_db,
                                call_type = c("positions"),
                                value = m_frac,
                                agg_fun = mean,
@@ -71,31 +71,31 @@ calc_mod_samplecor <- function(ch3_db,
   }
   
   # Open the database connection
-  ch3_db <- .ch3helper_connectDB(ch3_db)
+  mod_db <- .modhelper_connectDB(mod_db)
   
   if (length(call_type) > 1) {
     call_type <- "positions"
   }
   
-  if (!dbExistsTable(ch3_db$con, call_type)) {
+  if (!dbExistsTable(mod_db$con, call_type)) {
     stop(paste0(call_type, " table does not exist in the database."))
   }
   
   # Retrieve data (optionally sampled)
   if (!is.null(max_rows)) {
-    row_count <- dbGetQuery(ch3_db$con, paste0("SELECT COUNT(*) as n FROM ", call_type))$n
+    row_count <- dbGetQuery(mod_db$con, paste0("SELECT COUNT(*) as n FROM ", call_type))$n
     if (row_count < max_rows) {
       stop(paste0("Table '", call_type, "' only has ", row_count,
                   " rows, which is fewer than max_rows = ", max_rows, ". Pick fewer rows."))
     }
-    modseq_dat <- dbGetQuery(ch3_db$con, paste0("SELECT * FROM ", call_type, " ORDER BY RANDOM() LIMIT ", max_rows))
+    modseq_dat <- dbGetQuery(mod_db$con, paste0("SELECT * FROM ", call_type, " ORDER BY RANDOM() LIMIT ", max_rows))
   } else {
-    modseq_dat <- dplyr::tbl(ch3_db$con, call_type) |> dplyr::collect()
+    modseq_dat <- dplyr::tbl(mod_db$con, call_type) |> dplyr::collect()
   }
   
   # --- New check for value column existence ---
   if (!(value_col %in% colnames(modseq_dat))) {
-    .ch3helper_closeDB(ch3_db)
+    .modhelper_closeDB(mod_db)
     stop(paste0("The specified `value` column '", value_col,
                 "' does not exist in the '", call_type, "' table.\n",
                 "Available columns: ", paste(colnames(modseq_dat), collapse = ", "), "."))
@@ -104,7 +104,7 @@ calc_mod_samplecor <- function(ch3_db,
   
   # Quick column presence check for the selected value column
   if (!(value_col %in% names(modseq_dat))) {
-    on.exit(.ch3helper_closeDB(ch3_db), add = TRUE)
+    on.exit(.modhelper_closeDB(mod_db), add = TRUE)
     stop("Selected `value` column '", value_col, "' is not present in the '", call_type, "' table.")
   }
   
@@ -213,6 +213,6 @@ calc_mod_samplecor <- function(ch3_db,
     }
   }
   
-  .ch3helper_closeDB(ch3_db)
-  invisible(ch3_db)
+  .modhelper_closeDB(mod_db)
+  invisible(mod_db)
 }

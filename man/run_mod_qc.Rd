@@ -5,7 +5,7 @@
 \title{Quality Control Wrapper for Methylation Data}
 \usage{
 run_mod_qc(
-  ch3_db,
+  mod_db,
   call_type = "positions",
   plot = TRUE,
   max_rows = NULL,
@@ -13,7 +13,7 @@ run_mod_qc(
 )
 }
 \arguments{
-\item{ch3_db}{A database connection or object containing methylation data.}
+\item{mod_db}{A database connection or object containing methylation data.}
 
 \item{call_type}{A character string indicating the type of call to retrieve data (e.g., "positions", "regions").}
 
@@ -34,9 +34,9 @@ and performs principal component analysis (PCA).
 }
 \examples{
 \dontrun{
- ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
- run_mod_qc(ch3_db, call_type = "positions")                 # uses m_frac
- run_mod_qc(ch3_db, call_type = "regions", value = mh_frac)  # use mh_frac
+ mod_db <- system.file("my_data.mod.db", package = "MethylSeqR")
+ run_mod_qc(mod_db, call_type = "positions")                 # uses m_frac
+ run_mod_qc(mod_db, call_type = "regions", value = mh_frac)  # use mh_frac
 }
 
 }

@@ -5,7 +5,7 @@
 \title{Correlation Matrix of Modified Sequence Data}
 \usage{
 calc_mod_samplecor(
-  ch3_db,
+  mod_db,
   call_type = c("positions"),
   value = m_frac,
   agg_fun = mean,
@@ -17,7 +17,7 @@ calc_mod_samplecor(
 )
 }
 \arguments{
-\item{ch3_db}{A string. The path to the database containing ch3 files from nanopore data.}
+\item{mod_db}{A string. The path to the database containing ch3 files from nanopore data.}
 
 \item{call_type}{A character vector specifying the type of data to retrieve from the database.
 Options are "positions", "regions", or "windows". Default is "positions".}
@@ -48,18 +48,18 @@ modification fraction data from genomic positions. It supports position-based, r
 and window-based calls and provides visualization using ggplot2.
 }
 \details{
-The function connects to the ch3 database, pulls data for the selected `call_type`, reshapes
+The function connects to the mod database, pulls data for the selected `call_type`, reshapes
 to a samples x samples matrix, and computes Pearson correlations using
 `use = "pairwise.complete.obs"`. The `value` column controls which measurement is used.
 }
 \examples{
 \dontrun{
 # Use mh_frac (default)
-calc_mod_samplecor(ch3_db = "my_data.ch3.db", call_type = "positions")
+calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "positions")
 # Use m_frac
-calc_mod_samplecor(ch3_db = "my_data.ch3.db", call_type = "regions", value = m_frac)
+calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "regions", value = m_frac)
 # Or as a string
-calc_mod_samplecor(ch3_db = "my_data.ch3.db", call_type = "windows", value = "m_frac")
+calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "windows", value = "m_frac")
 }
 
 }

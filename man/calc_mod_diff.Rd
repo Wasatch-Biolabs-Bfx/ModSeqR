@@ -5,7 +5,7 @@
 \title{Calculate Differential Methylation}
 \usage{
 calc_mod_diff(
-  ch3_db,
+  mod_db,
   call_type = "positions",
   output_table = NULL,
   cases,
@@ -16,7 +16,7 @@ calc_mod_diff(
 )
 }
 \arguments{
-\item{ch3_db}{A list containing the database file path. This should be a valid "ch3_db" class object.}
+\item{mod_db}{A list containing the database file path. This should be a valid "mod_db" class object.}
 
 \item{call_type}{A string representing the name of the table in the database from which to pull the data. 
 Default is "positions".}
@@ -38,7 +38,7 @@ group, otherwise "fast_fisher" is used.}
 \item{overwrite}{If TRUE and output_table exists, it is dropped before writing.}
 }
 \value{
-A list containing the updated "ch3_db" object with the latest tables in the database, including "meth_diff".
+A list containing the updated "mod_db" object with the latest tables in the database, including "meth_diff".
 }
 \description{
 This function calculates differential methylation between specified case and control groups using various statistical methods. 
@@ -51,10 +51,10 @@ It summarizes the data for cases and controls, calculates p-values based on the 
 }
 \examples{
  # Specify the path to the database
- ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ mod_db <- system.file("my_data.mod.db", package = "MethylSeqR")
  
  # Get methylation statistics for the 'positions' call type without plotting
- calc_mod_diff(ch3_db = ch3_db, 
+ calc_mod_diff(mod_db = mod_db, 
                call_type = "positions",
                cases = c("Blood1_chr21", "Blood2_chr21", "Blood3_chr21"),
                controls = c("Sperm1_chr21", "Sperm2_chr21", "Sperm3_chr21")))

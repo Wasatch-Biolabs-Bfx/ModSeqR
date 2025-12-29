@@ -4,17 +4,17 @@
 \alias{plot_mod_diff}
 \title{Plot Differential Methylation Volcano Raster}
 \usage{
-plot_mod_diff(ch3_db, table)
+plot_mod_diff(mod_db, table)
 }
 \arguments{
-\item{ch3_db}{A `ch3_db` object or a character string representing the file path to a DuckDB database.
+\item{mod_db}{A `mod_db` object or a character string representing the file path to a DuckDB database.
 The database must contain a table with differential methylation results.}
 
 \item{table}{A character string specifying the name of the table in the database containing the differential methylation data.
 The table must contain at least the following columns: `meth_diff` and `p_val`.}
 }
 \value{
-Invisibly returns the `ch3_db` object after closing the database connection. The function prints the ggplot2 raster plot to the active R graphics device.
+Invisibly returns the `mod_db` object after closing the database connection. The function prints the ggplot2 raster plot to the active R graphics device.
 }
 \description{
 Creates a volcano-style raster plot of differential methylation results using database-backed plotting via `dbplot`. 
@@ -28,7 +28,7 @@ A message is printed to indicate the time taken to generate the plot.
 }
 \examples{
 \dontrun{
-plot_mod_diff("my_methylation.ch3.db", "mod_diff_windows")
+plot_mod_diff("my_methylation.mod.db", "mod_diff_windows")
 }
 
 }

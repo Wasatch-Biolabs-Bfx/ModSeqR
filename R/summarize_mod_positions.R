@@ -1,6 +1,6 @@
 #' Summarize per-position methylation calls into a DuckDB table
 #'
-#' Aggregates row-level CH3 calls (from \code{input_table}, typically \code{"calls"})
+#' Aggregates row-level mod calls (from \code{input_table}, typically \code{"calls"})
 #' into a per-sample, per-genomic-position table (\code{output_table}, default \code{"positions"}).
 #' Counts and fractions are created for the unmodified class and for any set of
 #' user-defined modification codes and/or combinations (e.g., \code{"m"}, \code{"h"},
@@ -16,7 +16,7 @@
 #' The unmodified class is controlled by \code{unmod_code} (e.g., \code{"-"}), with a column
 #' name prefix set by \code{unmod_label} (default \code{"c"} for \code{c_counts}, \code{c_frac}).
 #'
-#' @param ch3_db A path to a \code{.ch3.db} DuckDB file or a \code{"ch3_db"} object; a connection
+#' @param mod_db A path to a \code{.mod.db} DuckDB file or a \code{"mod_db"} object; a connection
 #'   is opened via internal helpers and closed on return.
 #' @param input_table Name of the source table containing call-level records (default \code{"calls"}).
 #'   Must include at least: \code{sample_name}, \code{chrom}, \code{start}, \code{call_code}.
@@ -52,7 +52,7 @@
 #' }
 #' Positions with \code{num_calls < min_num_calls} are skipped. Chromosome filtering is done in SQL.
 #'
-#' @return (Invisibly) a \code{"ch3_db"} object pointing to the same DB file with
+#' @return (Invisibly) a \code{"mod_db"} object pointing to the same DB file with
 #'   \code{current_table} set to \code{output_table}. The created table has columns:
 #'   \itemize{
 #'     \item \code{sample_name}, \code{chrom}, \code{start}, \code{end},
@@ -64,14 +64,14 @@
 #' \dontrun{
 #' # From a calls table, build per-position summaries for default m/h classes:
 #' summarize_mod_positions(
-#'   ch3_db       = "my_db.ch3.db",
+#'   mod_db       = "my_db.mod.db",
 #'   input_table  = "calls",
 #'   output_table = "positions"
 #' )
 #'
 #' # Restrict to specific samples and chromosomes, require at least 5 calls:
 #' summarize_mod_positions(
-#'   ch3_db       = "my_db.ch3.db",
+#'   mod_db       = "my_db.mod.db",
 #'   samples      = c("Cortical_Neurons","Astrocytes"),
 #'   chrs         = c("chr1","chrX"),
 #'   min_num_calls = 5
@@ -79,7 +79,7 @@
 #'
 #' # Count a novel code "a" and an m+h combination; rename unmodified to 'u':
 #' summarize_mod_positions(
-#'   ch3_db       = "my_db.ch3.db",
+#'   mod_db       = "my_db.mod.db",
 #'   mod_code     = c("a", "m + h"),
 #'   unmod_code   = "-",
 #'   unmod_label  = "u"
@@ -87,7 +87,7 @@
 #'
 #' # Recreate positions table (drop if exists):
 #' summarize_mod_positions(
-#'   ch3_db       = "my_db.ch3.db",
+#'   mod_db       = "my_db.mod.db",
 #'   overwrite    = TRUE
 #' )
 #' }
@@ -101,7 +101,7 @@
 #'
 #' @export
 
-summarize_mod_positions <- function(ch3_db,
+summarize_mod_positions <- function(mod_db,
                                     input_table  = "calls",
                                     output_table = "positions",
                                     chrs = c(as.character(1:22),
@@ -118,7 +118,7 @@ summarize_mod_positions <- function(ch3_db,
                                     overwrite = TRUE)
 {
   start_time <- Sys.time()
-  ch3_db <- MethylSeqR:::.ch3helper_connectDB(ch3_db)
+  mod_db <- ModSeqR:::.modhelper_connectDB(mod_db)
   
   # Resource caps
   caps <- .auto_duckdb_resource_caps(0.80)
@@ -126,19 +126,19 @@ summarize_mod_positions <- function(ch3_db,
   mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
   
   dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA threads=%d;", thr))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", thr))
   
-  in_id  <- as.character(DBI::dbQuoteIdentifier(ch3_db$con, input_table))
-  out_id <- as.character(DBI::dbQuoteIdentifier(ch3_db$con, output_table))
+  in_id  <- as.character(DBI::dbQuoteIdentifier(mod_db$con, input_table))
+  out_id <- as.character(DBI::dbQuoteIdentifier(mod_db$con, output_table))
   
-  if (DBI::dbExistsTable(ch3_db$con, output_table) && overwrite)
-    DBI::dbRemoveTable(ch3_db$con, output_table)
+  if (DBI::dbExistsTable(mod_db$con, output_table) && overwrite)
+    DBI::dbRemoveTable(mod_db$con, output_table)
   
   # Determine sample list
   samp_query <- sprintf("SELECT DISTINCT sample_name FROM %s WHERE sample_name IS NOT NULL", in_id)
-  all_samps <- DBI::dbGetQuery(ch3_db$con, samp_query)[,1]
+  all_samps <- DBI::dbGetQuery(mod_db$con, samp_query)[,1]
   if (!is.null(samples)) {
     all_samps <- intersect(all_samps, samples)
   }
@@ -164,7 +164,7 @@ summarize_mod_positions <- function(ch3_db,
       {frac_nulls}
     WHERE 1=0;
   ")
-  DBI::dbExecute(ch3_db$con, schema_sql)
+  DBI::dbExecute(mod_db$con, schema_sql)
   
   chr_clause <- .chrom_filter_sql(chrs)
   
@@ -184,7 +184,7 @@ summarize_mod_positions <- function(ch3_db,
       WHERE sample_name = '{samp_esc}' AND start > 0{chr_clause}
       GROUP BY sample_name, chrom, start
     ")
-    DBI::dbExecute(ch3_db$con, view_sql)
+    DBI::dbExecute(mod_db$con, view_sql)
     
     frac_cols <- paste(sprintf(
       "CASE WHEN num_calls = 0 THEN NULL ELSE %s_counts * 1.0 / num_calls END AS %s_frac",
@@ -203,16 +203,16 @@ summarize_mod_positions <- function(ch3_db,
       FROM temp_positions
       WHERE num_calls >= {min_num_calls};
     ")
-    DBI::dbExecute(ch3_db$con, insert_sql)
+    DBI::dbExecute(mod_db$con, insert_sql)
     
-    DBI::dbExecute(ch3_db$con, "DROP VIEW IF EXISTS temp_positions;")
+    DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_positions;")
   }
   
   end_time <- Sys.time()
   message("Positions table created as ", output_table,
           " (", round(as.numeric(end_time - start_time, "secs"), 1), "s).")
   
-  ch3_db$current_table <- output_table
-  ch3_db <- MethylSeqR:::.ch3helper_closeDB(ch3_db)
-  invisible(ch3_db)
+  mod_db$current_table <- output_table
+  mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
+  invisible(mod_db)
 }

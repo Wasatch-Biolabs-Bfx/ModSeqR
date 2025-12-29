@@ -5,7 +5,7 @@
 \title{Summarize per-position methylation calls into a DuckDB table}
 \usage{
 summarize_mod_positions(
-  ch3_db,
+  mod_db,
   input_table = "calls",
   output_table = "positions",
   chrs = c(as.character(1:22), paste0("chr", 1:22), "chrX", "chrY", "chrM", paste0("Chr",
@@ -22,7 +22,7 @@ summarize_mod_positions(
 )
 }
 \arguments{
-\item{ch3_db}{A path to a \code{.ch3.db} DuckDB file or a \code{"ch3_db"} object; a connection
+\item{mod_db}{A path to a \code{.mod.db} DuckDB file or a \code{"mod_db"} object; a connection
 is opened via internal helpers and closed on return.}
 
 \item{input_table}{Name of the source table containing call-level records (default \code{"calls"}).
@@ -58,7 +58,7 @@ an internal heuristic (~80\% of RAM) is used.}
 \item{overwrite}{If \code{TRUE} and \code{output_table} exists, it is dropped before writing.}
 }
 \value{
-(Invisibly) a \code{"ch3_db"} object pointing to the same DB file with
+(Invisibly) a \code{"mod_db"} object pointing to the same DB file with
   \code{current_table} set to \code{output_table}. The created table has columns:
   \itemize{
     \item \code{sample_name}, \code{chrom}, \code{start}, \code{end},
@@ -67,7 +67,7 @@ an internal heuristic (~80\% of RAM) is used.}
   }
 }
 \description{
-Aggregates row-level CH3 calls (from \code{input_table}, typically \code{"calls"})
+Aggregates row-level mod calls (from \code{input_table}, typically \code{"calls"})
 into a per-sample, per-genomic-position table (\code{output_table}, default \code{"positions"}).
 Counts and fractions are created for the unmodified class and for any set of
 user-defined modification codes and/or combinations (e.g., \code{"m"}, \code{"h"},
@@ -102,14 +102,14 @@ name prefix set by \code{unmod_label} (default \code{"c"} for \code{c_counts}, \
 \dontrun{
 # From a calls table, build per-position summaries for default m/h classes:
 summarize_mod_positions(
-  ch3_db       = "my_db.ch3.db",
+  mod_db       = "my_db.mod.db",
   input_table  = "calls",
   output_table = "positions"
 )
 
 # Restrict to specific samples and chromosomes, require at least 5 calls:
 summarize_mod_positions(
-  ch3_db       = "my_db.ch3.db",
+  mod_db       = "my_db.mod.db",
   samples      = c("Cortical_Neurons","Astrocytes"),
   chrs         = c("chr1","chrX"),
   min_num_calls = 5
@@ -117,7 +117,7 @@ summarize_mod_positions(
 
 # Count a novel code "a" and an m+h combination; rename unmodified to 'u':
 summarize_mod_positions(
-  ch3_db       = "my_db.ch3.db",
+  mod_db       = "my_db.mod.db",
   mod_code     = c("a", "m + h"),
   unmod_code   = "-",
   unmod_label  = "u"
@@ -125,7 +125,7 @@ summarize_mod_positions(
 
 # Recreate positions table (drop if exists):
 summarize_mod_positions(
-  ch3_db       = "my_db.ch3.db",
+  mod_db       = "my_db.mod.db",
   overwrite    = TRUE
 )
 }

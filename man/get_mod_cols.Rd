@@ -4,10 +4,10 @@
 \alias{get_mod_cols}
 \title{Get Column Names from a DuckDB Table}
 \usage{
-get_mod_cols(ch3_db, table_name)
+get_mod_cols(mod_db, table_name)
 }
 \arguments{
-\item{ch3_db}{Path to the DuckDB database file (e.g., `"my_data.ch3.db"`).}
+\item{mod_db}{Path to the DuckDB database file (e.g., `"my_data.mod.db"`).}
 
 \item{table_name}{Name of the table whose column names are to be retrieved.}
 }
@@ -20,7 +20,7 @@ in a DuckDB database file.
 }
 \examples{
 \dontrun{
-get_mod_cols("my_data.ch3.db", "windows")
+get_mod_cols("my_data.mod.db", "windows")
 }
 
 }

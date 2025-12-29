@@ -2,12 +2,12 @@
 % Please edit documentation in R/export_mod_table.R
 \name{export_mod_table}
 \alias{export_mod_table}
-\title{Export Tables from the ch3 Database}
+\title{Export Tables from the mod Database}
 \usage{
-export_mod_table(ch3_db, table = "positions", out_path)
+export_mod_table(mod_db, table = "positions", out_path)
 }
 \arguments{
-\item{ch3_db}{A string. The path to the database containing ch3 files from nanopore data.}
+\item{mod_db}{A string. The path to the database containing ch3 files from nanopore data.}
 
 \item{table}{A character vector specifying the table to be exported from the database. Default is "positions".}
 
@@ -17,7 +17,7 @@ export_mod_table(ch3_db, table = "positions", out_path)
 NULL. The function writes the specified tables to CSV files.
 }
 \description{
-This function exports specified tables from the ch3 database to CSV files. Can export one or multiple tables as a time. It checks whether each table exists in the database 
+This function exports specified tables from the mod database to CSV files. Can export one or multiple tables as a time. It checks whether each table exists in the database 
 before exporting, and provides informative messages for any missing tables. The output CSV files are saved at the specified path.
 }
 \details{

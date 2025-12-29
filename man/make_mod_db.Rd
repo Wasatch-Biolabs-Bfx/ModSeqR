@@ -2,7 +2,7 @@
 % Please edit documentation in R/make_mod_db.R
 \name{make_mod_db}
 \alias{make_mod_db}
-\title{Create a CH3 DuckDB from Parquet CH3 files (with optional sample naming)}
+\title{Create a Modifications DuckDB from Parquet CH3 files (with optional sample naming)}
 \usage{
 make_mod_db(
   ch3_files,
@@ -20,8 +20,8 @@ May be a \emph{named} vector to assign \code{sample_name}s explicitly; any
 entry of the form \code{NAME=PATH} is also accepted. Directories are scanned
 (non-recursively) for \code{*.ch3} files. Must not be empty.}
 
-\item{db_name}{Path (without or with \code{.ch3.db} extension) for the DuckDB
-database to be created; \code{.ch3.db} is appended if missing.}
+\item{db_name}{Path (without or with \code{.mod.db} extension) for the DuckDB
+database to be created; \code{.mod.db} is appended if missing.}
 
 \item{chrom}{Optional chromosome filter. Either a single string (e.g.,
 \code{"chr1"}) or a character vector (e.g., \code{c("chr1","chr2","chrX")}).
@@ -36,7 +36,7 @@ If \code{NULL}, all chromosomes are included.}
 \item{flag}{Optional numeric flag value to require; if \code{NULL}, no flag filter.}
 }
 \value{
-(Invisibly) a list of class \code{"ch3_db"} with elements:
+(Invisibly) a list of class \code{"mod_db"} with elements:
   \itemize{
     \item \code{db_file}: path to the created DuckDB file,
     \item \code{current_table}: \code{NULL} (set by downstream functions),
@@ -93,15 +93,14 @@ make_mod_db(ch3_files = "path/to/ch3_dir",
 
 # 2) Explicit files (auto-sample names from stems)
 make_mod_db(ch3_files = c("A.ch3", "B.ch3"),
-            db_name   = "two_samples.ch3.db",
+            db_name   = "two_samples.mod.db",
             min_read_length = 100, min_base_qual = 10)
 
 # 3) Named inputs (sample_name set from names)
 make_mod_db(
   ch3_files = c(
     Sample1      = "../CH3/Sample1.ch3",
-    Sample2  = "../CH3/Sample2.ch3",
-    Sample3   = "../CH3/Sample3.combined.ch3"
+    Sample2  = "../CH3/Sample2.ch3"
   ),
   db_name = "My_DB",
   min_base_qual = 10,
@@ -110,7 +109,7 @@ make_mod_db(
 
 # 4) Filter to specific chromosomes
 make_mod_db(
-  ch3_files = c(S1 = "A.ch3", S2 = "B.ch3"),
+  ch3_files = c(S1 = "A.mod", S2 = "B.mod"),
   db_name   = "chr1_chrX_only",
   chrom     = c("chr1","chrX")
 )
@@ -118,7 +117,7 @@ make_mod_db(
 
 }
 \seealso{
-\code{\link{summarize_ch3_positions}}, \code{\link{summarize_ch3_regions}},
-\code{\link{summarize_ch3_windows}}, \code{\link{get_ch3_dbinfo}},
-\code{\link{get_ch3_tableinfo}}, \code{\link{calc_ch3_diff}}
+\code{\link{summarize_mod_positions}}, \code{\link{summarize_mod_regions}},
+\code{\link{summarize_mod_windows}}, \code{\link{get_mod_dbinfo}},
+\code{\link{get_mod_tableinfo}}, \code{\link{calc_mod_diff}}
 }

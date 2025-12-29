@@ -5,7 +5,7 @@
 \title{Plot Case vs Control Methylation Fractions with Density-Weighted Points}
 \usage{
 plot_mod_diff_density(
-  ch3_db,
+  mod_db,
   table,
   thresh = c(0.2, 0.3),
   palette = "turbo",
@@ -13,7 +13,7 @@ plot_mod_diff_density(
 )
 }
 \arguments{
-\item{ch3_db}{A path to the CH3 SQLite database, or an open database connection object.}
+\item{mod_db}{A path to the modification DuckDB database, or an open database connection object.}
 
 \item{table}{A string specifying the table name within the database, containing `mh_frac_case` and `mh_frac_control` columns.}
 
@@ -28,7 +28,7 @@ Invisibly returns the closed database connection object. The plot is printed to 
 }
 \description{
 This function generates a scatter plot of methylation fractions in case vs control samples
-from a CH3 SQLite database table, with optional density shading and threshold lines.
+from a modification DuckDB database table, with optional density shading and threshold lines.
 }
 \details{
 This function visualizes the relationship between `mh_frac_case` and `mh_frac_control` methylation values
@@ -47,7 +47,7 @@ The plot is limited to the [0, 1] range for both axes and uses a clean classic t
 }
 \examples{
 \dontrun{
-plot_mod_diff_density("my_data/ch3.sqlite", table = "chr5", thresh = c(0.25, 0.35))
+plot_mod_diff_density("my_data/my.mod.db", table = "chr5", thresh = c(0.25, 0.35))
 }
 
 }

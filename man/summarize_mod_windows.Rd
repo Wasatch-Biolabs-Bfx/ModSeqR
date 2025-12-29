@@ -5,7 +5,7 @@
 \title{Summarize methylation in sliding windows}
 \usage{
 summarize_mod_windows(
-  ch3_db,
+  mod_db,
   input_table = "calls",
   output_table = "windows",
   window_size = 1000,
@@ -24,7 +24,7 @@ summarize_mod_windows(
 )
 }
 \arguments{
-\item{ch3_db}{Path to a \code{.ch3.db} DuckDB file or a \code{"ch3_db"} object.
+\item{mod_db}{Path to a \code{.mod.db} DuckDB file or a \code{"mod_db"} object.
 A connection is opened via internal helpers and closed/cleaned on return.}
 
 \item{input_table}{Source table containing call-level records (default \code{"calls"}).
@@ -64,7 +64,7 @@ If \code{NULL}, an internal heuristic (~80\% of RAM) is used.}
 \item{overwrite}{If \code{TRUE} and \code{output_table} exists, it is dropped before writing.}
 }
 \value{
-(Invisibly) a \code{"ch3_db"} object pointing to the same DB file with
+(Invisibly) a \code{"mod_db"} object pointing to the same DB file with
   \code{current_table} set to \code{output_table}. The created table has columns:
   \itemize{
     \item \code{sample_name}, \code{chrom}, \code{start}, \code{end},
@@ -111,11 +111,11 @@ using \code{unmod_label} (default \code{"c"} → \code{c_counts}, \code{c_frac})
 \examples{
 \dontrun{
 # Default m/h windows (1kb windows, 10bp staggered offsets)
-summarize_mod_windows("my_db.ch3.db")
+summarize_mod_windows("my_db.mod.db")
 
 # Custom mod codes with a novel 'a' code and stricter filtering
 summarize_mod_windows(
-  ch3_db        = "my_db.ch3.db",
+  mod_db        = "my_db.mod.db",
   mod_code      = c("a", "m + h"),
   min_num_calls = 25,
   window_size   = 2000,
@@ -123,8 +123,8 @@ summarize_mod_windows(
 )
 
 # Limit to selected samples and chromosomes; recreate table if present
-summarize_ch3_windows(
-  ch3_db       = "my_db.ch3.db",
+summarize_mod_windows(
+  mod_db       = "my_db.mod.db",
   samples      = c("Astrocytes","Blood_Plasma"),
   chrs         = c("chr1","chrX"),
   overwrite    = TRUE
@@ -133,8 +133,8 @@ summarize_ch3_windows(
 
 }
 \seealso{
-\code{\link{make_ch3_db}},
-\code{\link{summarize_ch3_positions}},
-\code{\link{summarize_ch3_regions}},
-\code{\link{calc_ch3_diff}}
+\code{\link{make_mod_db}},
+\code{\link{summarize_mod_positions}},
+\code{\link{summarize_mod_regions}},
+\code{\link{calc_mod_diff}}
 }

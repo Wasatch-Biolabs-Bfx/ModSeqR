@@ -4,10 +4,10 @@
 \alias{rename_mod_samples}
 \title{Rename sample names in a table}
 \usage{
-rename_mod_samples(ch3_db, table, samples_map, strict = TRUE, preview = TRUE)
+rename_mod_samples(mod_db, table, samples_map, strict = TRUE, preview = TRUE)
 }
 \arguments{
-\item{ch3_db}{Path to a \code{.ch3.db} file or a \code{"ch3_db"} object.}
+\item{mod_db}{Path to a \code{.mod.db} file or a \code{"mod_db"} object.}
 
 \item{table}{Character scalar: the table to modify (e.g. \code{"positions"},
 \code{"windows"}, \code{"regions"}, or \code{"calls"}).}
@@ -23,7 +23,7 @@ to proceed after dropping invalid rows with a warning.}
 of distinct sample names.}
 }
 \value{
-(Invisibly) the updated \code{"ch3_db"} object (connection closed on return).
+(Invisibly) the updated \code{"mod_db"} object (connection closed on return).
 }
 \description{
 Update \code{sample_name} values in a specified DuckDB table using a mapping
@@ -34,13 +34,13 @@ from old names to new names. Accepts either a named character vector
 \examples{
 \dontrun{
 # Named character vector
-rename_mod_samples("my_db.ch3.db", table = "positions",
+rename_mod_samples("my_db.mod.db", table = "positions",
                    samples_map = c("Astrocytes" = "Astro",
                                    "Cortical_Neurons" = "Cortical"))
 
 # data.frame mapping
 m <- data.frame(old = c("Ctrl1","Ctrl2"), new = c("Control_1","Control_2"))
-rename_mod_samples("my_db.ch3.db", "windows", m)
+rename_mod_samples("my_db.mod.db", "windows", m)
 }
 
 }

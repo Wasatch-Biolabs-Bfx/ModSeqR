@@ -5,7 +5,7 @@
 \title{Run Differential Analysis on Methylation Data}
 \usage{
 run_mod_analysis(
-  ch3_db,
+  mod_db,
   out_path,
   call_type,
   region_file = NULL,
@@ -19,7 +19,7 @@ run_mod_analysis(
 )
 }
 \arguments{
-\item{ch3_db}{A `ch3_db` object representing the DuckDB database containing methylation data.
+\item{mod_db}{A `mod_db` object representing the DuckDB database containing methylation data.
 The database should include necessary tables for the analysis, such as positions, regions, or windows.}
 
 \item{out_path}{The directory in which the "Mod_Diff_Analysis_Results" directory containing result data will be written out too. 

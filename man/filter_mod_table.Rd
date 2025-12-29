@@ -4,10 +4,10 @@
 \alias{filter_mod_table}
 \title{Filter a DuckDB Table and Save to a New Table}
 \usage{
-filter_mod_table(ch3_db, input_table, output_table, ...)
+filter_mod_table(mod_db, input_table, output_table, ...)
 }
 \arguments{
-\item{ch3_db}{Path to the DuckDB database file (e.g., `"my_data.ch3.db"`).}
+\item{mod_db}{Path to the DuckDB database file (e.g., `"my_data.mod.db"`).}
 
 \item{input_table}{Name of the table to filter.}
 
@@ -26,7 +26,7 @@ is translated to SQL and executed inside the database (not in R).
 }
 \examples{
 \dontrun{
-filter_mod_table(ch3_db = train_db, 
+filter_mod_table(mod_db = train_db, 
 input_table = "collapsed_windows", 
 output_table = "collapsed_windows",
 !(chrom \%in\% c("chrX", "chrY")))

@@ -6,7 +6,7 @@
 #' methylation (`m`), hemi-methylation (`h`), and total calls. The function 
 #' interacts with the database to generate a `reads` table.
 #'
-#' @param ch3_db A character string specifying the path to the DuckDB database.
+#' @param mod_db A character string specifying the path to the DuckDB database.
 #' @param table_name A string specifying what the user would like the name to be called in the database. Default is "reads".
 #' @param min_length An integer specifying the the minimum read_length.
 #' @param min_CGs An integer specifying the minimum number of CG sites required for a read to be included in the summary.
@@ -18,11 +18,11 @@
 #'
 #' @examples
 #' #Specify the path to the database
-#'  ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
-#'  region_bed = system.file("Islands_hg38_test.csv", package = "MethylSeqR")
+#'  mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
+#'  region_bed = system.file("Islands_hg38_test.csv", package = "ModSeqR")
 #'  
 #'  # Summarize Reads
-#'  summarize_mod_reads(ch3_db, region_bed)
+#'  summarize_mod_reads(mod_db, region_bed)
 #'
 #' @importFrom DBI dbConnect dbDisconnect dbExecute dbExistsTable dbRemoveTable dbWriteTable
 #' @importFrom duckdb duckdb
@@ -33,7 +33,7 @@
 #' @export
 
 # Bucket Approach
-summarize_mod_reads <- function(ch3_db,
+summarize_mod_reads <- function(mod_db,
                                 input_calls_table = "calls",
                                 output_reads_table = "reads",
                                 regions_table = NULL,
@@ -43,8 +43,8 @@ summarize_mod_reads <- function(ch3_db,
   start_time <- Sys.time()
   
   # Open the database connection
-  ch3_db <- .ch3helper_connectDB(ch3_db)
-  dbExecute(ch3_db$con, "PRAGMA max_temp_directory_size='100GiB';")
+  mod_db <- .modhelper_connectDB(mod_db)
+  dbExecute(mod_db$con, "PRAGMA max_temp_directory_size='100GiB';")
   
   # Optionally read and upload regions table if provided
   if (!is.null(regions_table)) {
@@ -62,15 +62,15 @@ summarize_mod_reads <- function(ch3_db,
       stop("Regions table must include columns: chrom, start, end")
     }
     
-    dbExecute(ch3_db$con, "DROP TABLE IF EXISTS temp_regions_table;")
+    dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_regions_table;")
     annotation <- annotation |> dplyr::mutate(bucket = floor(start / 10000))
-    DBI::dbWriteTable(ch3_db$con, "temp_regions_table", annotation, temporary = TRUE)
+    DBI::dbWriteTable(mod_db$con, "temp_regions_table", annotation, temporary = TRUE)
   }
   
   cat("Summarizing Reads...\n")
   
-  if (dbExistsTable(ch3_db$con, output_reads_table))
-    dbRemoveTable(ch3_db$con, output_reads_table)
+  if (dbExistsTable(mod_db$con, output_reads_table))
+    dbRemoveTable(mod_db$con, output_reads_table)
   
   query <- glue::glue("
     CREATE TABLE {output_reads_table} AS
@@ -100,7 +100,7 @@ summarize_mod_reads <- function(ch3_db,
     HAVING total_calls >= {min_CGs}
        AND read_length >= {min_length}")
   
-  dbExecute(ch3_db$con, query)
+  dbExecute(mod_db$con, query)
   
   cat("\n")
   end_time <- Sys.time()
@@ -114,8 +114,8 @@ summarize_mod_reads <- function(ch3_db,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
   
-  print(head(dplyr::tbl(ch3_db$con, output_reads_table)))
-  ch3_db$current_table = output_reads_table
-  ch3_db <- .ch3helper_cleanup(ch3_db)
-  invisible(ch3_db)
+  print(head(dplyr::tbl(mod_db$con, output_reads_table)))
+  mod_db$current_table = output_reads_table
+  mod_db <- .modhelper_cleanup(mod_db)
+  invisible(mod_db)
 }

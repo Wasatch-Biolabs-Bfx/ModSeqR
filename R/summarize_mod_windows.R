@@ -15,7 +15,7 @@
 #' unmodified class is defined by \code{unmod_code} (default \code{"-"}), named
 #' using \code{unmod_label} (default \code{"c"} → \code{c_counts}, \code{c_frac}).
 #'
-#' @param ch3_db Path to a \code{.ch3.db} DuckDB file or a \code{"ch3_db"} object.
+#' @param mod_db Path to a \code{.mod.db} DuckDB file or a \code{"mod_db"} object.
 #'   A connection is opened via internal helpers and closed/cleaned on return.
 #' @param input_table Source table containing call-level records (default \code{"calls"}).
 #'   Must contain at least: \code{sample_name}, \code{chrom}, \code{start}, \code{call_code}.
@@ -57,7 +57,7 @@
 #' Resource pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}) are set
 #' via internal heuristics unless overridden.
 #'
-#' @return (Invisibly) a \code{"ch3_db"} object pointing to the same DB file with
+#' @return (Invisibly) a \code{"mod_db"} object pointing to the same DB file with
 #'   \code{current_table} set to \code{output_table}. The created table has columns:
 #'   \itemize{
 #'     \item \code{sample_name}, \code{chrom}, \code{start}, \code{end},
@@ -69,11 +69,11 @@
 #' @examples
 #' \dontrun{
 #' # Default m/h windows (1kb windows, 10bp staggered offsets)
-#' summarize_mod_windows("my_db.ch3.db")
+#' summarize_mod_windows("my_db.mod.db")
 #'
 #' # Custom mod codes with a novel 'a' code and stricter filtering
 #' summarize_mod_windows(
-#'   ch3_db        = "my_db.ch3.db",
+#'   mod_db        = "my_db.mod.db",
 #'   mod_code      = c("a", "m + h"),
 #'   min_num_calls = 25,
 #'   window_size   = 2000,
@@ -81,8 +81,8 @@
 #' )
 #'
 #' # Limit to selected samples and chromosomes; recreate table if present
-#' summarize_ch3_windows(
-#'   ch3_db       = "my_db.ch3.db",
+#' summarize_mod_windows(
+#'   mod_db       = "my_db.mod.db",
 #'   samples      = c("Astrocytes","Blood_Plasma"),
 #'   chrs         = c("chr1","chrX"),
 #'   overwrite    = TRUE
@@ -90,16 +90,16 @@
 #' }
 #'
 #' @seealso
-#' \code{\link{make_ch3_db}},
-#' \code{\link{summarize_ch3_positions}},
-#' \code{\link{summarize_ch3_regions}},
-#' \code{\link{calc_ch3_diff}}
+#' \code{\link{make_mod_db}},
+#' \code{\link{summarize_mod_positions}},
+#' \code{\link{summarize_mod_regions}},
+#' \code{\link{calc_mod_diff}}
 #'
 #' @importFrom DBI dbExecute dbExistsTable dbGetQuery dbQuoteIdentifier dbRemoveTable
 #' @importFrom glue glue
 #' @export
 
-summarize_mod_windows <- function(ch3_db,
+summarize_mod_windows <- function(mod_db,
                                   input_table  = "calls",
                                   output_table = "windows",
                                   window_size = 1000,
@@ -118,7 +118,7 @@ summarize_mod_windows <- function(ch3_db,
                                   overwrite = TRUE)
 {
   start_time <- Sys.time()
-  ch3_db <- MethylSeqR:::.ch3helper_connectDB(ch3_db)
+  mod_db <- ModSeqR:::.modhelper_connectDB(mod_db)
   
   # Resource caps
   caps <- .auto_duckdb_resource_caps(0.80)
@@ -126,19 +126,19 @@ summarize_mod_windows <- function(ch3_db,
   mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
   
   dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
-  DBI::dbExecute(ch3_db$con, sprintf("PRAGMA threads=%d;", thr))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", thr))
   
-  in_id  <- as.character(DBI::dbQuoteIdentifier(ch3_db$con, input_table))
-  out_id <- as.character(DBI::dbQuoteIdentifier(ch3_db$con, output_table))
+  in_id  <- as.character(DBI::dbQuoteIdentifier(mod_db$con, input_table))
+  out_id <- as.character(DBI::dbQuoteIdentifier(mod_db$con, output_table))
   
-  if (DBI::dbExistsTable(ch3_db$con, output_table) && overwrite)
-    DBI::dbRemoveTable(ch3_db$con, output_table)
+  if (DBI::dbExistsTable(mod_db$con, output_table) && overwrite)
+    DBI::dbRemoveTable(mod_db$con, output_table)
   
   # Sample list
   samp_query <- sprintf("SELECT DISTINCT sample_name FROM %s WHERE sample_name IS NOT NULL", in_id)
-  all_samps <- DBI::dbGetQuery(ch3_db$con, samp_query)[,1]
+  all_samps <- DBI::dbGetQuery(mod_db$con, samp_query)[,1]
   if (!is.null(samples)) {
     all_samps <- intersect(all_samps, samples)
   }
@@ -167,7 +167,7 @@ summarize_mod_windows <- function(ch3_db,
       {frac_nulls}
     WHERE 1=0;
   ")
-  DBI::dbExecute(ch3_db$con, schema_sql)
+  DBI::dbExecute(mod_db$con, schema_sql)
   
   offsets <- seq(1, window_size - 1, by = step_size)
   chr_clause <- .chrom_filter_sql(chrs)
@@ -188,7 +188,7 @@ summarize_mod_windows <- function(ch3_db,
       WHERE sample_name = '{samp_esc}' AND start > 0{chr_clause}
       GROUP BY sample_name, chrom, start
     ")
-    DBI::dbExecute(ch3_db$con, pos_view)
+    DBI::dbExecute(mod_db$con, pos_view)
     
     # Dynamic SUMs for counts & fractions at window level
     sum_counts <- paste(sprintf("SUM(%s_counts) AS %s_counts", labels, labels),
@@ -224,23 +224,23 @@ summarize_mod_windows <- function(ch3_db,
         HAVING SUM(num_calls) >= {min_num_calls};
       ")
       
-      DBI::dbExecute(ch3_db$con, "DROP TABLE IF EXISTS temp_table;")
-      DBI::dbExecute(ch3_db$con, win_sql)
+      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_table;")
+      DBI::dbExecute(mod_db$con, win_sql)
       
       ins_sql <- glue::glue("INSERT INTO {out_id} SELECT * FROM temp_table;")
-      DBI::dbExecute(ch3_db$con, ins_sql)
+      DBI::dbExecute(mod_db$con, ins_sql)
       
-      DBI::dbExecute(ch3_db$con, "DROP TABLE IF EXISTS temp_table;")
+      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_table;")
     }
     
-    DBI::dbExecute(ch3_db$con, "DROP VIEW IF EXISTS temp_positions;")
+    DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_positions;")
   }
   
   end_time <- Sys.time()
   message("Windows table created as ", output_table,
           " (", round(as.numeric(end_time - start_time, "mins"), 2), " min).")
   
-  ch3_db$current_table <- output_table
-  ch3_db <- MethylSeqR:::.ch3helper_cleanup(ch3_db)
-  invisible(ch3_db)
+  mod_db$current_table <- output_table
+  mod_db <- ModSeqR:::.modhelper_cleanup(mod_db)
+  invisible(mod_db)
 }

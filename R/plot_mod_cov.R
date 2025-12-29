@@ -4,7 +4,7 @@
 #' methylation sequencing experiments. It can handle both positional and regional
 #' methylation data.
 #'
-#' @param ch3_db A data base either linking to the file name or of class ch3_db.
+#' @param mod_db A data base either linking to the file name or of class mod_db.
 #' @param call_type Either positions or regions data to analyze coverage on.
 #' @param plot Logical, if \code{TRUE}, the function will generate a histogram of
 #' the coverage data. Default is \code{FALSE}.
@@ -17,10 +17,10 @@
 #'
 #' @examples
 #'  # Specify the path to the database
-#'  ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+#'  mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
 #'  
 #'  # Get coverage statistics for the 'positions' call type without plotting
-#'  plot_mod_cov(ch3_db = ch3_db, call_type = "positions")
+#'  plot_mod_cov(mod_db = mod_db, call_type = "positions")
 #'
 #' @importFrom DBI dbConnect dbDisconnect dbExistsTable
 #' @importFrom duckdb duckdb
@@ -30,7 +30,7 @@
 #'
 #' @export
 
-plot_mod_cov <- function(ch3_db,
+plot_mod_cov <- function(mod_db,
                           call_type = "positions",
                           plot = TRUE,
                           save_path = NULL,
@@ -38,19 +38,19 @@ plot_mod_cov <- function(ch3_db,
 {
   start_time <- Sys.time()
   # Open the database connection
-  ch3_db <- .ch3helper_connectDB(ch3_db)
+  mod_db <- .modhelper_connectDB(mod_db)
   
   if (length(call_type) > 1) {
     call_type = c("positions")
   }
   
   # Check for specific table and connect to it in the database
-  if (!dbExistsTable(ch3_db$con, call_type)) {
+  if (!dbExistsTable(mod_db$con, call_type)) {
     stop(paste0(call_type, " Table does not exist in the database. Check spelling or make sure you create it first.\n"))
   }
   
   # Determine total number of rows first
-  total_rows <- tbl(ch3_db$con, call_type) |> summarise(n = n()) |> pull(n)
+  total_rows <- tbl(mod_db$con, call_type) |> summarise(n = n()) |> pull(n)
   
   # Sample in SQL if max_rows is given and valid
   if (!is.null(max_rows)) {
@@ -59,12 +59,12 @@ plot_mod_cov <- function(ch3_db,
                   ") exceeds available rows in the table (", total_rows, ")."))
     }
     
-    modseq_dat <- tbl(ch3_db$con, sql(paste0(
+    modseq_dat <- tbl(mod_db$con, sql(paste0(
       "SELECT * FROM ", call_type, 
       " USING SAMPLE ", max_rows, " ROWS"
     )))
   } else {
-    modseq_dat <- tbl(ch3_db$con, call_type)
+    modseq_dat <- tbl(mod_db$con, call_type)
   }
   
   # Checks
@@ -140,6 +140,6 @@ plot_mod_cov <- function(ch3_db,
   end_time <- Sys.time()
   message("Time elapsed: ", end_time - start_time, "\n")
   
-  ch3_db <- .ch3helper_closeDB(ch3_db)
-  invisible(ch3_db)
+  mod_db <- .modhelper_closeDB(mod_db)
+  invisible(mod_db)
 }

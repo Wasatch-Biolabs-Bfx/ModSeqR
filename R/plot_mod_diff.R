@@ -4,12 +4,12 @@
 #' This function connects to a DuckDB database, retrieves the specified differential methylation table, filters and 
 #' transforms the data, and generates a raster plot with `meth_diff` on the x-axis and `-log10(p-value)` on the y-axis.
 #'
-#' @param ch3_db A `ch3_db` object or a character string representing the file path to a DuckDB database.
+#' @param mod_db A `mod_db` object or a character string representing the file path to a DuckDB database.
 #'        The database must contain a table with differential methylation results.
 #' @param table A character string specifying the name of the table in the database containing the differential methylation data.
 #'        The table must contain at least the following columns: `meth_diff` and `p_val`.
 #'
-#' @return Invisibly returns the `ch3_db` object after closing the database connection. The function prints the ggplot2 raster plot to the active R graphics device.
+#' @return Invisibly returns the `mod_db` object after closing the database connection. The function prints the ggplot2 raster plot to the active R graphics device.
 #' 
 #' @details
 #' The plot uses `dbplot::dbplot_raster()` to efficiently create a raster visualization of large-scale methylation difference data. 
@@ -18,7 +18,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' plot_mod_diff("my_methylation.ch3.db", "mod_diff_windows")
+#' plot_mod_diff("my_methylation.mod.db", "mod_diff_windows")
 #' }
 #'
 #' @importFrom dplyr filter mutate
@@ -26,22 +26,22 @@
 #' @importFrom ggplot2 scale_fill_viridis_c labs theme_minimal
 #' @importFrom DBI dbExistsTable
 #' @export
-plot_mod_diff <- function(ch3_db,
+plot_mod_diff <- function(mod_db,
                           table) {
   start_time <- Sys.time()
   # Open the database connection
-  ch3_db <- .ch3helper_connectDB(ch3_db)
+  mod_db <- .modhelper_connectDB(mod_db)
   
   # check for differential methylation table
-  if (!dbExistsTable(ch3_db$con, table)) { # add db_con into object and put in every function...
-    stop(paste0(table, " table does not exist. Build it with calc_ch3_diff()!"))
+  if (!dbExistsTable(mod_db$con, table)) { # add db_con into object and put in every function...
+    stop(paste0(table, " table does not exist. Build it with calc_mod_diff()!"))
   }
   
   # Connect to the table
-  tbl_diff <- tbl(ch3_db$con, table)
+  tbl_diff <- tbl(mod_db$con, table)
   
   # Plot using dbplot_raster
-  plot <- tbl(ch3_db$con, table) |>
+  plot <- tbl(mod_db$con, table) |>
     filter(
       !is.na(meth_diff),
       !is.nan(meth_diff),
@@ -83,6 +83,6 @@ plot_mod_diff <- function(ch3_db,
     message("Differential Methylation Plotted!",
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
-  ch3_db <- .ch3helper_closeDB(ch3_db)
-  invisible(ch3_db)
+  mod_db <- .modhelper_closeDB(mod_db)
+  invisible(mod_db)
 }

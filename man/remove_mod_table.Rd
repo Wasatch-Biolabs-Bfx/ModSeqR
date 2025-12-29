@@ -4,10 +4,10 @@
 \alias{remove_mod_table}
 \title{Remove a table from a database connection.}
 \usage{
-remove_mod_table(ch3_db, table_name)
+remove_mod_table(mod_db, table_name)
 }
 \arguments{
-\item{ch3_db}{A database object.}
+\item{mod_db}{A database object.}
 
 \item{table_name}{A string specifying the name of the table to remove.}
 }

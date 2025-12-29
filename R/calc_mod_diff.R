@@ -3,7 +3,7 @@
 #' This function calculates differential methylation between specified case and control groups using various statistical methods. 
 #' The results are stored in a DuckDB database for further analysis.
 #'
-#' @param ch3_db A list containing the database file path. This should be a valid "ch3_db" class object.
+#' @param mod_db A list containing the database file path. This should be a valid "mod_db" class object.
 #' @param call_type A string representing the name of the table in the database from which to pull the data. 
 #' Default is "positions".
 #' @param output_table Destination table name for results. If NULL, defaults to paste0("mod_diff_", call_type).
@@ -22,14 +22,14 @@
 #' It summarizes the data for cases and controls, calculates p-values based on the specified method, and stores the results in the 
 #' "meth_diff" table. 
 #'
-#' @return A list containing the updated "ch3_db" object with the latest tables in the database, including "meth_diff".
+#' @return A list containing the updated "mod_db" object with the latest tables in the database, including "meth_diff".
 #' 
 #' @examples
 #'  # Specify the path to the database
-#'  ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+#'  mod_db <- system.file("my_data.mod.db", package = "MethylSeqR")
 #'  
 #'  # Get methylation statistics for the 'positions' call type without plotting
-#'  calc_mod_diff(ch3_db = ch3_db, 
+#'  calc_mod_diff(mod_db = mod_db, 
 #'                call_type = "positions",
 #'                cases = c("Blood1_chr21", "Blood2_chr21", "Blood3_chr21"),
 #'                controls = c("Sperm1_chr21", "Sperm2_chr21", "Sperm3_chr21")))
@@ -42,7 +42,7 @@
 #'
 #' @export
 
-calc_mod_diff <- function(ch3_db,
+calc_mod_diff <- function(mod_db,
                           call_type = "positions",
                           output_table = NULL,
                           cases,
@@ -54,16 +54,16 @@ calc_mod_diff <- function(ch3_db,
   start_time <- Sys.time()
 
   # Open the database connection
-  ch3_db <- .ch3helper_connectDB(ch3_db)
+  mod_db <- .modhelper_connectDB(mod_db)
 
   # check for windows function
-  if (!dbExistsTable(ch3_db$con, call_type)) { # add db_con into object and put in every function...
-    stop(call_type, " table does not exist. Build it with summarize_ch3_positions(), ",
-         "summarize_ch3_regions(), or summarize_ch3_windows().")
+  if (!dbExistsTable(mod_db$con, call_type)) { # add db_con into object and put in every function...
+    stop(call_type, " table does not exist. Build it with summarize_mod_positions(), ",
+         "summarize_mod_regions(), or summarize_mod_windows().")
   }
   
   # Discover available *_counts columns and validate mod_type
-  cols <- colnames(dplyr::tbl(ch3_db$con, call_type))
+  cols <- colnames(dplyr::tbl(mod_db$con, call_type))
   counts_cols <- grep("_counts$", cols, value = TRUE)
   available_labels <- sub("_counts$", "", counts_cols)
   
@@ -86,16 +86,16 @@ calc_mod_diff <- function(ch3_db,
     mod_diff_table <- output_table
   }
   
-  if (DBI::dbExistsTable(ch3_db$con, mod_diff_table)) {
+  if (DBI::dbExistsTable(mod_db$con, mod_diff_table)) {
     if (overwrite) {
-      DBI::dbRemoveTable(ch3_db$con, mod_diff_table)
+      DBI::dbRemoveTable(mod_db$con, mod_diff_table)
     } else {
       stop("Output table '", mod_diff_table, "' already exists. Set overwrite = TRUE or choose a different output_table.")
     }
   }
   
   in_dat <-
-    dplyr::tbl(ch3_db$con, call_type) |>
+    dplyr::tbl(mod_db$con, call_type) |>
     dplyr::select(
       sample_name,
       dplyr::any_of(c("region_name", "chrom", "start", "end")),
@@ -157,7 +157,7 @@ calc_mod_diff <- function(ch3_db,
     dplyr::collect() |>
     dplyr::mutate(p_adjust = stats::p.adjust(p_val, method = "BH")) |>
     dplyr::arrange(p_adjust) |>
-    DBI::dbWriteTable(conn = ch3_db$con, name = mod_diff_table, append = TRUE)
+    DBI::dbWriteTable(conn = mod_db$con, name = mod_diff_table, append = TRUE)
 
   end_time <- Sys.time()
   total_time_difftime <- end_time - start_time
@@ -177,15 +177,15 @@ calc_mod_diff <- function(ch3_db,
   }
   
   if (call_type == "windows") {
-    message("Call collapse_ch3_windows() to collapse significant windows.\n")
+    message("Call collapse_mod_windows() to collapse significant windows.\n")
   } 
   
   # Print a preview of what table looks like
-  print(head(dplyr::tbl(ch3_db$con, mod_diff_table)))
+  print(head(dplyr::tbl(mod_db$con, mod_diff_table)))
   
-  ch3_db$current_table = mod_diff_table
-  ch3_db <- .ch3helper_cleanup(ch3_db)
-  invisible(ch3_db)
+  mod_db$current_table = mod_diff_table
+  mod_db <- .modhelper_cleanup(mod_db)
+  invisible(mod_db)
 }
 
 

@@ -4,7 +4,7 @@
 #' contiguous regions that meet the specified criteria. Can only collapse windows 
 #' once a differential modification analysis (calc_mod_diff()) has been called.
 #'
-#' @param ch3_db A DuckDB database connection object or path to the database.
+#' @param mod_db A DuckDB database connection object or path to the database.
 #' @param table_name Character. Name of the output table to store collapsed
 #'        windows (default: "collapsed_windows").
 #' @param max_distance Numeric. The maximum allowable distance between consecutive
@@ -35,17 +35,17 @@
 #' 
 #' @export
 
-collapse_mod_windows <- function(ch3_db, 
+collapse_mod_windows <- function(mod_db, 
                                  table_name = "collapsed_windows",
                                  max_distance = 1000,
                                  sig_cutoff = 0.05,
                                  min_diff = 0.5) 
 {
   start_time <- Sys.time()
-  ch3_db <- .ch3helper_connectDB(ch3_db)
+  mod_db <- .modhelper_connectDB(mod_db)
   
   # Check if "mod_diff" table exists
-  if (!DBI::dbExistsTable(ch3_db$con, "mod_diff_windows")) {
+  if (!DBI::dbExistsTable(mod_db$con, "mod_diff_windows")) {
     stop(glue::glue("Error: Table 'mod_diff_windows' not found in the database. 
                      Please run 'mod_diff()' on windows data first to generate it.\n"))
   }
@@ -53,12 +53,12 @@ collapse_mod_windows <- function(ch3_db,
   cat("Collapsing windows on differential analysis results...\n")
   
   # --- Build AVG(...) list dynamically based on existing columns ---
-  cols <- DBI::dbListFields(ch3_db$con, "mod_diff_windows")
+  cols <- DBI::dbListFields(mod_db$con, "mod_diff_windows")
   patterns <- c("_counts_control$", "_counts_case$", "_frac_control$", "_frac_case$")
   match_cols <- cols[grepl(paste(patterns, collapse = "|"), cols)]
   
   # Quote identifiers safely for DuckDB
-  qi <- function(x) as.character(DBI::dbQuoteIdentifier(ch3_db$con, x))
+  qi <- function(x) as.character(DBI::dbQuoteIdentifier(mod_db$con, x))
   
   avg_exprs <- if (length(match_cols)) {
     paste0("AVG(", qi(match_cols), ") AS ", qi(paste0("avg_", match_cols)))
@@ -108,7 +108,7 @@ collapse_mod_windows <- function(ch3_db,
   )
   
   
-  DBI::dbExecute(ch3_db$con, query)
+  DBI::dbExecute(mod_db$con, query)
   
   end_time <- Sys.time()
   cat("\n")
@@ -123,8 +123,8 @@ collapse_mod_windows <- function(ch3_db,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
   
-  ch3_db$current_table <- table_name
-  ch3_db <- .ch3helper_cleanup(ch3_db)
+  mod_db$current_table <- table_name
+  mod_db <- .modhelper_cleanup(mod_db)
   
-  invisible(ch3_db)
+  invisible(mod_db)
 }

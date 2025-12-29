@@ -1,6 +1,6 @@
-#' Trim methylation calls at the read ends in a ch3 database
+#' Trim methylation calls at the read ends in a mod database
 #'
-#' Creates a new table in a ch3 database that keeps only methylation calls
+#' Creates a new table in a mod database that keeps only methylation calls
 #' within a central fraction of each read, optionally trimming from the
 #' start, the end, or both. Trimming is expressed as a fraction of the
 #' read length and applied via SQL filters on `read_position`.
@@ -16,9 +16,9 @@
 #' positions \code{0–9} and/or \code{90–99} are trimmed depending on
 #' which end(s) are enabled.
 #'
-#' @param ch3_db An object identifying the ch3 database, as accepted by
-#'   \code{MethylSeqR:::.ch3helper_connectDB()} (e.g. a file path or an
-#'   existing ch3 database object).
+#' @param mod_db An object identifying the mod database, as accepted by
+#'   \code{ModSeqR:::.modhelper_connectDB()} (e.g. a file path or an
+#'   existing mod database object).
 #' @param by_frac Numeric scalar between 0 and 1 (exclusive) giving the
 #'   fraction of the read length to trim from each enabled end. For
 #'   example, \code{by_frac = 0.1} trims 10\% of the read length from
@@ -36,7 +36,7 @@
 #'
 #' @details
 #' This function issues a \code{CREATE OR REPLACE TABLE} SQL statement
-#' against the ch3 database. The resulting table contains a subset of
+#' against the mod database. The resulting table contains a subset of
 #' rows from \code{input_table} where the read positions fall within the
 #' untrimmed interior region defined by \code{by_frac}, \code{trim_start},
 #' and \code{trim_end}.
@@ -45,11 +45,11 @@
 #' If both \code{trim_start} and \code{trim_end} are \code{FALSE}, the
 #' function also errors, as there would be nothing to trim.
 #'
-#' On success, \code{ch3_db$current_table} is updated to \code{output_table}
+#' On success, \code{mod_db$current_table} is updated to \code{output_table}
 #' and a short timing message is printed.
 #'
 #' @return
-#' Invisibly returns the updated \code{ch3_db} object, with
+#' Invisibly returns the updated \code{mod_db} object, with
 #' \code{current_table} set to \code{output_table}. The function is
 #' called for its side effects of creating/replacing the trimmed table
 #' in the database.
@@ -60,10 +60,10 @@
 #' @examples
 #' #' \dontrun{
 #' # Trim the last 10% of each read and write to a new table
-#' ch3_db <- "my_sample.ch3.sqlite"
+#' mod_db <- "my_sample.mod.sqlite"
 #'
-#' ch3_db <- trim_mod_reads(
-#'   ch3_db       = ch3_db,
+#' mod_db <- trim_mod_reads(
+#'   mod_db       = mod_db,
 #'   by_frac      = 0.1,
 #'   trim_start   = FALSE,
 #'   trim_end     = TRUE,
@@ -72,8 +72,8 @@
 #' )
 #'
 #' # Trim 5% from both the start and end of each read
-#' ch3_db <- trim_mod_reads(
-#'   ch3_db       = ch3_db,
+#' mod_db <- trim_mod_reads(
+#'   mod_db       = mod_db,
 #'   by_frac      = 0.05,
 #'   trim_start   = TRUE,
 #'   trim_end     = TRUE,
@@ -83,7 +83,7 @@
 #' }
 #'
 #' @export
-trim_mod_reads <- function(ch3_db, 
+trim_mod_reads <- function(mod_db, 
                            by_frac = .1,
                            trim_start = FALSE,
                            trim_end   = TRUE,
@@ -96,7 +96,7 @@ trim_mod_reads <- function(ch3_db,
     stop("by_frac must be between 0 and 1 (e.g. 0.1 for trimming last 10%).")
   }
   
-  ch3_db <- MethylSeqR:::.ch3helper_connectDB(ch3_db)
+  mod_db <- ModSeqR:::.modhelper_connectDB(mod_db)
   
   # Build filter conditions
   conds <- c()
@@ -125,20 +125,20 @@ trim_mod_reads <- function(ch3_db,
     WHERE {where_clause}
   ")
   
-  DBI::dbExecute(ch3_db$con, query)
+  DBI::dbExecute(mod_db$con, query)
   
   elapsed <- Sys.time() - start_time
   message(sprintf(
-    "trim_ch3_reads: wrote '%s' (by_frac = %.3f, start=%s, end=%s) in %.2f sec",
+    "trim_mod_reads: wrote '%s' (by_frac = %.3f, start=%s, end=%s) in %.2f sec",
     output_table, by_frac, trim_start, trim_end,
     as.numeric(elapsed, units = 'secs')
   ))
   
-  ch3_db$current_table <- output_table
+  mod_db$current_table <- output_table
   
-  ch3_db <- MethylSeqR:::.ch3helper_closeDB(ch3_db)
+  mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
   
-  invisible(ch3_db)
+  invisible(mod_db)
   
   
 }

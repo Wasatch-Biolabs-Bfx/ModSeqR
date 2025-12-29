@@ -1,10 +1,10 @@
-#' Get Methylation Statistics from the ch3 Database
+#' Get Methylation Statistics from the Modifications Database
 #'
 #' This function retrieves and calculates methylation statistics (mean methylation fractions) 
-#' from a specified table in the ch3 database. It can either return summary statistics or plot 
+#' from a specified table in the mod database. It can either return summary statistics or plot 
 #' a histogram of the methylation values, depending on the user's preference. 
 #'
-#' @param ch3_db A string. The path to the database containing ch3 files from nanopore data.
+#' @param mod_db A string. The path to the database containing mod files from nanopore data.
 #' @param call_type A character vector specifying the type of data to retrieve from the database. 
 #'                  Default is "positions". Can also be "regions".
 #' @param plot A logical value. If TRUE, a histogram of methylation values is plotted. Default is FALSE.
@@ -27,10 +27,10 @@
 #'
 #' @examples
 #'  # Specify the path to the database
-#'  ch3_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+#'  mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
 #'  
 #'  # Get methylation statistics for the 'positions' call type without plotting
-#'  plot_mod_modfrac(ch3_db = ch3_db, call_type = "positions")
+#'  plot_mod_modfrac(mod_db = mod_db, call_type = "positions")
 #'
 #' @importFrom DBI dbConnect dbDisconnect dbExistsTable
 #' @importFrom duckdb duckdb
@@ -40,7 +40,7 @@
 #' 
 #' @export
 
-plot_mod_modfrac<- function(ch3_db,
+plot_mod_modfrac<- function(mod_db,
                             call_type = c("positions", "regions"),
                             plot = TRUE,
                             save_path = NULL,
@@ -48,19 +48,19 @@ plot_mod_modfrac<- function(ch3_db,
 {
   start_time <- Sys.time()
   # Open the database connection
-  ch3_db <- .ch3helper_connectDB(ch3_db)
+  mod_db <- .modhelper_connectDB(mod_db)
   
   if (length(call_type) > 1) {
     call_type = c("positions")
   }
   
   # Check for specific table and connect to it in the database
-  if (!dbExistsTable(ch3_db$con, call_type)) {
+  if (!dbExistsTable(mod_db$con, call_type)) {
     stop(paste0(call_type, " Table does not exist in the database. Check spelling or make sure you create it first.\n"))
   }
   
   # Determine total number of rows first
-  total_rows <- tbl(ch3_db$con, call_type) |> summarise(n = n()) |> pull(n)
+  total_rows <- tbl(mod_db$con, call_type) |> summarise(n = n()) |> pull(n)
   
   # Sample in SQL if max_rows is given and valid
   if (!is.null(max_rows)) {
@@ -69,12 +69,12 @@ plot_mod_modfrac<- function(ch3_db,
                   ") exceeds available rows in the table (", total_rows, ")."))
     }
     
-    modseq_dat <- tbl(ch3_db$con, sql(paste0(
+    modseq_dat <- tbl(mod_db$con, sql(paste0(
       "SELECT * FROM ", call_type, 
       " USING SAMPLE ", max_rows, " ROWS"
     )))
   } else {
-    modseq_dat <- tbl(ch3_db$con, call_type)
+    modseq_dat <- tbl(mod_db$con, call_type)
   } 
   
   # decide if per base or per region
@@ -144,6 +144,6 @@ plot_mod_modfrac<- function(ch3_db,
   end_time <- Sys.time()
   
   message("Time elapsed: ", end_time - start_time, "\n")
-  ch3_db <- .ch3helper_closeDB(ch3_db)
-  invisible(ch3_db)
+  mod_db <- .modhelper_closeDB(mod_db)
+  invisible(mod_db)
 }

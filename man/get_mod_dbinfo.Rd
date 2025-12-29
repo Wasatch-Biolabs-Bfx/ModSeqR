@@ -4,22 +4,22 @@
 \alias{get_mod_dbinfo}
 \title{Get Database Statistics}
 \usage{
-get_mod_dbinfo(ch3_db)
+get_mod_dbinfo(mod_db)
 }
 \arguments{
-\item{ch3_db}{Path to the `.ch3.db` file or a `ch3_db` object.}
+\item{mod_db}{Path to the `.mod.db` file or a `mod_db` object.}
 }
 \value{
 Invisibly returns a list of stats from the database.
 }
 \description{
-Prints out a summary of the ch3 database, including size, tables, and unique sample names.
+Prints out a summary of the mod database, including size, tables, and unique sample names.
 }
 \examples{
  # Specify the path to the database
- ch3_db <- system.file("my_data.ch3.db", package = "MethylSeqR")
+ mod_db <- system.file("my_data.mod.db", package = "MethylSeqR")
  
  # Get database statistics
- get_ch3_dbinfo(ch3_db = ch3_db)
+ get_mod_dbinfo(mod_db = mod_db)
 
 }
