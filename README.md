@@ -5,8 +5,8 @@
 
 # ModSeqR
 
-## Version 0.8.1 
-**(Updated December 16th 2025)**
+## Version 1.0.0 
+**(Updated December 29th 2025)**
 
 ***Note***: *This is an early release - changes may occur that significantly change the functionality and structure of the data and functions. The user should be aware that subsequent releases may break code written using earlier releases.*
 
