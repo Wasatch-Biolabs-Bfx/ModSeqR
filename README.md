@@ -46,7 +46,7 @@ This takes a tab-delimited file of methylation calls (such as the output of modk
 
 ```{r, eval=FALSE}
 # Convert a calls.tsv file to compressed .ch3 format
-make_ch3_archive(
+make_mod_archive(
   file_name   = "calls.tsv",   # input modkit calls file
   sample_name = "sample1",     # will be embedded in output filenames
   out_path    = "output_dir/", # where to write .ch3 files
@@ -73,7 +73,7 @@ These test files can be used to practice building a database and running the ful
 ```{r, eval = FALSE}
 # Example: build a test database using included example files
 example_path <- system.file("extdata/ch3_files", package = "ModSeqR")
-ch3_db <- make_ch3_db(example_path, db_name = "example_db")
+mod_db <- make_mod_db(example_path, db_name = "example_db")
 ```
 
 
