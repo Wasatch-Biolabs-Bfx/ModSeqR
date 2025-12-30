@@ -139,7 +139,7 @@ make_mod_db <- function(ch3_files,
   expand_paths <- function(nm, p) {
     if (!file.exists(p)) stop("Path does not exist: ", p)
     if (dir.exists(p)) {
-      fs <- list.files(p, pattern = "\\.mod$", full.names = TRUE, recursive = FALSE)
+      fs <- list.files(p, pattern = "\\.ch3$", full.names = TRUE, recursive = FALSE)
       if (length(fs) == 0) stop("No .ch3 files in directory: ", p)
       data.frame(sample_name = if (!is.na(nm)) nm else NA_character_,
                  file = normalizePath(fs, winslash = "/"),
@@ -160,8 +160,8 @@ make_mod_db <- function(ch3_files,
   # --- derive robust fallback names in R (not SQL) -------------------------------
   derive_sample_from_path <- function(p) {
     b <- basename(p)
-    # strip case-insensitive ".mod"
-    stem <- sub("(?i)\\.mod$", "", b, perl = TRUE)
+    # strip case-insensitive ".ch3"
+    stem <- sub("(?i)\\.ch3$", "", b, perl = TRUE)
     # then strip a trailing "-<digits>" if present
     stem <- sub("-[0-9]+$", "", stem, perl = TRUE)
     stem
