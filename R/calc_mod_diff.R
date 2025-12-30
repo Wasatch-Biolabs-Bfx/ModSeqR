@@ -127,7 +127,12 @@ calc_mod_diff <- function(mod_db,
     n_case    <- length(cases)
     n_control <- length(controls)
     
-    if (n_case > 1 || n_control > 1) {
+    # if (n_case > 1 || n_control > 1) {
+    #   calc_type <- "wilcox"
+    # } else {
+    #   calc_type <- "fast_fisher"
+    # }
+    if (min(n_case, n_control) >= 5) {
       calc_type <- "wilcox"
     } else {
       calc_type <- "fast_fisher"
