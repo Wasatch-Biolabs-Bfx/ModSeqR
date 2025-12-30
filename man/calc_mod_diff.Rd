@@ -51,7 +51,7 @@ It summarizes the data for cases and controls, calculates p-values based on the 
 }
 \examples{
  # Specify the path to the database
- mod_db <- system.file("my_data.mod.db", package = "MethylSeqR")
+ mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
  # Get methylation statistics for the 'positions' call type without plotting
  calc_mod_diff(mod_db = mod_db, 

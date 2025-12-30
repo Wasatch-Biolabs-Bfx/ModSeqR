@@ -303,6 +303,6 @@ make_mod_db <- function(ch3_files,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
   
-  mod_db <- MethylSeqR:::.modhelper_closeDB(mod_db)
+  mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
   invisible(mod_db)
 }
