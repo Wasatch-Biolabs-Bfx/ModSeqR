@@ -3,7 +3,7 @@ pkgdown: 2.2.0
 pkgdown_sha: ~
 articles:
   ModSeqRWalkthrough: ModSeqRWalkthrough.html
-last_built: 2025-12-31T23:34Z
+last_built: 2025-12-31T23:36Z
 urls:
   reference: https://wasatch-biolabs-bfx.github.io/ModSeqR/reference
   article: https://wasatch-biolabs-bfx.github.io/ModSeqR/articles
