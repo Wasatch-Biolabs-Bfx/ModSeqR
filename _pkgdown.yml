@@ -1,0 +1,17 @@
+url: https://wasatch-biolabs-bfx.github.io/ModSeqR/
+template:
+  bootstrap: 5
+  
+navbar:
+  structure:
+    left:  [home, reference, articles, news]
+    right: [github]
+  components:
+    github:
+      icon: fab fa-github
+      href: https://github.com/<your-github-username>/ModSeqR
+
+articles:
+- title: "Walkthroughs"
+  contents:
+  - ModSeqRWalkthrough

@@ -1,7 +1,4 @@
-<div style="display: flex; align-items: center; justify-content: center;">
-  <img src="inst/WBL_MODSEQR.png" alt="ModSeqR Logo" style="width: 275px;">
-</div>
-
+<img src="man/figures/WBL_MODSEQR.png" style="width: 275px;">
 
 # ModSeqR
 
@@ -19,7 +16,7 @@
 For easy visualization and data management, we encourage you to download and use RStudio.
 RStudio download instructions can be found [here](https://posit.co/download/rstudio-desktop/).
 
-```{r, eval = FALSE}
+```r
 # Install the devtools package if necessary
 install.packages("devtools")
 
@@ -44,7 +41,7 @@ Typically, one .ch3 file is created per sample, and each file compresses large a
 If .ch3 files were not provided, you can build them yourself using the make_ch3_archive() function in this package. 
 This takes a tab-delimited file of methylation calls (such as the output of modkit extract-calls) and compresses it into .ch3 format for downstream use.
 
-```{r, eval=FALSE}
+```r
 # Convert a calls.tsv file to compressed .ch3 format
 make_mod_archive(
   file_name   = "calls.tsv",   # input modkit calls file
@@ -70,7 +67,7 @@ You can download these example .ch3 files directly from the GitHub repository un
 
 These test files can be used to practice building a database and running the full analysis workflow.
 
-```{r, eval = FALSE}
+```r
 # Example: build a test database using included example files
 example_path <- system.file("extdata/ch3_files", package = "ModSeqR")
 mod_db <- make_mod_db(example_path, db_name = "example_db")
@@ -106,7 +103,7 @@ If you would like to run everything in one command, call `run_mod_analysis()`.
 
 ## Paradigm
 You can pipe your functions together, or feel free to call each function one line at a time. Below are two examples of this.
-```{r, eval = FALSE}
+```r
 setwd("/home/directory/analysis")
 
 # Build database and run analysis in a pipe
@@ -161,7 +158,7 @@ regions <- get_mod_table(mod_db, "regions")
 
 ModSeqR also provides a few helper utilities to make it easier to inspect and manage your database:
 
-```{r, eval=FALSE}
+```r
 # View all column names in a given table
 get_mod_cols(mod_db, "calls")
 
@@ -184,7 +181,7 @@ remove_mod_table(mod_db, "temp_table")
 
 ## Getting Help
 To see detailed documentation on a specific function in R, call `?{function}`. Example:
-```{r, eval = FALSE}
+```r
 ?make_mod_db()
 ```
 This will render development documentation for that function in the Help tab in Rstudio
@@ -193,12 +190,12 @@ This will render development documentation for that function in the Help tab in 
 To get detailed instructions and help working through the package, download and view our vignette in this github repo at `docs/ModSeqRWalkthrough.html`.
 
 Or, build and follow along the vignette by calling:
-```{r, eval = FALSE}
+```r
 browseVignettes("ModSeqR")
 ```
 in R and click on HTML in your browser. Or, to browse the vignette in your R environment, call
 
-```{r, eval = FALSE}
+```r
 vignette("ModSeqRWalkthrough")
 ```
 
@@ -217,4 +214,4 @@ If you have any suggestions or requested features, please email Jonathon Hill at
 #### Developed by Wasatch Biolabs.
 #### Visit us on [our website](https://www.wasatchbiolabs.com/) for more details.
 
-<div style="margin-top: 40px; text-align: center;"> <img src="inst/wbl_main_logo.png" alt="Wasatch Biolabs Logo" style="width: 200px;"> </div> 
+<img src="man/figures/wbl_main_logo.png" style="width: 275px;">

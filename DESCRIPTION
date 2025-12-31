@@ -33,6 +33,6 @@ Suggests:
     rmarkdown,
     testthat (>= 3.0.0)
 VignetteBuilder: knitr
-URL: https://github.com/Wasatch-Biolabs-Bfx/ModSeqR
+URL: https://github.com/Wasatch-Biolabs-Bfx/ModSeqR, https://wasatch-biolabs-bfx.github.io/ModSeqR/
 biocViews: Software, Sequencing, Epigenetics, Methylation
 Config/testthat/edition: 3

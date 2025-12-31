@@ -31,6 +31,7 @@ https://github.com/Wasatch-Biolabs-Bfx/ModSeqR
 Useful links:
 \itemize{
   \item \url{https://github.com/Wasatch-Biolabs-Bfx/ModSeqR}
+  \item \url{https://wasatch-biolabs-bfx.github.io/ModSeqR/}
 }
 
 }
