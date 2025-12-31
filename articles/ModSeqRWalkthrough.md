@@ -1,0 +1,623 @@
+# Using the ModSeqR package
+
+## Introduction
+
+The `ModSeqR` package provides basic functions for importing and working
+with third-generation methylation sequencing data.
+
+This vignette will walk you through a typical workflow. If sequencing
+data is coming from Wasatch Biolabs (<https://www.wasatchbiolabs.com/>),
+`.ch3` files will be delivered directly if requested for your batch.
+These `.ch3` files contain methylation calls from a third-generation
+sequencing run. A `.ch3` file will typically be created for each sample
+within a run, and is meant as an intermediate existing to compress large
+amounts of data into a usable form.
+
+If not delivered through Wasatch Biolabs, `.ch3` files can be built
+using this package.
+
+It’s most helpful to store all the sample CH3 files from a run you want
+to analyze within a single directory to get started.
+
+## Creating `.ch3` files from a TSV (optional)
+
+If your methylation calls are in a delimited text file (e.g., from a
+`modkit extract-calls` TSV), you can convert them into compressed `.ch3`
+archives using
+[`make_mod_archive()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/make_mod_archive.md).
+This will dramatically reduce file size and allow use of the ModSeqR
+package.
+
+[`make_mod_archive()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/make_mod_archive.md)
+reads a tab-delimited calls file, selects and transforms the required
+columns, and writes a compressed Arrow dataset to `out_path` using zstd
+compression. The function derives `start`/`end` coordinates per CpG
+(accounting for strand and the CG k-mer), optionally shortens long
+`read_id`’s to shrink file size (`short_ids = TRUE`), and embeds your
+`sample_name` into the output filenames. The output may be sharded into
+multiple files (e.g., `SampleA-0.ch3`, `SampleA-1.ch3`, …) depending on
+Arrow’s writer.
+
+### Coordinate convention:
+
+The `.ch3` files use 0-based, half-open coordinates for `start`/`end`
+(like BED format). This means the `start` column is inclusive and `end`
+is exclusive. Keep this in mind if you compare `.ch3` positions to
+genome browsers or annotation files that use 1-based inclusive
+coordinates (e.g., GTF/GFF). Conversion may be required when joining
+with external annotations.
+
+### Expected input columns (typical from modkit):
+
+`read_id`,`forward_read_position`, `ref_position`, `ref_mod_strand`,
+`chrom`, `read_length`, `query_kmer`, `call_prob`, `call_code`,
+`base_qual`, `flag`.
+
+After the `.ch3` files are written, point
+[`make_mod_db()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/make_mod_db.md)
+at the directory containing them (or pass their paths directly), and the
+package will take care of the rest.
+
+``` r
+# Convert a modkit TSV to a compressed .ch3 archive
+make_mod_archive(
+  file_name   = "/path/to/modkit_calls.tsv",  # tab-delimited input
+  sample_name = "Astrocytes",                 # used in output filenames
+  out_path    = "/path/to/ch3_out",           # directory to write .ch3 files
+  short_ids   = TRUE                          # shorten read_id to reduce size
+)
+
+# The directory now contains e.g.: Astrocytes-0.ch3, Astrocytes-1.ch3, ...
+# Build a DB from those .ch3 files:
+make_mod_db(
+  ch3_files = "/path/to/ch3_out",   # a directory OR a vector of file paths
+  db_name   = "astro_db"
+)
+```
+
+### Notes & tips
+
+- If your input file contains unplaced minus-strand rows at position 0
+  (common in some extract outputs), those are filtered automatically.
+- If you already have concise read IDs, set short_ids = FALSE.
+- You can run make_mod_archive() for each sample TSV, all writing into
+  the same out_path; make_mod_db() can then ingest the whole directory
+  in one call.
+- The .ch3 files are standard Parquet—fast to read, compact on disk, and
+  splittable for parallel import.
+
+## Loading Data
+
+The first step of a workflow will be to upload data from a directory
+holding sample sequencing data in the form of CH3 files. These files are
+typically created by Wasatch Biolabs.
+
+Once data is obtained in this format, the first step is done using the
+[`make_mod_db()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/make_mod_db.md)
+function. This function directly imports a directory of CH3 files, and
+creates a database in the form of a local file.
+
+### make_mod_db
+
+[`make_mod_db()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/make_mod_db.md)
+builds the DuckDB database from one or more `.ch3` Parquet files.
+
+It requires two arguments: `ch3_files`, which can be a directory or a
+vector of file paths, and `db_name`, which is the path where the DuckDB
+file will be created (the .ch3.db suffix is added if missing).
+
+You may optionally pass a named character vector to assign explicit
+`sample_name`s; otherwise, `sample_name` is derived from the file’s
+basename by removing a trailing - (if present) and the .ch3 extension
+(e.g., Astrocytes-12.ch3 → Astrocytes, M1.combined.ch3 → M1.combined).
+Additional filters include `chrom` (vector of chromosomes to keep),
+`min_read_length` (default 50), `min_call_prob` (default 0.9),
+`min_base_qual` (default 10), and an optional `flag` filter. The
+function configures DuckDB pragmas for performance (temp directory,
+threads ≈ all-but-one core, memory ≈ 50% RAM), drops any existing
+tables, and creates a `calls` table with: `sample_name`, `chrom`,
+`start`, `end`,`read_position`, `call_code`, `read_length`, `call_prob`,
+`base_qual`, and `flag`.
+
+Here is an example:
+
+``` r
+# Example: directory of CH3 files; auto-derived sample names
+ch3_files <- system.file("TEST_DATA", package = "ModSeqR")   # adjust as needed
+mod_db    <- tempfile("example_db")
+make_mod_db(ch3_files, mod_db)
+
+# Example: explicit sample names override the fallback
+make_mod_db(
+  ch3_files = c(
+    sample1  = "/data/sample1-0.ch3",
+    sample2     = "/data/sample2.ch3"
+  ),
+  db_name   = "named_samples"
+)
+```
+
+After this step, a database is made and the raw calls table is included.
+A user may continue their analysis in any direction they want. They may
+run a quality control
+([`run_mod_qc()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/run_mod_qc.md)),
+summarize data by positions
+([`summarize_mod_positions()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/summarize_mod_positions.md)),
+regions
+([`summarize_mod_regions()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/summarize_mod_regions.md)),
+or windows
+([`summarize_mod_windows()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/summarize_mod_windows.md)).
+At any point in the analysis, a user can export a table in the database
+by calling `export_mod_tables()`, or use
+[`get_mod_table()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/get_mod_table.md)to
+import as a tibble into the local environment. All these functions will
+be explained below.
+
+### summarize_mod_positions
+
+This function summarizes methylation data (from the calls table) by each
+unique position in the genome. A table called “positions” will be built
+into the database.
+
+[`summarize_mod_positions()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/summarize_mod_positions.md)
+aggregates the `calls` table at each genomic position for each sample
+and writes a `positions` table. It always produces `num_calls`, and, for
+each unique modification you request, a `<label>_counts` and
+`<label>_frac` column (ex. methylation would be m_counts and m_frac).
+You control modification types via `mod_code` (e.g., c(“m”,“h”,“m + h”)
+or a novel “a”).
+
+Labels are formed by removing spaces/“+” (so `"m + h"` becomes `mh`).
+The unmodified class is defined by `unmod_code` (default `"-"`) and
+named by `unmod_label` (default `"c"`, yielding `c_counts` and
+`c_frac`). Optional `chrs`, `samples`, and `min_num_calls` let you
+filter chromosomes, samples, and minimum coverage per position.
+
+``` r
+# Minimal usage: default m/h classes
+summarize_mod_positions(mod_db)
+
+# Custom classes, including a novel code 'a', with stricter filtering
+summarize_mod_positions(
+  mod_db,
+  mod_code      = c("a", "m + h"),
+  unmod_code    = "-",
+  unmod_label   = "c",
+  min_num_calls = 5
+)
+```
+
+### summarize_mod_regions
+
+[`summarize_mod_regions()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/summarize_mod_regions.md)
+joins per-position counts to an annotation file of regions (BED/TSV/CSV
+with `chrom`, `start`, `end`, and optional `region_name`) and writes a
+`regions` table. If `region_name` is missing, it is synthesized as
+`chrom_start_end`.
+
+You choose the join type via `join = "inner" | "left" | "right"`; inner
+keeps only overlapping positions/regions, left keeps all regions
+(filling zeros where appropriate), and right keeps all positions with
+region matches.
+
+As with positions, you specify any set of `mod_code` values (single or
+combined like “m + h”), `unmod_code`, `unmod_label`, and filters
+(`chrs`, `samples`, `min_num_calls`). Output columns include
+`sample_name`, `region_name`, `chrom`, `start`, `end`, `num_CpGs`
+(number of positions aggregated), `num_calls`, and the
+`<label>_counts/<label>_frac` columns for all requested labels.
+
+``` r
+region_bed = system.file("Islands_hg38_test.csv", package = "ModSeqR")
+# Minimal call
+summarize_mod_regions(mod_db, region_file = region_bed)
+
+# Custom call
+summarize_mod_regions(
+  mod_db,
+  region_file   = region_bed,
+  join          = "inner",
+  mod_code      = c("m","h","m + h"),   # supports novel codes too, e.g., "a"
+  min_num_calls = 5
+)
+```
+
+### summarize_mod_windows
+
+[`summarize_mod_windows()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/summarize_mod_windows.md)
+produces sliding/offset windows from per-position counts and writes a
+windows table.
+
+By default it tiles with 1,000 bp windows and 10 bp offsets so positions
+are assigned to multiple staggered windows. The output contains
+`num_CpGs`, `num_calls`, and `<label>_counts/<label>_frac` for all
+requested modification labels (as defined by `mod_code`, `unmod_code`,
+and `unmod_label`).
+
+You can adjust `window_size`, `step_size`, `min_num_calls`, limit to
+particular `chrs` or `samples`, and choose to `overwrite` an existing
+table. Default overwrite is TRUE.
+
+``` r
+# 100 bp windows, non-overlapping (step_size = window_size)
+summarize_mod_windows(mod_db, window_size = 100, step_size = 100)
+
+# 2 kb windows with offsets; include a novel 'a' class
+summarize_mod_windows(
+  mod_db,
+  window_size   = 2000,
+  step_size     = 20,
+  mod_code      = c("a", "m + h"),
+  min_num_calls = 25,
+  overwrite     = TRUE
+)
+```
+
+### summarize_mod_reads
+
+This function summarizes methylation data from a mod_db database by the
+reads. A table called “reads” will be built into the database.
+
+``` r
+# Specify the path to the database
+mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+ 
+# Calculate windows
+summarize_mod_reads(mod_db)
+```
+
+There is only 1 required arguments. `mod_db` is a list containing the
+database file path. This should be a string representing a path to the
+database, or a valid “ch3_db” class object. Optionally, `key_table` is a
+path to an external table which can be used to filter for unique windows
+of interest. It should have a “chrom”, “start”, and “end” column to
+specify which windows are of interest. The reads table will be filtered
+for just those windows from the key_table.Lastly, `min_CGs` specifies
+the minimum number of CG sites for a read to be included. If a read has
+less than that argument, it will not be included in the table.
+
+## Convenience utilities (inspect/rename/tidy)
+
+Sometimes you just want to peek at what’s in your database, check a
+table’s shape, or quickly fix sample names. The helpers below are
+lightweight wrappers around DuckDB/DBI that do exactly that.
+
+### get_mod_dbinfo()
+
+Prints a quick summary of the database: on-disk size, a list of tables,
+and the distinct sample_names (if a calls table exists). Invisibly
+returns the closed ch3_db object.
+
+``` r
+# Path or ch3_db object both work
+get_mod_dbinfo("my_data.ch3.db")
+```
+
+### get_mod_tableinfo()
+
+Summarizes a single table: total rows, per-sample row counts (if the
+table has a sample_name column), and a list of columns. Good first check
+after creating a table.
+
+``` r
+get_mod_tableinfo("my_data.ch3.db", table_name = "positions")
+```
+
+### get_mod_cols()
+
+Returns (and prints) the column names for a given table. Handy when
+you’re about to write a query and can’t remember exact column names.
+
+``` r
+get_mod_cols("my_data.ch3.db", "windows")
+```
+
+### get_mod_cpg_count()
+
+Counts unique CpG sites in a table, where uniqueness is defined by
+distinct (start, end) pairs. Prints a small summary and invisibly
+returns the count.
+
+``` r
+n_cpg <- get_mod_cpg_count("my_data.ch3.db", table_name = "calls")
+```
+
+### rename_mod_samples()
+
+Renames sample_names directly in a specified table (e.g., positions,
+windows, regions, calls). You provide a mapping from old → new names as
+a named character vector (c(old = “new”, …)) or a two-column data frame
+with old and new. The function validates inputs, updates in place, and
+(optionally) prints a before/after list of distinct names.
+
+``` r
+# Rename in the 'positions' table
+rename_mod_samples(
+  "my_data.ch3.db",
+  table       = "positions",
+  samples_map = c("Cortical_Neurons" = "Cortex", "Blood" = "PBMC"),
+  preview     = TRUE
+)
+```
+
+### remove_mod_table()
+
+Deletes a table by name if it exists, with a clear message either way
+(no error if the table is missing). Useful to clean up experiments.
+
+``` r
+remove_mod_table("my_data.ch3.db", "tmp_debug_table")
+```
+
+*Tip*: All helpers accept either a path to the *.ch3.db file or an
+existing ch3_db object. They open a connection, do the work, and close
+it for you.*
+
+## Differential Methylation
+
+### calc_mod_diff
+
+This function calculates differential methylation between specified case
+and control groups using various statistical methods.
+
+Differential methylation can be calculated from ***positional***,
+***regional***, or ***window*** methylation data.
+
+Calling this function creates a unique `mod_diff_*` table within the
+database, where differential methylation results are stored.
+
+The table name depends on the input `call_type`:
+
+- `call_type = "positions"` → `mod_diff_positions`
+
+- `call_type = "regions"` → `mod_diff_regions`
+
+- `call_type = "windows"` → `mod_diff_windows`
+
+Calling
+[`calc_mod_diff()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/calc_mod_diff.md)
+again on the same type of data will overwrite the existing
+`mod_diff_{type}` table (e.g. `mod_diff_windows` will be rewritten if
+you run it again on window data).
+
+#### Automatic choice of statistical test (calc_type)
+
+The argument `calc_type` controls which statistical method is used to
+test for differential methylation. It can be set manually to one of:
+
+- `"wilcox"` – Wilcoxon rank-sum test on per-sample methylation
+  fractions
+
+- `"fast_fisher"` – fast Fisher’s exact test on aggregated counts
+
+- `"r_fisher"` – Fisher’s exact test via base R
+
+- `"log_reg"` – logistic regression–based test
+
+If `calc_type` is left as `NULL` (the default), the function
+automatically chooses an appropriate method based on how many samples
+are in each group:
+
+- **If there is more than one sample in either the case or control
+  group**
+  - `calc_type` is set to `"wilcox"`
+  - The function compares the distribution of methylation fractions
+    across samples between groups.
+- **If there is exactly one sample in the case group and one in the
+  control group**
+  - `calc_type` is set to `"fast_fisher"`
+  - The function aggregates counts and performs a Fisher’s exact test on
+    the resulting 2×2 contingency table.
+
+A message is printed indicating which method was chosen.
+
+#### Why this behavior?
+
+- With replicates (more than one sample in a group), the Wilcoxon
+  rank-sum test is preferred because it uses the variation between
+  samples and compares the distributions of methylation fractions across
+  samples. This better reflects biological variability.
+- With only one sample per group, there is no between-sample variation
+  to model. In that case, collapsing to counts and using Fisher’s exact
+  test is more appropriate and statistically well-defined.
+
+You can always override this behavior by explicitly setting `calc_type`
+yourself.
+
+``` r
+# Specify the path to the database
+mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+  
+# Get methylation statistics for the 'positions' call type without plotting
+calc_mod_diff(mod_db = mod_db,
+              call_type = "positions",
+              cases = "blood",
+              controls = "sperm")
+```
+
+### collapse_mod_windows
+
+This function only works on a mod_diff_windows table already in the
+database. After a differential methylation analysis is called on
+windows, this will collapse significant windows by merging contiguous
+regions that meet the specified criteria.
+
+The only required parameter is the link to the database. Optionally, a
+user may specify the following arguments.`max_distance`is the maximum
+allowable distance between consecutive significant windows for merging
+(default: 1000). `sig_cutoff` is the significance threshold for adjusted
+p-values (default: 0.05). Lastly, `min_diff` specifies the minimum
+absolute methylation difference required for inclusion in the analysis
+(default: 0.5).
+
+``` r
+# Specify the path to the database
+mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+  
+# Collapse significant windows
+collapse_mod_windows("my_data.ch3.db")
+```
+
+### run_mod_analysis
+
+This function automates an entire workflow in one command. It identifies
+differences in DNA methylation patterns between two groups (cases and
+controls) by summarizing methylation data at various genomic scales
+(positions, regions, or windows) and then performing statistical tests,
+outputting the results into organized CSV files within one directory.
+
+[`run_mod_analysis()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/run_mod_analysis.md)
+creates a new subdirectory named “Mod_Diff_Analysis_Results” within the
+out_path where all the data will be written to. It writes three CSV
+files into the “Mod_Diff_Analysis_Results” directory by directly copying
+tables from the DuckDB database:
+
+**mod_diff.csv**: Contains the results of the differential analysis
+(e.g., p-values, fold changes) for each position, region, or window. The
+source table in the database is determined by diff_table_name.
+
+**All_CpGs.csv**: Contains all the summarized methylation data for the
+chosen call_type (positions, regions, or windows) across all samples.
+The source table in the database is determined by call_type.
+
+**Sig_CpGs.csv**: Contains summarized methylation data for only those
+positions/regions/windows that are deemed significantly differentially
+methylated, based on the p_val_max threshold.
+
+``` r
+# Specify the path to the database
+mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+  
+# Collapse significant windows
+run_mod_analysis(mod_db, 
+             out_path = "/Users/analysis",
+             call_type = "windows",
+             cases = c("sperm"),
+             controls = c("blood"))
+```
+
+## Quality Control
+
+A variety of quality control functions are available to visually assess
+methylation data.
+
+### plot_mod_cov
+
+This function calculates and optionally plots statistics for coverage
+data from methylation sequencing experiments. It can handle both
+positional and regional methylation data.
+
+``` r
+# Specify the path to the database
+mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+ 
+# Get coverage statistics for the 'positions' call type
+plot_mod_cov(mod_db = mod_db, call_type = "positions")
+```
+
+### plot_mod_modfrac
+
+This function retrieves and calculates methylation statistics (mean
+methylation fractions) from a specified table in the mod database. It
+can either return summary statistics or plot a histogram of the
+methylation values, depending on the user’s preference.
+
+``` r
+# Specify the path to the database
+mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+ 
+# Get methylation statistics for the 'positions' call type without plotting
+plot_mod_modfrac(mod_db = mod_db, call_type = "positions")
+```
+
+### calc_mod_samplecor
+
+This function calculates and optionally plots a correlation matrix for
+methylation or other modification fraction data from genomic positions.
+It can handle both position-based and region-based calls and supports
+visualization using ggplot2.
+
+``` r
+# Specify the path to the database
+mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+ 
+# Run the correlation matrix function using the 'positions' call type and plot the results
+calc_mod_samplecor(mod_db = mod_db, call_type = "positions", plot = TRUE)
+```
+
+### plot_mod_pca
+
+This function performs Principal Component Analysis (PCA) on methylation
+data retrieved from the database.It aggregates the methylation fraction
+data based on the specified call type and prepares it for PCA analysis.
+
+``` r
+# Specify the path to the database
+mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+ 
+# Calculate PCA
+plot_mod_pca(mod_db)
+```
+
+### run_mod_qc
+
+Combining all functions above, the \`run_mod_qc()\`\` function computes
+all QC checks on methylation data at the same time.
+
+``` r
+# Specify the path to the database
+mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+ 
+# Calculate windows
+run_mod_qc(mod_db)
+```
+
+## Retrieving and Exporting Tables
+
+You can access data in your database with two different functions.
+
+### get_mod_table
+
+To retrieve a single table into your local environment for further
+analysis within R, using `get_mod_table` will transform it into a tibble
+and store it into a variable. Arguments required includes the database,
+and name of the table to be retrieved.
+
+``` r
+# Specify the path to the database
+mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+ 
+# Get any table in your database and create a variable in R to work with
+positions = get_mod_table("my_data.ch3.db", "positions")
+regions = get_mod_table("my_data.ch3.db", "regions")
+
+mod_diff_regions = get_mod_table("my_data.ch3.db", "mod_diff_regions")
+collapsed_windows = get_mod_table("my_data.ch3.db", "collapsed_windows")
+```
+
+### export_mod_table
+
+To export one or more tables into a CSV file, use `export_mod_table`.
+This function takes three arguments, the database, which tables to
+export, and the path where the CSV files will be saved.
+
+``` r
+# Specify the path to the database
+mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+ 
+# Export the table to your computer
+export_mod_table("my_data.ch3.db", 
+             table = "windows", 
+             out_path = "/Desktop/My_Folder/windows.csv")
+
+export_mod_table("my_data.ch3.db", 
+             table = "mod_diff_windows", 
+             out_path = "/Desktop/My_Folder/mod_diff_windows.csv")
+```
+
+## Conclusion
+
+In this vignette, we have walked you through the basic functions in the
+`ModSeqR` package. This work is a work in progress and we hope to
+improve its functionality. If you have any suggestions or requested
+features, please email Jonathon Hill at <jhill@byu.edu>.
