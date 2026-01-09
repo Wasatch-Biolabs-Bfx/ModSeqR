@@ -9,7 +9,7 @@
 
 **ModSeqR** is an R package managing Direct Whole Methylome Sequencing (dWMS) data. It creates a database, and processes it with unique options. Data can be summarized by positions, windows, or provided an annotation bed file, by unique genomic regions. The package also offers quality control functions, differential methylation, and a sliding window analysis.
 
-
+The website at [wasatch-biolabs-bfx.github.io/ModSeqR/](https://wasatch-biolabs-bfx.github.io/ModSeqR/) provides the official documentation and usage guide for the tool.
 
 ## Installation
 
