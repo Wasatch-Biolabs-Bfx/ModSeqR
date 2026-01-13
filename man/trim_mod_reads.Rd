@@ -20,7 +20,9 @@ trim_mod_reads(
 existing mod database object).}
 
 \item{by_frac}{Numeric scalar between 0 and 1 (exclusive) giving the
-fraction of the read length to trim from each enabled end.}
+fraction of the read length to trim from each enabled end.
+For example, \code{by_frac = 0.1} trims the first/last 10% depending
+on \code{trim_start}/\code{trim_end}.}
 
 \item{trim_start}{Logical; whether to trim from the start (low
 \code{read_position}) of each read.}
@@ -36,8 +38,9 @@ at least \code{read_position} and \code{read_length} columns.}
 create/overwrite with the trimmed calls (default \code{"calls_trimmed"}).}
 
 \item{samples}{Character vector of sample name(s) to trim. If \code{NULL}
-(default), trims all samples. Requires a \code{sample_name} column in
-\code{input_table}.}
+(default), trims all samples. If non-NULL, requires a \code{sample_name}
+column in \code{input_table}. Only these samples are trimmed; all other
+samples are copied through unchanged.}
 }
 \value{
 Invisibly returns the updated \code{mod_db} object, with
@@ -45,6 +48,26 @@ Invisibly returns the updated \code{mod_db} object, with
 }
 \description{
 Creates a new table in a mod database that keeps only methylation calls
-within a central fraction of each read. Optionally restricts trimming to
-one or more sample(s) via the \code{samples} argument.
+within a central fraction of each read (i.e., trims a fraction from the
+start and/or end of each read).
+}
+\details{
+If \code{samples} is \code{NULL} (default), trimming is applied to ALL samples.
+If \code{samples} is provided, trimming is applied ONLY to those sample(s),
+and ALL rows from other samples are retained unchanged in the output table.
+}
+\examples{
+\dontrun{
+# Trim last 10\% of reads for all samples
+trim_mod_reads(mod_db, by_frac = 0.1, trim_end = TRUE, output_table = "calls_trimmed")
+
+# Trim last 10\% of reads only for Alzheimers2, keep all other samples intact
+trim_mod_reads(mod_db, by_frac = 0.1, trim_end = TRUE,
+               samples = "Alzheimers2", output_table = "calls_trimmed_A2")
+
+# Trim both ends (5\% each) for a subset of samples
+trim_mod_reads(mod_db, by_frac = 0.05, trim_start = TRUE, trim_end = TRUE,
+               samples = c("Control1", "Control2"), output_table = "calls_trimmed_controls")
+}
+
 }

@@ -1,14 +1,20 @@
 #' Trim methylation calls at the read ends in a mod database
 #'
 #' Creates a new table in a mod database that keeps only methylation calls
-#' within a central fraction of each read. Optionally restricts trimming to
-#' one or more sample(s) via the \code{samples} argument.
+#' within a central fraction of each read (i.e., trims a fraction from the
+#' start and/or end of each read).
+#'
+#' If \code{samples} is \code{NULL} (default), trimming is applied to ALL samples.
+#' If \code{samples} is provided, trimming is applied ONLY to those sample(s),
+#' and ALL rows from other samples are retained unchanged in the output table.
 #'
 #' @param mod_db An object identifying the mod database, as accepted by
 #'   \code{ModSeqR:::.modhelper_connectDB()} (e.g. a file path or an
 #'   existing mod database object).
 #' @param by_frac Numeric scalar between 0 and 1 (exclusive) giving the
 #'   fraction of the read length to trim from each enabled end.
+#'   For example, \code{by_frac = 0.1} trims the first/last 10% depending
+#'   on \code{trim_start}/\code{trim_end}.
 #' @param trim_start Logical; whether to trim from the start (low
 #'   \code{read_position}) of each read.
 #' @param trim_end Logical; whether to trim from the end (high
@@ -19,11 +25,26 @@
 #' @param output_table Character scalar; name of the output table to
 #'   create/overwrite with the trimmed calls (default \code{"calls_trimmed"}).
 #' @param samples Character vector of sample name(s) to trim. If \code{NULL}
-#'   (default), trims all samples. Requires a \code{sample_name} column in
-#'   \code{input_table}.
+#'   (default), trims all samples. If non-NULL, requires a \code{sample_name}
+#'   column in \code{input_table}. Only these samples are trimmed; all other
+#'   samples are copied through unchanged.
 #'
 #' @return Invisibly returns the updated \code{mod_db} object, with
 #'   \code{current_table} set to \code{output_table}.
+#'
+#' @examples
+#' \dontrun{
+#' # Trim last 10% of reads for all samples
+#' trim_mod_reads(mod_db, by_frac = 0.1, trim_end = TRUE, output_table = "calls_trimmed")
+#'
+#' # Trim last 10% of reads only for Alzheimers2, keep all other samples intact
+#' trim_mod_reads(mod_db, by_frac = 0.1, trim_end = TRUE,
+#'                samples = "Alzheimers2", output_table = "calls_trimmed_A2")
+#'
+#' # Trim both ends (5% each) for a subset of samples
+#' trim_mod_reads(mod_db, by_frac = 0.05, trim_start = TRUE, trim_end = TRUE,
+#'                samples = c("Control1", "Control2"), output_table = "calls_trimmed_controls")
+#' }
 #'
 #' @importFrom DBI dbExecute dbListFields dbQuoteIdentifier dbQuoteString
 #' @importFrom glue glue
@@ -38,9 +59,16 @@ trim_mod_reads <- function(mod_db,
   
   start_time <- Sys.time()
   
-  # sanity checks
+  # ---- sanity checks ----
+  if (!is.numeric(by_frac) || length(by_frac) != 1 || is.na(by_frac)) {
+    stop("by_frac must be a single numeric value.")
+  }
   if (by_frac <= 0 || by_frac >= 1) {
     stop("by_frac must be between 0 and 1 (e.g. 0.1 for trimming last 10%).")
+  }
+  if (!is.logical(trim_start) || length(trim_start) != 1 ||
+      !is.logical(trim_end)   || length(trim_end)   != 1) {
+    stop("trim_start and trim_end must be single TRUE/FALSE values.")
   }
   if (!trim_start && !trim_end) {
     stop("Both trim_start and trim_end are set to FALSE — nothing to trim.")
@@ -51,46 +79,69 @@ trim_mod_reads <- function(mod_db,
   # Helper for quoting identifiers
   qi <- function(x) as.character(DBI::dbQuoteIdentifier(mod_db$con, x))
   
-  # Validate columns
+  # ---- Validate columns ----
   cols <- DBI::dbListFields(mod_db$con, input_table)
   required <- c("read_position", "read_length")
   missing <- setdiff(required, cols)
   if (length(missing) > 0) {
+    mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
     stop(glue::glue(
       "Input table '{input_table}' is missing required column(s): ",
       paste(missing, collapse = ", "), "."
     ))
   }
   
-  # Build trimming filter conditions
-  conds <- character(0)
+  # ---- Build trimming conditions (ONLY trimming; no sample filtering here) ----
+  trim_conds <- character(0)
   
   if (trim_start) {
-    conds <- c(conds, glue::glue("{qi('read_position')} >= {qi('read_length')} * {by_frac}"))
+    trim_conds <- c(
+      trim_conds,
+      glue::glue("{qi('read_position')} >= {qi('read_length')} * {by_frac}")
+    )
   }
   if (trim_end) {
-    conds <- c(conds, glue::glue("{qi('read_position')} < {qi('read_length')} * (1 - {by_frac})"))
+    trim_conds <- c(
+      trim_conds,
+      glue::glue("{qi('read_position')} < {qi('read_length')} * (1 - {by_frac})")
+    )
   }
   
-  # Optional sample filter
+  trim_clause <- paste(trim_conds, collapse = " AND ")
+  
+  # ---- Optional sample restriction: trim ONLY selected samples, keep others intact ----
   if (!is.null(samples)) {
     if (!"sample_name" %in% cols) {
+      mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
       stop(glue::glue(
         "samples was provided, but input table '{input_table}' has no 'sample_name' column."
       ))
     }
     samples <- as.character(samples)
     if (length(samples) == 0) {
+      mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
       stop("samples was provided but is empty. Use NULL to trim all samples.")
     }
     
-    # Quote string literals safely for SQL IN (...)
     sample_sql <- paste(DBI::dbQuoteString(mod_db$con, samples), collapse = ", ")
-    conds <- c(conds, glue::glue("{qi('sample_name')} IN ({sample_sql})"))
+    
+    # Keep all rows for non-target samples; trim only target samples
+    where_clause <- glue::glue("
+      (
+        {qi('sample_name')} IN ({sample_sql})
+        AND {trim_clause}
+      )
+      OR
+      (
+        {qi('sample_name')} NOT IN ({sample_sql})
+      )
+    ")
+  } else {
+    # Trim all samples
+    where_clause <- trim_clause
   }
   
-  where_clause <- paste(conds, collapse = " AND ")
-  
+  # ---- Execute ----
   query <- glue::glue("
     CREATE OR REPLACE TABLE {qi(output_table)} AS
     SELECT *
