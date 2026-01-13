@@ -6,6 +6,7 @@
 \usage{
 collapse_mod_windows(
   mod_db,
+  input_table = "mod_diff_windows",
   table_name = "collapsed_windows",
   max_distance = 1000,
   sig_cutoff = 0.05,
@@ -14,6 +15,11 @@ collapse_mod_windows(
 }
 \arguments{
 \item{mod_db}{A DuckDB database connection object or path to the database.}
+
+\item{input_table}{Character. Name of the database table containing
+differential methylation windows to be collapsed. The table must
+contain at least the columns \code{chrom}, \code{start}, \code{end},
+\code{p_adjust}, and \code{meth_diff}. Default is \code{"mod_diff_windows"}.}
 
 \item{table_name}{Character. Name of the output table to store collapsed
 windows (default: "collapsed_windows").}
