@@ -10,6 +10,7 @@ collapse windows once a differential modification analysis
 ``` r
 collapse_mod_windows(
   mod_db,
+  input_table = "mod_diff_windows",
   table_name = "collapsed_windows",
   max_distance = 1000,
   sig_cutoff = 0.05,
@@ -22,6 +23,13 @@ collapse_mod_windows(
 - mod_db:
 
   A DuckDB database connection object or path to the database.
+
+- input_table:
+
+  Character. Name of the database table containing differential
+  methylation windows to be collapsed. The table must contain at least
+  the columns `chrom`, `start`, `end`, `p_adjust`, and `meth_diff`.
+  Default is `"mod_diff_windows"`.
 
 - table_name:
 
