@@ -4,7 +4,7 @@
 
 ## Version 1.0.0
 
-**(Updated December 29th 2025)**
+**(Updated February 3rd 2026)**
 
 ***Note***: *This is an early release - changes may occur that
 significantly change the functionality and structure of the data and
