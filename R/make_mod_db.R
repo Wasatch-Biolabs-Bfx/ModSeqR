@@ -247,7 +247,36 @@ make_mod_db <- function(ch3_files,
     sprintf("SELECT * FROM read_parquet(%s, filename = TRUE) LIMIT 0", file_list_sql)
   )
   
-  has_read_position <- "read_position" %in% names(schema)
+  # --- detect schema compatibility across files -----------------------------------
+  # Use union_by_name so DuckDB can read mixed schemas for inspection
+  schema_all <- DBI::dbGetQuery(
+    mod_db$con,
+    sprintf(
+      "SELECT * FROM read_parquet(%s, filename = TRUE, union_by_name = TRUE) LIMIT 0",
+      file_list_sql
+    )
+  )
+  
+  # column exists in the unioned schema if at least one file has it
+  union_has_read_position <- "read_position" %in% names(schema_all)
+  
+  # Now decide: keep only if EVERY file has it
+  all_have_read_position <- TRUE
+  if (union_has_read_position) {
+    # Check each file individually (fast: LIMIT 0)
+    all_have_read_position <- all(vapply(df_files$file, function(fp) {
+      one_sql <- sprintf(
+        "SELECT * FROM read_parquet(['%s']) LIMIT 0",
+        gsub("'", "''", fp)
+      )
+      one_schema <- DBI::dbGetQuery(mod_db$con, one_sql)
+      "read_position" %in% names(one_schema)
+    }, logical(1)))
+  }
+  
+  has_read_position <- isTRUE(all_have_read_position)
+  
+  #has_read_position <- "read_position" %in% names(schema)
   
   wanted_sql <- paste(
     c(
@@ -275,7 +304,7 @@ make_mod_db <- function(ch3_files,
     CREATE TABLE calls AS
     WITH src AS (
       SELECT *
-      FROM read_parquet({file_list_sql}, filename = TRUE)
+      FROM read_parquet({file_list_sql}, filename = TRUE, union_by_name = TRUE)
     ),
     tagged AS (
       SELECT
