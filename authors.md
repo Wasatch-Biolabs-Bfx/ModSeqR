@@ -9,7 +9,7 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/Wasatch-Biolabs-Bfx/ModSeqR/blob/main/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/Wasatch-Biolabs-Bfx/ModSeqR/blob/v1.0.0/DESCRIPTION)
 
 Hill J, Zimmerman H (2026). *ModSeqR: Process and Analyze Nanopore
 Sequencing Methylation Data*. R package version 1.0.0,
