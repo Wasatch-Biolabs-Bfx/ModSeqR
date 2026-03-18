@@ -3,7 +3,7 @@
 # ModSeqR
 
 ## Version 1.0.0 
-**(Updated February 3rd 2026)**
+**(Updated March 18th 2026)**
 
 ***Note***: *This is an early release - changes may occur that significantly change the functionality and structure of the data and functions. The user should be aware that subsequent releases may break code written using earlier releases.*
 
@@ -211,7 +211,7 @@ See the full license text in the [LICENSE](./LICENSE) file included with this re
 
 If you have any suggestions or requested features, please email Jonathon Hill at jhill@byu.edu.
 
-#### Developed by Wasatch Biolabs.
+#### Developed by Hailey Zimmerman & Dr. Jonathon Hill at Wasatch Biolabs.
 #### Visit us on [our website](https://www.wasatchbiolabs.com/) for more details.
 
 <img src="man/figures/wbl_main_logo.png" style="width: 275px;">
