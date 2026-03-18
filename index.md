@@ -4,7 +4,7 @@
 
 ## Version 1.0.0
 
-**(Updated February 3rd 2026)**
+**(Updated March 18th 2026)**
 
 ***Note***: *This is an early release - changes may occur that
 significantly change the functionality and structure of the data and
@@ -286,7 +286,7 @@ included with this repository.
 If you have any suggestions or requested features, please email Jonathon
 Hill at <jhill@byu.edu>.
 
-#### Developed by Wasatch Biolabs.
+#### Developed by Hailey Zimmerman & Dr. Jonathon Hill at Wasatch Biolabs.
 
 #### Visit us on [our website](https://www.wasatchbiolabs.com/) for more details.
 

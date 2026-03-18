@@ -2,22 +2,22 @@
 
 ## Authors
 
-- **Jonathon Hill**. Author, maintainer.
+- **Hailey Zimmerman**. Author, maintainer.
 
-- **Hailey Zimmerman**. Author.
+- **Jonathon Hill**. Author.
 
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/Wasatch-Biolabs-Bfx/ModSeqR/blob/v1.0.0/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/Wasatch-Biolabs-Bfx/ModSeqR/blob/main/DESCRIPTION)
 
-Hill J, Zimmerman H (2026). *ModSeqR: Process and Analyze Nanopore
+Zimmerman H, Hill J (2026). *ModSeqR: Process and Analyze Nanopore
 Sequencing Methylation Data*. R package version 1.0.0,
 <https://github.com/Wasatch-Biolabs-Bfx/ModSeqR>.
 
     @Manual{,
       title = {ModSeqR: Process and Analyze Nanopore Sequencing Methylation Data},
-      author = {Jonathon Hill and Hailey Zimmerman},
+      author = {Hailey Zimmerman and Jonathon Hill},
       year = {2026},
       note = {R package version 1.0.0},
       url = {https://github.com/Wasatch-Biolabs-Bfx/ModSeqR},
