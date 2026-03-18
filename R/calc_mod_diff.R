@@ -25,7 +25,8 @@
 #' @return A list containing the updated "mod_db" object with the latest tables in the database, including "meth_diff".
 #' 
 #' @examples
-#'  # Specify the path to the database
+#' \dontrun{
+#' # Specify the path to the database
 #'  mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
 #'  
 #'  # Get methylation statistics for the 'positions' call type without plotting
@@ -33,6 +34,7 @@
 #'                call_type = "positions",
 #'                cases = c("Blood1_chr21", "Blood2_chr21", "Blood3_chr21"),
 #'                controls = c("Sperm1_chr21", "Sperm2_chr21", "Sperm3_chr21")))
+#' }
 #'                
 #' @importFrom DBI dbConnect dbDisconnect dbExistsTable dbRemoveTable dbExecute dbWriteTable
 #' @importFrom duckdb duckdb
