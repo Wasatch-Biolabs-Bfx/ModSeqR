@@ -32,6 +32,8 @@
 #' @param unmod_label Label used to name unmodified columns (default \code{"c"} yielding
 #'   \code{c_counts} and \code{c_frac}).
 #' @param min_num_calls Minimum total calls required at a position to be written (default \code{1}).
+#' @param batch_size Optional integer number of aggregated position rows to process per batch
+#'   for each sample. If \code{NULL}, all rows for a sample are processed in one batch.
 #' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
 #' @param threads Integer DuckDB thread count. If \code{NULL}, uses an internal heuristic
 #'   (typically all-but-one core).
@@ -47,6 +49,8 @@
 #'   \item Builds dynamic SQL to compute, per sample and position (\code{chrom}, \code{start}):
 #'         \code{num_calls}, \code{<label>_counts} for each requested code/combination, and
 #'         \code{<label>_frac} = \code{<label>_counts / num_calls}.
+#'   \item Inserts per-sample summaries into \code{output_table}, optionally in row-count
+#'         batches controlled by \code{batch_size}.
 #'   \item Pre-creates the \code{output_table} schema with the appropriate dynamic columns, then
 #'         inserts rows per sample. \code{end} is set equal to \code{start}.
 #' }
@@ -112,6 +116,7 @@ summarize_mod_positions <- function(mod_db,
                                     unmod_code  = "-",
                                     unmod_label = "c",
                                     min_num_calls = 1,
+                                    batch_size = NULL,
                                     temp_dir = tempdir(),
                                     threads = NULL,             # default: all-but-one
                                     memory_limit = NULL,        # default: ~80% RAM
@@ -167,6 +172,14 @@ summarize_mod_positions <- function(mod_db,
   DBI::dbExecute(mod_db$con, schema_sql)
   
   chr_clause <- .chrom_filter_sql(chrs)
+  pos_batch_size <- if (is.null(batch_size)) {
+    NA_integer_
+  } else {
+    as.integer(batch_size[1])
+  }
+  if (!is.na(pos_batch_size) && pos_batch_size < 1) {
+    stop("batch_size must be >= 1 when provided.")
+  }
   
   # Process each sample separately (chunking by sample)
   for (samp in all_samps) {
@@ -185,26 +198,49 @@ summarize_mod_positions <- function(mod_db,
       GROUP BY sample_name, chrom, start
     ")
     DBI::dbExecute(mod_db$con, view_sql)
+
+    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions_batched;")
+    DBI::dbExecute(mod_db$con, "
+      CREATE TEMP TABLE temp_positions_batched AS
+      SELECT
+        *,
+        ROW_NUMBER() OVER (ORDER BY chrom, start) AS rn
+      FROM temp_positions
+    ")
+
+    total_rows <- DBI::dbGetQuery(mod_db$con,
+                                  "SELECT COUNT(*) AS n FROM temp_positions_batched")$n[1]
+    if (!is.finite(total_rows) || total_rows == 0) {
+      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions_batched;")
+      DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_positions;")
+      next
+    }
+    this_batch <- if (is.na(pos_batch_size)) total_rows else pos_batch_size
     
     frac_cols <- paste(sprintf(
       "CASE WHEN num_calls = 0 THEN NULL ELSE %s_counts * 1.0 / num_calls END AS %s_frac",
       labels, labels), collapse = ",\n          ")
+    for (row_start in seq.int(1, total_rows, by = this_batch)) {
+      row_end <- min(row_start + this_batch - 1, total_rows)
+
+      insert_sql <- glue::glue("
+        INSERT INTO {out_id}
+        SELECT
+          sample_name,
+          chrom,
+          start,
+          start AS \"end\",
+          num_calls,
+          {paste(sprintf('%s_counts', labels), collapse = ', ')},
+          {frac_cols}
+        FROM temp_positions_batched
+        WHERE rn BETWEEN {row_start} AND {row_end}
+          AND num_calls >= {min_num_calls};
+      ")
+      DBI::dbExecute(mod_db$con, insert_sql)
+    }
     
-    insert_sql <- glue::glue("
-      INSERT INTO {out_id}
-      SELECT
-        sample_name,
-        chrom,
-        start,
-        start AS \"end\",
-        num_calls,
-        {paste(sprintf('%s_counts', labels), collapse = ', ')},
-        {frac_cols}
-      FROM temp_positions
-      WHERE num_calls >= {min_num_calls};
-    ")
-    DBI::dbExecute(mod_db$con, insert_sql)
-    
+    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions_batched;")
     DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_positions;")
   }
   

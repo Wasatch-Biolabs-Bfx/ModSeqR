@@ -17,6 +17,7 @@ summarize_mod_windows(
   unmod_code = "-",
   unmod_label = "c",
   min_num_calls = 1,
+  batch_size = NULL,
   temp_dir = tempdir(),
   threads = NULL,
   memory_limit = NULL,
@@ -52,6 +53,9 @@ all samples present in \code{input_table} are processed.}
 
 \item{min_num_calls}{Minimum total calls required for a window to be written
 (default \code{1}). Windows below this threshold are skipped.}
+
+\item{batch_size}{Optional integer number of chromosomes to process per batch
+for each sample. If \code{NULL}, all chromosomes for a sample are processed together.}
 
 \item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
 
@@ -95,6 +99,7 @@ sums counts over \code{[temp_start, temp_start + window_size - 1]} and writes:
   \item \code{<label>_counts}: summed counts for each label
   \item \code{<label>_frac}: \code{<label>_counts / num_calls} (NULL if \code{num_calls == 0})
 }
+Window aggregation can be split by chromosome groups using \code{batch_size}.
 Resource pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}) are set
 via internal heuristics unless overridden.
 }

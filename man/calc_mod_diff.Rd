@@ -12,6 +12,9 @@ calc_mod_diff(
   controls,
   mod_type = "mh",
   calc_type = NULL,
+  temp_dir = tempdir(),
+  threads = NULL,
+  memory_limit = NULL,
   overwrite = TRUE
 )
 }
@@ -35,6 +38,14 @@ Options include "wilcox", "fast_fisher", "r_fisher", and "log_reg".
 Default is NULL, in which case "wilcox" is used if there are replicates in either
 group, otherwise "fast_fisher" is used.}
 
+\item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
+
+\item{threads}{Integer DuckDB thread count. If \code{NULL}, an internal heuristic
+(typically all-but-one core) is used.}
+
+\item{memory_limit}{DuckDB memory limit string (e.g. \code{"16384MB"}).
+If \code{NULL}, an internal heuristic (~80\% of RAM) is used.}
+
 \item{overwrite}{If TRUE and output_table exists, it is dropped before writing.}
 }
 \value{
@@ -47,7 +58,8 @@ The results are stored in a DuckDB database for further analysis.
 \details{
 The function connects to the specified DuckDB database and retrieves methylation data from the specified call type table. 
 It summarizes the data for cases and controls, calculates p-values based on the specified method, and stores the results in the 
-"meth_diff" table.
+"meth_diff" table. Resource pragmas (\code{temp_directory}, \code{threads},
+\code{memory_limit}) are set via internal heuristics unless overridden.
 }
 \examples{
 \dontrun{
