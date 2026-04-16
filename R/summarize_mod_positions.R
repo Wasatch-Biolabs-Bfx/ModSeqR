@@ -48,7 +48,9 @@
 #'   \item Determines the list of samples to process (all by default, or the intersection with \code{samples}).
 #'   \item Builds dynamic SQL to compute, per sample and position (\code{chrom}, \code{start}):
 #'         \code{num_calls}, \code{<label>_counts} for each requested code/combination, and
-#'         \code{<label>_frac} = \code{<label>_counts / num_calls}.
+#'         \code{<label>_frac} = \code{<label>_counts / num_calls}. Position aggregation
+#'         is computed chromosome-by-chromosome per sample to reduce peak \code{GROUP BY}
+#'         resource usage.
 #'   \item Inserts per-sample summaries into \code{output_table}, optionally in row-count
 #'         batches controlled by \code{batch_size}.
 #'   \item Pre-creates the \code{output_table} schema with the appropriate dynamic columns, then
@@ -184,20 +186,49 @@ summarize_mod_positions <- function(mod_db,
   # Process each sample separately (chunking by sample)
   for (samp in all_samps) {
     samp_esc <- gsub("'", "''", samp)
-    
-    view_sql <- glue::glue("
-      CREATE OR REPLACE TEMP VIEW temp_positions AS
-      SELECT
-          sample_name,
-          chrom,
-          start,
-          COUNT(*) AS num_calls,
-          {countsS}
+
+    chrom_q <- glue::glue("\
+      SELECT DISTINCT chrom
       FROM {in_id}
       WHERE sample_name = '{samp_esc}' AND start > 0{chr_clause}
-      GROUP BY sample_name, chrom, start
+      ORDER BY chrom
     ")
-    DBI::dbExecute(mod_db$con, view_sql)
+    sample_chroms <- DBI::dbGetQuery(mod_db$con, chrom_q)[, 1]
+    if (length(sample_chroms) == 0) {
+      next
+    }
+
+    count_nulls_pos <- paste(sprintf("CAST(NULL AS BIGINT) AS %s_counts", labels), collapse = ",\n          ")
+    pos_schema_sql <- glue::glue("\
+      CREATE OR REPLACE TEMP TABLE temp_positions AS
+      SELECT
+          CAST(NULL AS VARCHAR) AS sample_name,
+          CAST(NULL AS VARCHAR) AS chrom,
+          CAST(NULL AS BIGINT)  AS start,
+          CAST(NULL AS BIGINT)  AS num_calls,
+          {count_nulls_pos}
+      WHERE 1=0
+    ")
+    DBI::dbExecute(mod_db$con, pos_schema_sql)
+
+    for (chr in sample_chroms) {
+      chr_esc <- gsub("'", "''", chr)
+      agg_chr_sql <- glue::glue("\
+        INSERT INTO temp_positions
+        SELECT
+            sample_name,
+            chrom,
+            start,
+            COUNT(*) AS num_calls,
+            {countsS}
+        FROM {in_id}
+        WHERE sample_name = '{samp_esc}'
+          AND chrom = '{chr_esc}'
+          AND start > 0
+        GROUP BY sample_name, chrom, start
+      ")
+      DBI::dbExecute(mod_db$con, agg_chr_sql)
+    }
 
     DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions_batched;")
     DBI::dbExecute(mod_db$con, "
@@ -212,7 +243,7 @@ summarize_mod_positions <- function(mod_db,
                                   "SELECT COUNT(*) AS n FROM temp_positions_batched")$n[1]
     if (!is.finite(total_rows) || total_rows == 0) {
       DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions_batched;")
-      DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_positions;")
+      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions;")
       next
     }
     this_batch <- if (is.na(pos_batch_size)) total_rows else pos_batch_size
@@ -241,7 +272,7 @@ summarize_mod_positions <- function(mod_db,
     }
     
     DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions_batched;")
-    DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_positions;")
+    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions;")
   }
   
   end_time <- Sys.time()

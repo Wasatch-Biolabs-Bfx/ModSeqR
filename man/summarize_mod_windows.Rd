@@ -88,7 +88,9 @@ total CpG sites, total calls, per-class counts, and per-class fractions.
 \details{
 For each sample, the function first aggregates per-position counts from
 \code{input_table} (\code{num_calls} plus dynamically generated
-\code{<label>_counts} per \code{mod_code}/\code{unmod_code}). It then creates
+\code{<label>_counts} per \code{mod_code}/\code{unmod_code}). Position
+aggregation is computed chromosome-by-chromosome per sample to reduce peak
+\code{GROUP BY} resource usage. It then creates
 sliding windows by assigning each position to a window start computed as:
 \deqn{temp\_start = start - ((start - offset) \bmod window\_size).}
 For each \code{offset} in \code{seq(1, window_size - 1, by = step_size)}, it

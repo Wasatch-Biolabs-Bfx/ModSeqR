@@ -53,7 +53,9 @@
 #'         DB positions and annotation disagree on presence of a \code{"chr"} prefix.
 #'   \item Configures DuckDB pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}).
 #'   \item Builds per-position counts (one row per \code{sample_name}, \code{chrom}, \code{start})
-#'         for the requested classes (\code{<label>_counts}, plus fractions later).
+#'         for the requested classes (\code{<label>_counts}, plus fractions later). Position
+#'         aggregation is computed chromosome-by-chromosome per sample to reduce peak
+#'         \code{GROUP BY} resource usage.
 #'   \item Joins positions to regions using the chosen \code{join} type and aggregates per region:
 #'         \code{num_CpGs}, \code{num_calls}, \code{<label>_counts}, and
 #'         \code{<label>_frac} = \code{<label>_counts / num_calls}.
@@ -256,22 +258,51 @@ summarize_mod_regions <- function(mod_db,
   # ---- Process per sample: position counts -> region aggregation ---------------
   for (samp in all_samps) {
     samp_esc <- gsub("'", "''", samp)
-    
-    # Per-position counts for this sample
-    pos_view <- glue::glue("
-      CREATE OR REPLACE TEMP VIEW temp_positions AS
-      SELECT
-          sample_name,
-          chrom,
-          start,
-          \"end\",
-          COUNT(*) AS num_calls,
-          {countsS}
+
+    chrom_q <- glue::glue("\
+      SELECT DISTINCT chrom
       FROM {in_id}
       WHERE sample_name = '{samp_esc}' AND start > 0{chr_clause}
-      GROUP BY sample_name, chrom, start, \"end\"
+      ORDER BY chrom
     ")
-    DBI::dbExecute(mod_db$con, pos_view)
+    sample_chroms <- DBI::dbGetQuery(mod_db$con, chrom_q)[, 1]
+    if (length(sample_chroms) == 0) {
+      next
+    }
+
+    count_nulls_pos <- paste(sprintf("CAST(NULL AS BIGINT) AS %s_counts", labels), collapse = ",\n          ")
+    pos_schema_sql <- glue::glue("\
+      CREATE OR REPLACE TEMP TABLE temp_positions AS
+      SELECT
+          CAST(NULL AS VARCHAR) AS sample_name,
+          CAST(NULL AS VARCHAR) AS chrom,
+          CAST(NULL AS BIGINT)  AS start,
+          CAST(NULL AS BIGINT)  AS \"end\",
+          CAST(NULL AS BIGINT)  AS num_calls,
+          {count_nulls_pos}
+      WHERE 1=0
+    ")
+    DBI::dbExecute(mod_db$con, pos_schema_sql)
+
+    for (chr in sample_chroms) {
+      chr_esc <- gsub("'", "''", chr)
+      agg_chr_sql <- glue::glue("\
+        INSERT INTO temp_positions
+        SELECT
+            sample_name,
+            chrom,
+            start,
+            \"end\",
+            COUNT(*) AS num_calls,
+            {countsS}
+        FROM {in_id}
+        WHERE sample_name = '{samp_esc}'
+          AND chrom = '{chr_esc}'
+          AND start > 0
+        GROUP BY sample_name, chrom, start, \"end\"
+      ")
+      DBI::dbExecute(mod_db$con, agg_chr_sql)
+    }
     
     # Build dynamic SUMs and fractions at region level
     sum_counts <- paste(sprintf("COALESCE(SUM(p.%s_counts), 0) AS %s_counts", labels, labels),
@@ -324,7 +355,7 @@ summarize_mod_regions <- function(mod_db,
       DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_annotation_chunk;")
     }
 
-    DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_positions;")
+    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions;")
   }
   
   # ---- Finish ------------------------------------------------------------------
