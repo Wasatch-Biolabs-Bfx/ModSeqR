@@ -17,6 +17,7 @@ summarize_mod_regions(
   unmod_code = "-",
   unmod_label = "c",
   min_num_calls = 1,
+  batch_size = NULL,
   temp_dir = tempdir(),
   threads = NULL,
   memory_limit = NULL,
@@ -55,6 +56,9 @@ all samples present in \code{input_table} are processed.}
 \item{min_num_calls}{Minimum total calls required at the \emph{region} level to be written
 (default \code{1}). Regions below this threshold are skipped.}
 
+\item{batch_size}{Optional integer number of annotation regions to process per batch
+for each sample. If \code{NULL}, all regions are processed in one batch.}
+
 \item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
 
 \item{threads}{Integer DuckDB thread count. If \code{NULL}, an internal heuristic
@@ -92,10 +96,13 @@ The function:
         DB positions and annotation disagree on presence of a \code{"chr"} prefix.
   \item Configures DuckDB pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}).
   \item Builds per-position counts (one row per \code{sample_name}, \code{chrom}, \code{start})
-        for the requested classes (\code{<label>_counts}, plus fractions later).
+        for the requested classes (\code{<label>_counts}, plus fractions later). Position
+        aggregation is computed chromosome-by-chromosome per sample to reduce peak
+        \code{GROUP BY} resource usage.
   \item Joins positions to regions using the chosen \code{join} type and aggregates per region:
         \code{num_CpGs}, \code{num_calls}, \code{<label>_counts}, and
         \code{<label>_frac} = \code{<label>_counts / num_calls}.
+        Region processing can be split into annotation-sized batches via \code{batch_size}.
 }
 }
 \section{How modification codes work}{

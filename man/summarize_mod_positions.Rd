@@ -15,6 +15,7 @@ summarize_mod_positions(
   unmod_code = "-",
   unmod_label = "c",
   min_num_calls = 1,
+  batch_size = NULL,
   temp_dir = tempdir(),
   threads = NULL,
   memory_limit = NULL,
@@ -46,6 +47,9 @@ Default: \code{c("m","h","m + h")}.}
 \code{c_counts} and \code{c_frac}).}
 
 \item{min_num_calls}{Minimum total calls required at a position to be written (default \code{1}).}
+
+\item{batch_size}{Optional integer number of aggregated position rows to process per batch
+for each sample. If \code{NULL}, all rows for a sample are processed in one batch.}
 
 \item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
 
@@ -80,7 +84,11 @@ The function:
   \item Determines the list of samples to process (all by default, or the intersection with \code{samples}).
   \item Builds dynamic SQL to compute, per sample and position (\code{chrom}, \code{start}):
         \code{num_calls}, \code{<label>_counts} for each requested code/combination, and
-        \code{<label>_frac} = \code{<label>_counts / num_calls}.
+        \code{<label>_frac} = \code{<label>_counts / num_calls}. Position aggregation
+        is computed chromosome-by-chromosome per sample to reduce peak \code{GROUP BY}
+        resource usage.
+  \item Inserts per-sample summaries into \code{output_table}, optionally in row-count
+        batches controlled by \code{batch_size}.
   \item Pre-creates the \code{output_table} schema with the appropriate dynamic columns, then
         inserts rows per sample. \code{end} is set equal to \code{start}.
 }

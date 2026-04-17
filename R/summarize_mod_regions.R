@@ -36,6 +36,8 @@
 #' @param unmod_label Label used to name unmodified columns (default \code{"c"}).
 #' @param min_num_calls Minimum total calls required at the \emph{region} level to be written
 #'   (default \code{1}). Regions below this threshold are skipped.
+#' @param batch_size Optional integer number of annotation regions to process per batch
+#'   for each sample. If \code{NULL}, all regions are processed in one batch.
 #' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
 #' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic
 #'   (typically all-but-one core) is used.
@@ -51,10 +53,13 @@
 #'         DB positions and annotation disagree on presence of a \code{"chr"} prefix.
 #'   \item Configures DuckDB pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}).
 #'   \item Builds per-position counts (one row per \code{sample_name}, \code{chrom}, \code{start})
-#'         for the requested classes (\code{<label>_counts}, plus fractions later).
+#'         for the requested classes (\code{<label>_counts}, plus fractions later). Position
+#'         aggregation is computed chromosome-by-chromosome per sample to reduce peak
+#'         \code{GROUP BY} resource usage.
 #'   \item Joins positions to regions using the chosen \code{join} type and aggregates per region:
 #'         \code{num_CpGs}, \code{num_calls}, \code{<label>_counts}, and
 #'         \code{<label>_frac} = \code{<label>_counts / num_calls}.
+#'         Region processing can be split into annotation-sized batches via \code{batch_size}.
 #' }
 #'
 #' @return (Invisibly) a \code{"mod_db"} object pointing to the same DB file with
@@ -109,6 +114,7 @@ summarize_mod_regions <- function(mod_db,
                                   unmod_code  = "-",
                                   unmod_label = "c",
                                   min_num_calls = 1,
+                                  batch_size = NULL,
                                   temp_dir = tempdir(),
                                   threads = NULL,             # default: all-but-one
                                   memory_limit = NULL,        # default: ~80% RAM
@@ -222,26 +228,81 @@ summarize_mod_regions <- function(mod_db,
     # strip 'chr' from annotation
     DBI::dbExecute(mod_db$con, "UPDATE temp_annotation SET chrom = REGEXP_REPLACE(chrom, '^chr', '');")
   }
+
+  DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_annotation_batched;")
+  DBI::dbExecute(mod_db$con, "
+    CREATE TEMP TABLE temp_annotation_batched AS
+    SELECT
+      chrom,
+      start,
+      \"end\",
+      region_name,
+      ROW_NUMBER() OVER (ORDER BY chrom, start, \"end\", region_name) AS rn
+    FROM temp_annotation
+  ")
+
+  total_regions <- DBI::dbGetQuery(mod_db$con,
+                                   "SELECT COUNT(*) AS n FROM temp_annotation_batched")$n[1]
+  if (!is.finite(total_regions) || total_regions == 0) {
+    stop("No regions found in region_file after parsing.")
+  }
+  reg_batch_size <- if (is.null(batch_size)) {
+    total_regions
+  } else {
+    as.integer(batch_size[1])
+  }
+  if (!is.finite(reg_batch_size) || reg_batch_size < 1) {
+    stop("batch_size must be >= 1 when provided.")
+  }
   
   # ---- Process per sample: position counts -> region aggregation ---------------
   for (samp in all_samps) {
     samp_esc <- gsub("'", "''", samp)
-    
-    # Per-position counts for this sample
-    pos_view <- glue::glue("
-      CREATE OR REPLACE TEMP VIEW temp_positions AS
-      SELECT
-          sample_name,
-          chrom,
-          start,
-          \"end\",
-          COUNT(*) AS num_calls,
-          {countsS}
+
+    chrom_q <- glue::glue("\
+      SELECT DISTINCT chrom
       FROM {in_id}
       WHERE sample_name = '{samp_esc}' AND start > 0{chr_clause}
-      GROUP BY sample_name, chrom, start, \"end\"
+      ORDER BY chrom
     ")
-    DBI::dbExecute(mod_db$con, pos_view)
+    sample_chroms <- DBI::dbGetQuery(mod_db$con, chrom_q)[, 1]
+    if (length(sample_chroms) == 0) {
+      next
+    }
+
+    count_nulls_pos <- paste(sprintf("CAST(NULL AS BIGINT) AS %s_counts", labels), collapse = ",\n          ")
+    pos_schema_sql <- glue::glue("\
+      CREATE OR REPLACE TEMP TABLE temp_positions AS
+      SELECT
+          CAST(NULL AS VARCHAR) AS sample_name,
+          CAST(NULL AS VARCHAR) AS chrom,
+          CAST(NULL AS BIGINT)  AS start,
+          CAST(NULL AS BIGINT)  AS \"end\",
+          CAST(NULL AS BIGINT)  AS num_calls,
+          {count_nulls_pos}
+      WHERE 1=0
+    ")
+    DBI::dbExecute(mod_db$con, pos_schema_sql)
+
+    for (chr in sample_chroms) {
+      chr_esc <- gsub("'", "''", chr)
+      agg_chr_sql <- glue::glue("\
+        INSERT INTO temp_positions
+        SELECT
+            sample_name,
+            chrom,
+            start,
+            \"end\",
+            COUNT(*) AS num_calls,
+            {countsS}
+        FROM {in_id}
+        WHERE sample_name = '{samp_esc}'
+          AND chrom = '{chr_esc}'
+          AND start > 0
+        GROUP BY sample_name, chrom, start, \"end\"
+      ")
+      DBI::dbExecute(mod_db$con, agg_chr_sql)
+    }
     
     # Build dynamic SUMs and fractions at region level
     sum_counts <- paste(sprintf("COALESCE(SUM(p.%s_counts), 0) AS %s_counts", labels, labels),
@@ -255,32 +316,46 @@ summarize_mod_regions <- function(mod_db,
                       inner = "JOIN",
                       left  = "LEFT JOIN",
                       right = "RIGHT JOIN")
-    
-    reg_sql <- glue::glue("
-      CREATE TEMP TABLE temp_regions AS
-      SELECT
-        p.sample_name,
-        a.region_name,
-        a.chrom,
-        a.start,
-        a.\"end\",
-        COUNT(*)                       AS num_CpGs,
-        COALESCE(SUM(p.num_calls), 0)  AS num_calls,
-        {sum_counts},
-        {frac_cols}
-      FROM temp_positions p
-      {join_kw} temp_annotation a
-        ON p.chrom = a.chrom
-       AND CAST(p.start AS DOUBLE) BETWEEN CAST(a.start AS DOUBLE) AND CAST(a.\"end\" AS DOUBLE)
-      GROUP BY p.sample_name, a.region_name, a.chrom, a.start, a.\"end\"
-      HAVING COALESCE(SUM(p.num_calls), 0) >= {min_num_calls};
-    ")
-    
-    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_regions;")
-    DBI::dbExecute(mod_db$con, reg_sql)
-    DBI::dbExecute(mod_db$con, glue::glue("INSERT INTO {out_id} SELECT * FROM temp_regions;"))
-    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_regions;")
-    DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_positions;")
+
+    for (reg_start in seq.int(1, total_regions, by = reg_batch_size)) {
+      reg_end <- min(reg_start + reg_batch_size - 1, total_regions)
+
+      ann_chunk_sql <- glue::glue("
+        CREATE OR REPLACE TEMP VIEW temp_annotation_chunk AS
+        SELECT chrom, start, \"end\", region_name
+        FROM temp_annotation_batched
+        WHERE rn BETWEEN {reg_start} AND {reg_end}
+      ")
+      DBI::dbExecute(mod_db$con, ann_chunk_sql)
+
+      reg_sql <- glue::glue("
+        CREATE TEMP TABLE temp_regions AS
+        SELECT
+          p.sample_name,
+          a.region_name,
+          a.chrom,
+          a.start,
+          a.\"end\",
+          COUNT(*)                       AS num_CpGs,
+          COALESCE(SUM(p.num_calls), 0)  AS num_calls,
+          {sum_counts},
+          {frac_cols}
+        FROM temp_positions p
+        {join_kw} temp_annotation_chunk a
+          ON p.chrom = a.chrom
+         AND CAST(p.start AS DOUBLE) BETWEEN CAST(a.start AS DOUBLE) AND CAST(a.\"end\" AS DOUBLE)
+        GROUP BY p.sample_name, a.region_name, a.chrom, a.start, a.\"end\"
+        HAVING COALESCE(SUM(p.num_calls), 0) >= {min_num_calls};
+      ")
+
+      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_regions;")
+      DBI::dbExecute(mod_db$con, reg_sql)
+      DBI::dbExecute(mod_db$con, glue::glue("INSERT INTO {out_id} SELECT * FROM temp_regions;"))
+      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_regions;")
+      DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_annotation_chunk;")
+    }
+
+    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions;")
   }
   
   # ---- Finish ------------------------------------------------------------------

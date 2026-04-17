@@ -15,12 +15,18 @@
 #' Options include "wilcox", "fast_fisher", "r_fisher", and "log_reg". 
 #' Default is NULL, in which case "wilcox" is used if there are replicates in either
 #' group, otherwise "fast_fisher" is used.
+#' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
+#' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic
+#'   (typically all-but-one core) is used.
+#' @param memory_limit DuckDB memory limit string (e.g. \code{"16384MB"}).
+#'   If \code{NULL}, an internal heuristic (~80\% of RAM) is used.
 #' @param overwrite If TRUE and output_table exists, it is dropped before writing.
 #'
 #' @details
 #' The function connects to the specified DuckDB database and retrieves methylation data from the specified call type table. 
 #' It summarizes the data for cases and controls, calculates p-values based on the specified method, and stores the results in the 
-#' "meth_diff" table. 
+#' "meth_diff" table. Resource pragmas (\code{temp_directory}, \code{threads},
+#' \code{memory_limit}) are set via internal heuristics unless overridden.
 #'
 #' @return A list containing the updated "mod_db" object with the latest tables in the database, including "meth_diff".
 #' 
@@ -51,12 +57,25 @@ calc_mod_diff <- function(mod_db,
                           controls,
                           mod_type = "mh",
                           calc_type = NULL,
+                          temp_dir = tempdir(),
+                          threads = NULL,
+                          memory_limit = NULL,
                           overwrite = TRUE)
 {
   start_time <- Sys.time()
 
   # Open the database connection
   mod_db <- .modhelper_connectDB(mod_db)
+
+  # Resource caps
+  caps <- .auto_duckdb_resource_caps(0.80)
+  thr  <- if (is.null(threads)) caps$threads else threads
+  mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
+
+  dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", thr))
 
   # check for windows function
   if (!dbExistsTable(mod_db$con, call_type)) { # add db_con into object and put in every function...

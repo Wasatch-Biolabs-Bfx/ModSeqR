@@ -33,6 +33,8 @@
 #' @param unmod_label Label used to name unmodified columns (default \code{"c"}).
 #' @param min_num_calls Minimum total calls required for a window to be written
 #'   (default \code{1}). Windows below this threshold are skipped.
+#' @param batch_size Optional integer number of chromosomes to process per batch
+#'   for each sample. If \code{NULL}, all chromosomes for a sample are processed together.
 #' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
 #' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic
 #'   (typically all-but-one core) is used.
@@ -43,7 +45,9 @@
 #' @details
 #' For each sample, the function first aggregates per-position counts from
 #' \code{input_table} (\code{num_calls} plus dynamically generated
-#' \code{<label>_counts} per \code{mod_code}/\code{unmod_code}). It then creates
+#' \code{<label>_counts} per \code{mod_code}/\code{unmod_code}). Position
+#' aggregation is computed chromosome-by-chromosome per sample to reduce peak
+#' \code{GROUP BY} resource usage. It then creates
 #' sliding windows by assigning each position to a window start computed as:
 #' \deqn{temp\_start = start - ((start - offset) \bmod window\_size).}
 #' For each \code{offset} in \code{seq(1, window_size - 1, by = step_size)}, it
@@ -54,6 +58,7 @@
 #'   \item \code{<label>_counts}: summed counts for each label
 #'   \item \code{<label>_frac}: \code{<label>_counts / num_calls} (NULL if \code{num_calls == 0})
 #' }
+#' Window aggregation can be split by chromosome groups using \code{batch_size}.
 #' Resource pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}) are set
 #' via internal heuristics unless overridden.
 #'
@@ -112,6 +117,7 @@ summarize_mod_windows <- function(mod_db,
                                   unmod_code  = "-",
                                   unmod_label = "c",
                                   min_num_calls = 1,
+                                  batch_size = NULL,
                                   temp_dir = tempdir(),
                                   threads = NULL,             # default: all-but-one
                                   memory_limit = NULL,        # default: ~80% RAM
@@ -171,24 +177,61 @@ summarize_mod_windows <- function(mod_db,
   
   offsets <- seq(1, window_size - 1, by = step_size)
   chr_clause <- .chrom_filter_sql(chrs)
+  chrom_batch_size <- if (is.null(batch_size)) {
+    NA_integer_
+  } else {
+    as.integer(batch_size[1])
+  }
+  if (!is.na(chrom_batch_size) && chrom_batch_size < 1) {
+    stop("batch_size must be >= 1 when provided.")
+  }
   
   # Process each sample separately
   for (samp in all_samps) {
     samp_esc <- gsub("'", "''", samp)
-    
-    pos_view <- glue::glue("
-      CREATE OR REPLACE TEMP VIEW temp_positions AS
-      SELECT
-          sample_name,
-          chrom,
-          start,
-          COUNT(*) AS num_calls,
-          {countsS}
+
+    chrom_q <- glue::glue("\
+      SELECT DISTINCT chrom
       FROM {in_id}
       WHERE sample_name = '{samp_esc}' AND start > 0{chr_clause}
-      GROUP BY sample_name, chrom, start
+      ORDER BY chrom
     ")
-    DBI::dbExecute(mod_db$con, pos_view)
+    sample_chroms <- DBI::dbGetQuery(mod_db$con, chrom_q)[, 1]
+    if (length(sample_chroms) == 0) {
+      next
+    }
+
+    count_nulls_pos <- paste(sprintf("CAST(NULL AS BIGINT) AS %s_counts", labels), collapse = ",\n          ")
+    pos_schema_sql <- glue::glue("\
+      CREATE OR REPLACE TEMP TABLE temp_positions AS
+      SELECT
+          CAST(NULL AS VARCHAR) AS sample_name,
+          CAST(NULL AS VARCHAR) AS chrom,
+          CAST(NULL AS BIGINT)  AS start,
+          CAST(NULL AS BIGINT)  AS num_calls,
+          {count_nulls_pos}
+      WHERE 1=0
+    ")
+    DBI::dbExecute(mod_db$con, pos_schema_sql)
+
+    for (chr in sample_chroms) {
+      chr_esc <- gsub("'", "''", chr)
+      agg_chr_sql <- glue::glue("\
+        INSERT INTO temp_positions
+        SELECT
+            sample_name,
+            chrom,
+            start,
+            COUNT(*) AS num_calls,
+            {countsS}
+        FROM {in_id}
+        WHERE sample_name = '{samp_esc}'
+          AND chrom = '{chr_esc}'
+          AND start > 0
+        GROUP BY sample_name, chrom, start
+      ")
+      DBI::dbExecute(mod_db$con, agg_chr_sql)
+    }
     
     # Dynamic SUMs for counts & fractions at window level
     sum_counts <- paste(sprintf("SUM(%s_counts) AS %s_counts", labels, labels),
@@ -196,44 +239,59 @@ summarize_mod_windows <- function(mod_db,
     frac_cols <- paste(sprintf(
       "CASE WHEN SUM(num_calls) = 0 THEN NULL ELSE SUM(%s_counts) * 1.0 / SUM(num_calls) END AS %s_frac",
       labels, labels), collapse = ",\n            ")
+
+    chroms <- DBI::dbGetQuery(mod_db$con,
+                              "SELECT DISTINCT chrom FROM temp_positions ORDER BY chrom")$chrom
+    if (length(chroms) == 0) {
+      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions;")
+      next
+    }
+    this_batch <- if (is.na(chrom_batch_size)) length(chroms) else chrom_batch_size
     
-    for (offset in offsets) {
-      win_sql <- glue::glue("
-        CREATE TEMP TABLE temp_table AS
-        WITH window_map AS (
+    for (chrom_start in seq.int(1, length(chroms), by = this_batch)) {
+      chrom_end <- min(chrom_start + this_batch - 1, length(chroms))
+      chrom_slice <- chroms[chrom_start:chrom_end]
+      chrom_vals <- paste(sprintf("'%s'", gsub("'", "''", chrom_slice)), collapse = ", ")
+
+      for (offset in offsets) {
+        win_sql <- glue::glue("
+          CREATE TEMP TABLE temp_table AS
+          WITH window_map AS (
+            SELECT 
+              sample_name,
+              chrom,
+              start,
+              (start - ((start - {offset}) % {window_size})) AS temp_start,
+              num_calls,
+              {paste(sprintf('%s_counts', labels), collapse = ', ')}
+            FROM temp_positions
+            WHERE chrom IN ({chrom_vals})
+          )
           SELECT 
             sample_name,
             chrom,
-            start,
-            (start - ((start - {offset}) % {window_size})) AS temp_start,
-            num_calls,
-            {paste(sprintf('%s_counts', labels), collapse = ', ')}
-          FROM temp_positions
-        )
-        SELECT 
-          sample_name,
-          chrom,
-          temp_start AS start,
-          temp_start + {window_size} - 1 AS \"end\",
-          COUNT(*)              AS num_CpGs,   -- one row per position
-          SUM(num_calls)        AS num_calls,
-          {sum_counts},
-          {frac_cols}
-        FROM window_map
-        GROUP BY sample_name, chrom, temp_start
-        HAVING SUM(num_calls) >= {min_num_calls};
-      ")
-      
-      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_table;")
-      DBI::dbExecute(mod_db$con, win_sql)
-      
-      ins_sql <- glue::glue("INSERT INTO {out_id} SELECT * FROM temp_table;")
-      DBI::dbExecute(mod_db$con, ins_sql)
-      
-      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_table;")
+            temp_start AS start,
+            temp_start + {window_size} - 1 AS \"end\",
+            COUNT(*)              AS num_CpGs,   -- one row per position
+            SUM(num_calls)        AS num_calls,
+            {sum_counts},
+            {frac_cols}
+          FROM window_map
+          GROUP BY sample_name, chrom, temp_start
+          HAVING SUM(num_calls) >= {min_num_calls};
+        ")
+
+        DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_table;")
+        DBI::dbExecute(mod_db$con, win_sql)
+
+        ins_sql <- glue::glue("INSERT INTO {out_id} SELECT * FROM temp_table;")
+        DBI::dbExecute(mod_db$con, ins_sql)
+
+        DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_table;")
+      }
     }
     
-    DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_positions;")
+    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions;")
   }
   
   end_time <- Sys.time()

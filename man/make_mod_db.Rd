@@ -11,7 +11,10 @@ make_mod_db(
   min_read_length = 50,
   min_call_prob = 0.9,
   min_base_qual = 10,
-  flag = NULL
+  flag = NULL,
+  threads = NULL,
+  memory_limit = NULL,
+  batch_size = NULL
 )
 }
 \arguments{
@@ -34,6 +37,15 @@ If \code{NULL}, all chromosomes are included.}
 \item{min_base_qual}{Minimum base quality to keep (default \code{10}).}
 
 \item{flag}{Optional numeric flag value to require; if \code{NULL}, no flag filter.}
+
+\item{threads}{Integer DuckDB thread count. If \code{NULL}, an internal heuristic
+(typically all-but-one core) is used.}
+
+\item{memory_limit}{DuckDB memory limit string (e.g. \code{"16384MB"}).
+If \code{NULL}, an internal heuristic (~50\% of RAM) is used.}
+
+\item{batch_size}{Optional integer number of \code{.ch3} files to process per batch.
+If \code{NULL}, all files are processed in one batch.}
 }
 \value{
 (Invisibly) a list of class \code{"mod_db"} with elements:
@@ -56,13 +68,15 @@ names are used as \code{sample_name}s in the output.
   \item Expands \code{ch3_files} (handling directories and named entries) into a mapping
         of source files and optional \code{sample_name}s.
   \item Configures DuckDB pragmas for temp directory, thread count (all-but-one core),
-        and a memory limit (~50% of detected RAM).
+        and a memory limit (~50% of detected RAM), unless \code{threads}/\code{memory_limit}
+        are explicitly provided.
   \item Drops any existing tables in the target DB.
   \item Reads all input \code{.ch3} parquet files in a single pass and creates a
         table \code{calls} with columns:
         \code{sample_name}, \code{chrom}, \code{start}, \code{end}, \code{read_position},
         \code{call_code}, \code{read_length}, \code{call_prob}, \code{base_qual}, \code{flag}.
         When names are not given for inputs, \code{sample_name} defaults to the file stem.
+        File reading can be split into batches using \code{batch_size}.
   \item Applies pushdown filters based on \code{chrom}, \code{min_read_length},
         \code{min_call_prob}, \code{min_base_qual}, and \code{flag}.
 }

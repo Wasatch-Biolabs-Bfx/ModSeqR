@@ -27,6 +27,12 @@
 #' @param min_call_prob Minimum call probability to keep (default \code{0.9}).
 #' @param min_base_qual Minimum base quality to keep (default \code{10}).
 #' @param flag Optional numeric flag value to require; if \code{NULL}, no flag filter.
+#' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic
+#'   (typically all-but-one core) is used.
+#' @param memory_limit DuckDB memory limit string (e.g. \code{"16384MB"}).
+#'   If \code{NULL}, an internal heuristic (~50\% of RAM) is used.
+#' @param batch_size Optional integer number of \code{.ch3} files to process per batch.
+#'   If \code{NULL}, all files are processed in one batch.
 #'
 #' @details
 #' \strong{What it does}
@@ -34,13 +40,15 @@
 #'   \item Expands \code{ch3_files} (handling directories and named entries) into a mapping
 #'         of source files and optional \code{sample_name}s.
 #'   \item Configures DuckDB pragmas for temp directory, thread count (all-but-one core),
-#'         and a memory limit (~50% of detected RAM).
+#'         and a memory limit (~50% of detected RAM), unless \code{threads}/\code{memory_limit}
+#'         are explicitly provided.
 #'   \item Drops any existing tables in the target DB.
 #'   \item Reads all input \code{.ch3} parquet files in a single pass and creates a
 #'         table \code{calls} with columns:
 #'         \code{sample_name}, \code{chrom}, \code{start}, \code{end}, \code{read_position},
 #'         \code{call_code}, \code{read_length}, \code{call_prob}, \code{base_qual}, \code{flag}.
 #'         When names are not given for inputs, \code{sample_name} defaults to the file stem.
+#'         File reading can be split into batches using \code{batch_size}.
 #'   \item Applies pushdown filters based on \code{chrom}, \code{min_read_length},
 #'         \code{min_call_prob}, \code{min_base_qual}, and \code{flag}.
 #' }
@@ -109,7 +117,10 @@ make_mod_db <- function(ch3_files,
                         min_read_length = 50, 
                         min_call_prob  = 0.9, 
                         min_base_qual  = 10, 
-                        flag = NULL)
+                        flag = NULL,
+                        threads = NULL,
+                        memory_limit = NULL,
+                        batch_size = NULL)
 {
   start_time <- Sys.time()
   if (length(ch3_files) == 0) stop("No files provided.")
@@ -205,14 +216,30 @@ make_mod_db <- function(ch3_files,
     list(threads = threads, memory_limit = paste0(limit_mb, "MB"))
   }
   
-  # Use 50% of RAM (returns e.g. "16384MB")
+  # Use 50% of RAM by default (returns e.g. "16384MB")
   caps <- detect_caps(0.50)
+  thr  <- if (is.null(threads)) caps$threads else as.integer(threads[1])
+  mem  <- if (is.null(memory_limit)) caps$memory_limit else as.character(memory_limit[1])
+  file_batch_size <- if (is.null(batch_size)) {
+    nrow(df_files)
+  } else {
+    as.integer(batch_size[1])
+  }
+  if (!is.finite(thr) || thr < 1) {
+    stop("threads must be an integer >= 1 when provided.")
+  }
+  if (!nzchar(mem)) {
+    stop("memory_limit must be a non-empty string when provided.")
+  }
+  if (!is.finite(file_batch_size) || file_batch_size < 1) {
+    stop("batch_size must be an integer >= 1 when provided.")
+  }
   
   tmp_dir <- file.path(tempdir(), "duckdb_tmp")
   dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
   DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", tmp_dir))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", caps$threads))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", caps$memory_limit))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", thr))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
   
   # Drop existing tables
   for (tbl in DBI::dbListTables(mod_db$con)) {
@@ -240,12 +267,6 @@ make_mod_db <- function(ch3_files,
   
   # Paths for read_parquet
   file_list_sql <- paste0("['", paste(esc(df_files$file), collapse = "','"), "']")
-  
-  # Get the schema of the parquet files (no data, just column names)
-  schema <- DBI::dbGetQuery(
-    mod_db$con,
-    sprintf("SELECT * FROM read_parquet(%s, filename = TRUE) LIMIT 0", file_list_sql)
-  )
   
   # --- detect schema compatibility across files -----------------------------------
   # Use union_by_name so DuckDB can read mixed schemas for inspection
@@ -299,12 +320,13 @@ make_mod_db <- function(ch3_files,
   #                       "call_code","read_length","call_prob","base_qual","flag"),
   #                     collapse = ", ")
   
-  # --- one parallel scan; join to mapping; fallback name from filename -----------
-  sql <- glue::glue("
+  # --- create calls table schema once, then append file batches ------------------
+  create_calls_sql <- glue::glue("
     CREATE TABLE calls AS
     WITH src AS (
       SELECT *
       FROM read_parquet({file_list_sql}, filename = TRUE, union_by_name = TRUE)
+      LIMIT 0
     ),
     tagged AS (
       SELECT
@@ -318,9 +340,37 @@ make_mod_db <- function(ch3_files,
     )
     SELECT *
     FROM tagged
-    {where_clause}
+    WHERE 1=0
   ")
-  DBI::dbExecute(mod_db$con, sql)
+  DBI::dbExecute(mod_db$con, create_calls_sql)
+
+  for (i in seq.int(1, nrow(df_files), by = file_batch_size)) {
+    j <- min(i + file_batch_size - 1, nrow(df_files))
+    batch_files <- df_files$file[i:j]
+    batch_list_sql <- paste0("['", paste(esc(batch_files), collapse = "','"), "']")
+
+    insert_sql <- glue::glue("
+      INSERT INTO calls
+      WITH src AS (
+        SELECT *
+        FROM read_parquet({batch_list_sql}, filename = TRUE, union_by_name = TRUE)
+      ),
+      tagged AS (
+        SELECT
+          -- use the sample_name we computed in R
+          m.sample_name AS sample_name,
+          {wanted_sql}
+        FROM src s
+        LEFT JOIN file_map m
+          ON m.file = s.filename
+          OR m.base = REGEXP_REPLACE(s.filename, '^.*[/\\\\]', '')
+      )
+      SELECT *
+      FROM tagged
+      {where_clause}
+    ")
+    DBI::dbExecute(mod_db$con, insert_sql)
+  }
   
   # --- finish --------------------------------------------------------------------
   total_seconds <- as.numeric(Sys.time() - start_time, units = "secs")
