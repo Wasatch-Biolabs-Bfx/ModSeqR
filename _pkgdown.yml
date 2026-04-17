@@ -75,6 +75,12 @@ reference:
     desc: "Run a full analysis in one command"
     contents:
       - run_mod_analysis
+      
+  - title: "Package"
+    desc: "Package-level documentation and internal classes"
+    contents:
+      - ModSeqR
+      - print.mod_db
 
 articles:
   - title: "Getting Started"
