@@ -3,6 +3,8 @@ url: https://wasatch-biolabs-bfx.github.io/ModSeqR/
 template:
   bootstrap: 5
   bootswatch: cosmo
+  bslib:
+    navbar-bg: "#4FBDBA"
 
 navbar:
   structure:
