@@ -1,4 +1,82 @@
 url: https://wasatch-biolabs-bfx.github.io/ModSeqR/
+
 template:
   bootstrap: 5
+  bootswatch: flatly
 
+navbar:
+  structure:
+    left:  [intro, reference, articles]
+    right: [search, github]
+  components:
+    github:
+      icon: fa-github
+      href: https://github.com/Wasatch-Biolabs-Bfx/ModSeqR
+
+reference:
+  - title: "Database Creation"
+    desc: "Build and manage methylation databases from .ch3 files"
+    contents:
+      - make_mod_archive
+      - make_mod_db
+
+  - title: "Summarize Data"
+    desc: "Summarize methylation data at different resolutions"
+    contents:
+      - summarize_mod_positions
+      - summarize_mod_regions
+      - summarize_mod_windows
+      - summarize_mod_reads
+
+  - title: "Differential Methylation"
+    desc: "Detect and collapse differentially methylated regions"
+    contents:
+      - calc_mod_diff
+      - collapse_mod_windows
+
+  - title: "Quality Control & Visualization"
+    desc: "QC reports and plotting functions"
+    contents:
+      - run_mod_qc
+      - plot_mod_cov
+      - plot_mod_diff
+      - plot_mod_diff_density
+      - plot_mod_modfrac
+      - plot_mod_pca
+      - calc_mod_samplecor
+
+  - title: "Database Utilities"
+    desc: "Inspect, query, and manage your database"
+    contents:
+      - get_mod_dbinfo
+      - get_mod_tableinfo
+      - get_mod_cols
+      - get_mod_cpg_count
+      - get_mod_stats
+      - get_mod_table
+      - export_mod_table
+      - remove_mod_table
+      - rename_mod_samples
+
+  - title: "Read-Level Tools"
+    desc: "Classify and filter individual reads"
+    contents:
+      - classify_mod_reads
+      - trim_mod_reads
+      - filter_mod_table
+
+  - title: "Advanced Queries"
+    desc: "Run custom SQL or dplyr queries on your database"
+    contents:
+      - run_mod_sql
+      - run_mod_dplyr
+
+  - title: "Pipeline"
+    desc: "Run a full analysis in one command"
+    contents:
+      - run_mod_analysis
+
+articles:
+  - title: "Getting Started"
+    contents:
+      - ModSeqRWalkthrough
