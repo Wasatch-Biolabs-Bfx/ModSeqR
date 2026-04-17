@@ -2,14 +2,9 @@
 
 ![](reference/figures/WBL_MODSEQR.png)
 
-## Version 1.0.0
+## Version 1.1.0
 
-**(Updated March 18th 2026)**
-
-***Note***: *This is an early release - changes may occur that
-significantly change the functionality and structure of the data and
-functions. The user should be aware that subsequent releases may break
-code written using earlier releases.*
+**(Updated April 17th 2026)**
 
 **ModSeqR** is an R package managing Direct Whole Methylome Sequencing
 (dWMS) data. It creates a database, and processes it with unique

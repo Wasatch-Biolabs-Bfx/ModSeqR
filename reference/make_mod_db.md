@@ -15,7 +15,10 @@ make_mod_db(
   min_read_length = 50,
   min_call_prob = 0.9,
   min_base_qual = 10,
-  flag = NULL
+  flag = NULL,
+  threads = NULL,
+  memory_limit = NULL,
+  batch_size = NULL
 )
 ```
 
@@ -55,6 +58,21 @@ make_mod_db(
 
   Optional numeric flag value to require; if `NULL`, no flag filter.
 
+- threads:
+
+  Integer DuckDB thread count. If `NULL`, an internal heuristic
+  (typically all-but-one core) is used.
+
+- memory_limit:
+
+  DuckDB memory limit string (e.g. `"16384MB"`). If `NULL`, an internal
+  heuristic (~50% of RAM) is used.
+
+- batch_size:
+
+  Optional integer number of `.ch3` files to process per batch. If
+  `NULL`, all files are processed in one batch.
+
 ## Value
 
 (Invisibly) a list of class `"mod_db"` with elements:
@@ -75,7 +93,7 @@ The database contains at least the `calls` table.
   mapping of source files and optional `sample_name`s.
 
 - Configures DuckDB pragmas for temp directory, thread count
-  (all-but-one core), and a memory limit (~50
+  (all-but-one core), and a memory limit (~50 are explicitly provided.
 
 - Drops any existing tables in the target DB.
 
@@ -83,7 +101,8 @@ The database contains at least the `calls` table.
   table `calls` with columns: `sample_name`, `chrom`, `start`, `end`,
   `read_position`, `call_code`, `read_length`, `call_prob`, `base_qual`,
   `flag`. When names are not given for inputs, `sample_name` defaults to
-  the file stem.
+  the file stem. File reading can be split into batches using
+  `batch_size`.
 
 - Applies pushdown filters based on `chrom`, `min_read_length`,
   `min_call_prob`, `min_base_qual`, and `flag`.

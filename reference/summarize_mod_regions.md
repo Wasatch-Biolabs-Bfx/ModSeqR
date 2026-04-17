@@ -23,6 +23,7 @@ summarize_mod_regions(
   unmod_code = "-",
   unmod_label = "c",
   min_num_calls = 1,
+  batch_size = NULL,
   temp_dir = tempdir(),
   threads = NULL,
   memory_limit = NULL,
@@ -86,6 +87,11 @@ summarize_mod_regions(
   Minimum total calls required at the *region* level to be written
   (default `1`). Regions below this threshold are skipped.
 
+- batch_size:
+
+  Optional integer number of annotation regions to process per batch for
+  each sample. If `NULL`, all regions are processed in one batch.
+
 - temp_dir:
 
   Directory for DuckDB temporary files (default
@@ -130,11 +136,13 @@ The function:
 
 3.  Builds per-position counts (one row per `sample_name`, `chrom`,
     `start`) for the requested classes (`<label>_counts`, plus fractions
-    later).
+    later). Position aggregation is computed chromosome-by-chromosome
+    per sample to reduce peak `GROUP BY` resource usage.
 
 4.  Joins positions to regions using the chosen `join` type and
     aggregates per region: `num_CpGs`, `num_calls`, `<label>_counts`,
-    and `<label>_frac` = `<label>_counts / num_calls`.
+    and `<label>_frac` = `<label>_counts / num_calls`. Region processing
+    can be split into annotation-sized batches via `batch_size`.
 
 ## How modification codes work
 

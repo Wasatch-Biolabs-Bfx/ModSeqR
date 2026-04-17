@@ -23,6 +23,7 @@ summarize_mod_windows(
   unmod_code = "-",
   unmod_label = "c",
   min_num_calls = 1,
+  batch_size = NULL,
   temp_dir = tempdir(),
   threads = NULL,
   memory_limit = NULL,
@@ -84,6 +85,12 @@ summarize_mod_windows(
   Minimum total calls required for a window to be written (default `1`).
   Windows below this threshold are skipped.
 
+- batch_size:
+
+  Optional integer number of chromosomes to process per batch for each
+  sample. If `NULL`, all chromosomes for a sample are processed
+  together.
+
 - temp_dir:
 
   Directory for DuckDB temporary files (default
@@ -117,9 +124,11 @@ summarize_mod_windows(
 
 For each sample, the function first aggregates per-position counts from
 `input_table` (`num_calls` plus dynamically generated `<label>_counts`
-per `mod_code`/`unmod_code`). It then creates sliding windows by
-assigning each position to a window start computed as: \$\$temp\\start =
-start - ((start - offset) \bmod window\\size).\$\$ For each `offset` in
+per `mod_code`/`unmod_code`). Position aggregation is computed
+chromosome-by-chromosome per sample to reduce peak `GROUP BY` resource
+usage. It then creates sliding windows by assigning each position to a
+window start computed as: \$\$temp\\start = start - ((start - offset)
+\bmod window\\size).\$\$ For each `offset` in
 `seq(1, window_size - 1, by = step_size)`, it sums counts over
 `[temp_start, temp_start + window_size - 1]` and writes:
 
@@ -132,6 +141,7 @@ start - ((start - offset) \bmod window\\size).\$\$ For each `offset` in
 - `<label>_frac`: `<label>_counts / num_calls` (NULL if
   `num_calls == 0`)
 
+Window aggregation can be split by chromosome groups using `batch_size`.
 Resource pragmas (`temp_directory`, `threads`, `memory_limit`) are set
 via internal heuristics unless overridden.
 

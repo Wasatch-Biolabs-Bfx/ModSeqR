@@ -15,6 +15,9 @@ calc_mod_diff(
   controls,
   mod_type = "mh",
   calc_type = NULL,
+  temp_dir = tempdir(),
+  threads = NULL,
+  memory_limit = NULL,
   overwrite = TRUE
 )
 ```
@@ -56,6 +59,21 @@ calc_mod_diff(
   "log_reg". Default is NULL, in which case "wilcox" is used if there
   are replicates in either group, otherwise "fast_fisher" is used.
 
+- temp_dir:
+
+  Directory for DuckDB temporary files (default
+  [`tempdir()`](https://rdrr.io/r/base/tempfile.html)).
+
+- threads:
+
+  Integer DuckDB thread count. If `NULL`, an internal heuristic
+  (typically all-but-one core) is used.
+
+- memory_limit:
+
+  DuckDB memory limit string (e.g. `"16384MB"`). If `NULL`, an internal
+  heuristic (~80% of RAM) is used.
+
 - overwrite:
 
   If TRUE and output_table exists, it is dropped before writing.
@@ -70,6 +88,8 @@ the database, including "meth_diff".
 The function connects to the specified DuckDB database and retrieves
 methylation data from the specified call type table. It summarizes the
 data for cases and controls, calculates p-values based on the specified
-method, and stores the results in the "meth_diff" table.
+method, and stores the results in the "meth_diff" table. Resource
+pragmas (`temp_directory`, `threads`, `memory_limit`) are set via
+internal heuristics unless overridden.
 
 ## Examples

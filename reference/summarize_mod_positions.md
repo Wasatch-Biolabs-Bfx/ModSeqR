@@ -20,6 +20,7 @@ summarize_mod_positions(
   unmod_code = "-",
   unmod_label = "c",
   min_num_calls = 1,
+  batch_size = NULL,
   temp_dir = tempdir(),
   threads = NULL,
   memory_limit = NULL,
@@ -76,6 +77,12 @@ summarize_mod_positions(
   Minimum total calls required at a position to be written (default
   `1`).
 
+- batch_size:
+
+  Optional integer number of aggregated position rows to process per
+  batch for each sample. If `NULL`, all rows for a sample are processed
+  in one batch.
+
 - temp_dir:
 
   Directory for DuckDB temporary files (default
@@ -118,8 +125,13 @@ The function:
 3.  Builds dynamic SQL to compute, per sample and position (`chrom`,
     `start`): `num_calls`, `<label>_counts` for each requested
     code/combination, and `<label>_frac` = `<label>_counts / num_calls`.
+    Position aggregation is computed chromosome-by-chromosome per sample
+    to reduce peak `GROUP BY` resource usage.
 
-4.  Pre-creates the `output_table` schema with the appropriate dynamic
+4.  Inserts per-sample summaries into `output_table`, optionally in
+    row-count batches controlled by `batch_size`.
+
+5.  Pre-creates the `output_table` schema with the appropriate dynamic
     columns, then inserts rows per sample. `end` is set equal to
     `start`.
 

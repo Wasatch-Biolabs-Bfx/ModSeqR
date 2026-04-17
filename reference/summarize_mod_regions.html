@@ -19,7 +19,7 @@ fractions.'></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">ModSeqR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -73,6 +73,7 @@ fractions.</p>
 <span>  unmod_code <span class="op">=</span> <span class="st">"-"</span>,</span>
 <span>  unmod_label <span class="op">=</span> <span class="st">"c"</span>,</span>
 <span>  min_num_calls <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  batch_size <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  temp_dir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  threads <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  memory_limit <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -137,6 +138,11 @@ all samples present in <code>input_table</code> are processed.</p></dd>
 (default <code>1</code>). Regions below this threshold are skipped.</p></dd>
 
 
+<dt id="arg-batch-size">batch_size<a class="anchor" aria-label="anchor" href="#arg-batch-size"></a></dt>
+<dd><p>Optional integer number of annotation regions to process per batch
+for each sample. If <code>NULL</code>, all regions are processed in one batch.</p></dd>
+
+
 <dt id="arg-temp-dir">temp_dir<a class="anchor" aria-label="anchor" href="#arg-temp-dir"></a></dt>
 <dd><p>Directory for DuckDB temporary files (default <code><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir()</a></code>).</p></dd>
 
@@ -170,10 +176,13 @@ If <code>NULL</code>, an internal heuristic (~80% of RAM) is used.</p></dd>
         DB positions and annotation disagree on presence of a <code>"chr"</code> prefix.</p></li>
 <li><p>Configures DuckDB pragmas (<code>temp_directory</code>, <code>threads</code>, <code>memory_limit</code>).</p></li>
 <li><p>Builds per-position counts (one row per <code>sample_name</code>, <code>chrom</code>, <code>start</code>)
-        for the requested classes (<code>&lt;label&gt;_counts</code>, plus fractions later).</p></li>
+        for the requested classes (<code>&lt;label&gt;_counts</code>, plus fractions later). Position
+        aggregation is computed chromosome-by-chromosome per sample to reduce peak
+        <code>GROUP BY</code> resource usage.</p></li>
 <li><p>Joins positions to regions using the chosen <code>join</code> type and aggregates per region:
         <code>num_CpGs</code>, <code>num_calls</code>, <code>&lt;label&gt;_counts</code>, and
-        <code>&lt;label&gt;_frac</code> = <code>&lt;label&gt;_counts / num_calls</code>.</p></li>
+        <code>&lt;label&gt;_frac</code> = <code>&lt;label&gt;_counts / num_calls</code>.
+        Region processing can be split into annotation-sized batches via <code>batch_size</code>.</p></li>
 </ol></div>
     <div class="section level2">
     <h2 id="how-modification-codes-work">How modification codes work<a class="anchor" aria-label="anchor" href="#how-modification-codes-work"></a></h2>

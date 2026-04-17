@@ -13,7 +13,7 @@ names are used as sample_names in the output."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">ModSeqR</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.0.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -58,7 +58,10 @@ names are used as <code>sample_name</code>s in the output.</p>
 <span>  min_read_length <span class="op">=</span> <span class="fl">50</span>,</span>
 <span>  min_call_prob <span class="op">=</span> <span class="fl">0.9</span>,</span>
 <span>  min_base_qual <span class="op">=</span> <span class="fl">10</span>,</span>
-<span>  flag <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  flag <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  threads <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  memory_limit <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  batch_size <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -99,6 +102,21 @@ If <code>NULL</code>, all chromosomes are included.</p></dd>
 <dt id="arg-flag">flag<a class="anchor" aria-label="anchor" href="#arg-flag"></a></dt>
 <dd><p>Optional numeric flag value to require; if <code>NULL</code>, no flag filter.</p></dd>
 
+
+<dt id="arg-threads">threads<a class="anchor" aria-label="anchor" href="#arg-threads"></a></dt>
+<dd><p>Integer DuckDB thread count. If <code>NULL</code>, an internal heuristic
+(typically all-but-one core) is used.</p></dd>
+
+
+<dt id="arg-memory-limit">memory_limit<a class="anchor" aria-label="anchor" href="#arg-memory-limit"></a></dt>
+<dd><p>DuckDB memory limit string (e.g. <code>"16384MB"</code>).
+If <code>NULL</code>, an internal heuristic (~50% of RAM) is used.</p></dd>
+
+
+<dt id="arg-batch-size">batch_size<a class="anchor" aria-label="anchor" href="#arg-batch-size"></a></dt>
+<dd><p>Optional integer number of <code>.ch3</code> files to process per batch.
+If <code>NULL</code>, all files are processed in one batch.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
@@ -112,13 +130,15 @@ If <code>NULL</code>, all chromosomes are included.</p></dd>
     <p><strong>What it does</strong></p><ul><li><p>Expands <code>ch3_files</code> (handling directories and named entries) into a mapping
         of source files and optional <code>sample_name</code>s.</p></li>
 <li><p>Configures DuckDB pragmas for temp directory, thread count (all-but-one core),
-        and a memory limit (~50<!-- % of detected RAM). --></p></li>
+        and a memory limit (~50<!-- % of detected RAM), unless \code{threads}/\code{memory_limit} -->
+        are explicitly provided.</p></li>
 <li><p>Drops any existing tables in the target DB.</p></li>
 <li><p>Reads all input <code>.ch3</code> parquet files in a single pass and creates a
         table <code>calls</code> with columns:
         <code>sample_name</code>, <code>chrom</code>, <code>start</code>, <code>end</code>, <code>read_position</code>,
         <code>call_code</code>, <code>read_length</code>, <code>call_prob</code>, <code>base_qual</code>, <code>flag</code>.
-        When names are not given for inputs, <code>sample_name</code> defaults to the file stem.</p></li>
+        When names are not given for inputs, <code>sample_name</code> defaults to the file stem.
+        File reading can be split into batches using <code>batch_size</code>.</p></li>
 <li><p>Applies pushdown filters based on <code>chrom</code>, <code>min_read_length</code>,
         <code>min_call_prob</code>, <code>min_base_qual</code>, and <code>flag</code>.</p></li>
 </ul><p><strong>Side effects and performance</strong></p><ul><li><p>Creates (or overwrites) a DuckDB file at <code>db_name</code>.</p></li>
