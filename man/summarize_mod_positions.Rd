@@ -84,11 +84,11 @@ The function:
   \item Determines the list of samples to process (all by default, or the intersection with \code{samples}).
   \item Builds dynamic SQL to compute, per sample and position (\code{chrom}, \code{start}):
         \code{num_calls}, \code{<label>_counts} for each requested code/combination, and
-      \code{<label>_frac} = \code{<label>_counts / num_calls}. Position aggregation
-      is computed chromosome-by-chromosome per sample to reduce peak \code{GROUP BY}
-      resource usage.
-    \item Inserts per-sample summaries into \code{output_table}, optionally in row-count
-      batches controlled by \code{batch_size}.
+        \code{<label>_frac} = \code{<label>_counts / num_calls}. Position aggregation
+        is computed chromosome-by-chromosome per sample to reduce peak \code{GROUP BY}
+        resource usage.
+  \item Inserts per-sample summaries into \code{output_table}, optionally in row-count
+        batches controlled by \code{batch_size}.
   \item Pre-creates the \code{output_table} schema with the appropriate dynamic columns, then
         inserts rows per sample. \code{end} is set equal to \code{start}.
 }

@@ -68,15 +68,15 @@ names are used as \code{sample_name}s in the output.
   \item Expands \code{ch3_files} (handling directories and named entries) into a mapping
         of source files and optional \code{sample_name}s.
   \item Configures DuckDB pragmas for temp directory, thread count (all-but-one core),
-      and a memory limit (~50% of detected RAM), unless \code{threads}/\code{memory_limit}
-      are explicitly provided.
+        and a memory limit (~50% of detected RAM), unless \code{threads}/\code{memory_limit}
+        are explicitly provided.
   \item Drops any existing tables in the target DB.
   \item Reads all input \code{.ch3} parquet files in a single pass and creates a
         table \code{calls} with columns:
         \code{sample_name}, \code{chrom}, \code{start}, \code{end}, \code{read_position},
         \code{call_code}, \code{read_length}, \code{call_prob}, \code{base_qual}, \code{flag}.
         When names are not given for inputs, \code{sample_name} defaults to the file stem.
-      File reading can be split into batches using \code{batch_size}.
+        File reading can be split into batches using \code{batch_size}.
   \item Applies pushdown filters based on \code{chrom}, \code{min_read_length},
         \code{min_call_prob}, \code{min_base_qual}, and \code{flag}.
 }

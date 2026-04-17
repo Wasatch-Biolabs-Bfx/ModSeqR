@@ -96,13 +96,13 @@ The function:
         DB positions and annotation disagree on presence of a \code{"chr"} prefix.
   \item Configures DuckDB pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}).
   \item Builds per-position counts (one row per \code{sample_name}, \code{chrom}, \code{start})
-      for the requested classes (\code{<label>_counts}, plus fractions later). Position
-      aggregation is computed chromosome-by-chromosome per sample to reduce peak
-      \code{GROUP BY} resource usage.
+        for the requested classes (\code{<label>_counts}, plus fractions later). Position
+        aggregation is computed chromosome-by-chromosome per sample to reduce peak
+        \code{GROUP BY} resource usage.
   \item Joins positions to regions using the chosen \code{join} type and aggregates per region:
         \code{num_CpGs}, \code{num_calls}, \code{<label>_counts}, and
         \code{<label>_frac} = \code{<label>_counts / num_calls}.
-      Region processing can be split into annotation-sized batches via \code{batch_size}.
+        Region processing can be split into annotation-sized batches via \code{batch_size}.
 }
 }
 \section{How modification codes work}{

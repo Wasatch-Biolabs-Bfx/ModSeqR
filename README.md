@@ -2,10 +2,8 @@
 
 # ModSeqR
 
-## Version 1.0.0 
-**(Updated March 18th 2026)**
-
-***Note***: *This is an early release - changes may occur that significantly change the functionality and structure of the data and functions. The user should be aware that subsequent releases may break code written using earlier releases.*
+## Version 1.1.0 
+**(Updated April 17th 2026)**
 
 **ModSeqR** is an R package managing Direct Whole Methylome Sequencing (dWMS) data. It creates a database, and processes it with unique options. Data can be summarized by positions, windows, or provided an annotation bed file, by unique genomic regions. The package also offers quality control functions, differential methylation, and a sliding window analysis.
 
