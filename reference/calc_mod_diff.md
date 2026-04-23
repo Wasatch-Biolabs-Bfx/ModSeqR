@@ -50,7 +50,9 @@ calc_mod_diff(
 - mod_type:
 
   A string indicating the type of modification to analyze. Default is
-  "mh" for methylation/hydroxymethylation.
+  "mh" for methylation/hydroxymethylation. Other codes include "a" for
+  6mA, "17596" for inosine, and "17802" for pseudouridine. Bare numeric
+  codes are automatically prefixed with "m\_".
 
 - calc_type:
 
