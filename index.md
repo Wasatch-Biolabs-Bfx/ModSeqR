@@ -24,10 +24,12 @@ and use RStudio. RStudio download instructions can be found
 [here](https://posit.co/download/rstudio-desktop/).
 
 ``` r
-# Install the devtools package if necessary
-install.packages("devtools")
+# Install ModSeqR from GitHub (pick one, install the package first if needed)
+install.packages("remotes")
+remotes::install_github("Wasatch-Biolabs-Bfx/ModSeqR", build_vignettes = FALSE)
 
-# Install ModSeqR from GitHub
+# or
+install.packages("devtools")
 devtools::install_github("Wasatch-Biolabs-Bfx/ModSeqR", build_vignettes = FALSE)
 
 # Access Package
