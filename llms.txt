@@ -2,9 +2,14 @@
 
 ![](reference/figures/WBL_MODSEQR.png)
 
-## Version 1.1.0
+## Version 1.1.1
 
 **(Updated April 23rd 2026)**
+
+**Publication:** If you use ModSeqR in your research, please cite our
+paper in *BMC Genomics*:  
+[ModSeqR: An R package for managing direct whole methylome sequencing
+data](https://link.springer.com/article/10.1186/s12864-026-12655-5)
 
 **ModSeqR** is an R package managing Direct Whole Methylome Sequencing
 (dWMS) data. It creates a database, and processes it with unique
@@ -282,6 +287,14 @@ included with this repository.
 
 If you have any suggestions or requested features, please email Jonathon
 Hill at <jhill@byu.edu>.
+
+## Citation
+
+If you use ModSeqR in your research, please cite:
+
+Zimmerman, H., & Hill, J. (2026). ModSeqR: An R package for managing
+direct whole methylome sequencing data. *BMC Genomics*.
+<https://link.springer.com/article/10.1186/s12864-026-12655-5>
 
 #### Developed by Hailey Zimmerman & Dr. Jonathon Hill at Wasatch Biolabs.
 
