@@ -290,11 +290,13 @@ Hill at <jhill@byu.edu>.
 
 ## Citation
 
+## Citation
+
 If you use ModSeqR in your research, please cite:
 
-Zimmerman, H., & Hill, J. (2026). ModSeqR: An R package for managing
-direct whole methylome sequencing data. *BMC Genomics*.
-<https://link.springer.com/article/10.1186/s12864-026-12655-5>
+Zimmerman, H.E., Moore, J.L., Miller, R.H. et al. ModSeqR: an R package
+for efficient analysis of modified nucleotide data. *BMC Genomics* 27,
+318 (2026). <https://doi.org/10.1186/s12864-026-12655-5>
 
 #### Developed by Hailey Zimmerman & Dr. Jonathon Hill at Wasatch Biolabs.
 
