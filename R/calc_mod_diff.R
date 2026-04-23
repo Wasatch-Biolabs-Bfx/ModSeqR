@@ -89,6 +89,12 @@ calc_mod_diff <- function(mod_db,
   available_labels <- sub("_counts$", "", counts_cols)
   
   mod_type <- mod_type[1]
+  
+  # Allow bare numeric codes: e.g. 17596 -> "m_17596"
+  if (grepl("^\\d+$", mod_type)) {
+    mod_type <- paste0("m_", mod_type)
+  }
+  
   mod_counts_col <- paste0(mod_type, "_counts")
   if (!mod_counts_col %in% cols) {
     stop("Requested mod_type '", mod_type, "' not found in ", call_type, ". ",
