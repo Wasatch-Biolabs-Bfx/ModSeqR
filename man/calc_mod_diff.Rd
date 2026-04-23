@@ -31,7 +31,9 @@ Default is "positions".}
 \item{controls}{A character vector containing the sample names for the control group.}
 
 \item{mod_type}{A string indicating the type of modification to analyze. 
-Default is "mh" for methylation/hydroxymethylation.}
+Default is "mh" for methylation/hydroxymethylation. Other codes include
+  "a" for 6mA, "17596" for inosine, and "17802" for pseudouridine.
+  Bare numeric codes are automatically prefixed with "m_".}
 
 \item{calc_type}{A string specifying the statistical method to use for calculating p-values. 
 Options include "wilcox", "fast_fisher", "r_fisher", and "log_reg". 
