@@ -303,8 +303,8 @@ make_mod_db <- function(ch3_files,
     c(
       "read_id",
       "chrom",
-      "start",
-      "\"end\"",
+      "CAST(start AS INTEGER) AS start",
+      "CAST(\"end\" AS INTEGER) AS \"end\"",
       if (has_read_position) "read_position" else NULL,
       "query_kmer", #added
       "call_code",

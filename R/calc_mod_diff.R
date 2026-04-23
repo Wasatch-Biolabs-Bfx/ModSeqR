@@ -186,12 +186,17 @@ calc_mod_diff <- function(mod_db,
     # rename mod_* columns to e.g. a_* or mh_* to reflect the chosen mod_type
     dplyr::rename_with(~ gsub("^mod", mod_type, .x))
   
-  
+  # Build your final table...
   result |>
     dplyr::collect() |>
-    dplyr::mutate(p_adjust = stats::p.adjust(p_val, method = "BH")) |>
+    dplyr::mutate(
+      p_adjust = stats::p.adjust(p_val, method = "BH"),
+      p_val    = pmax(p_val, .Machine$double.xmin),
+      p_adjust = pmax(p_adjust, .Machine$double.xmin)) |>
     dplyr::arrange(p_adjust) |>
-    DBI::dbWriteTable(conn = mod_db$con, name = mod_diff_table, append = TRUE)
+    DBI::dbWriteTable(conn = mod_db$con, 
+                      name = mod_diff_table, 
+                      append = TRUE)
 
   end_time <- Sys.time()
   total_time_difftime <- end_time - start_time
