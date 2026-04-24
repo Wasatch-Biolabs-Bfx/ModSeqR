@@ -2,7 +2,7 @@
 
 ![](reference/figures/WBL_MODSEQR.png)
 
-## Version 1.1.1
+## Version 1.1.2
 
 **(Updated April 24th 2026)**
 
@@ -204,10 +204,6 @@ regions <- get_mod_table(mod_db, "regions")
 
 #DONE! Data has been analyzed and exported!
 ```
-
-***Warning*** *- If using samples other than human or with unique
-chromosome names, remember to adjust the chrs argument in each
-function!*
 
 ### Convenience Functions
 
