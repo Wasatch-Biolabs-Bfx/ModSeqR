@@ -16,8 +16,7 @@ summarize_mod_regions(
   output_table = "regions",
   region_file,
   join = c("inner", "left", "right"),
-  chrs = c(as.character(1:22), paste0("chr", 1:22), "chrX", "chrY", "chrM", paste0("Chr",
-    1:22), "ChrX", "ChrY", "ChrM"),
+  chrs = NULL,
   samples = NULL,
   mod_code = c("m", "h", "m + h"),
   unmod_code = "-",
@@ -60,9 +59,8 @@ summarize_mod_regions(
 
 - chrs:
 
-  Character vector of chromosome filters; rows whose `chrom` match any
-  value are retained. Defaults to common human aliases (1–22, `chrX`,
-  `chrY`, `chrM`, …).
+  Optional character vector of chromosome filters. If `NULL` (default),
+  all chromosomes present in the data are used.
 
 - samples:
 

@@ -13,8 +13,7 @@ summarize_mod_positions(
   mod_db,
   input_table = "calls",
   output_table = "positions",
-  chrs = c(as.character(1:22), paste0("chr", 1:22), "chrX", "chrY", "chrM", paste0("Chr",
-    1:22), "ChrX", "ChrY", "ChrM"),
+  chrs = NULL,
   samples = NULL,
   mod_code = c("m", "h", "m + h"),
   unmod_code = "-",
@@ -48,9 +47,8 @@ summarize_mod_positions(
 
 - chrs:
 
-  Character vector of chromosome/name filters. Rows whose `chrom` match
-  any value are retained. Defaults to common human aliases (1–22,
-  `chrX`, `chrY`, `chrM`, etc.).
+  Optional character vector of chromosome filters. If `NULL` (default),
+  all chromosomes present in the data are used.
 
 - samples:
 

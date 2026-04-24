@@ -55,8 +55,7 @@ user-defined modification codes and/or combinations (e.g., <code>"m"</code>, <co
 <span>  <span class="va">mod_db</span>,</span>
 <span>  input_table <span class="op">=</span> <span class="st">"calls"</span>,</span>
 <span>  output_table <span class="op">=</span> <span class="st">"positions"</span>,</span>
-<span>  chrs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">22</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"chr"</span>, <span class="fl">1</span><span class="op">:</span><span class="fl">22</span><span class="op">)</span>, <span class="st">"chrX"</span>, <span class="st">"chrY"</span>, <span class="st">"chrM"</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"Chr"</span>,</span>
-<span>    <span class="fl">1</span><span class="op">:</span><span class="fl">22</span><span class="op">)</span>, <span class="st">"ChrX"</span>, <span class="st">"ChrY"</span>, <span class="st">"ChrM"</span><span class="op">)</span>,</span>
+<span>  chrs <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  samples <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  mod_code <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"m"</span>, <span class="st">"h"</span>, <span class="st">"m + h"</span><span class="op">)</span>,</span>
 <span>  unmod_code <span class="op">=</span> <span class="st">"-"</span>,</span>
@@ -89,8 +88,8 @@ Must include at least: <code>sample_name</code>, <code>chrom</code>, <code>start
 
 
 <dt id="arg-chrs">chrs<a class="anchor" aria-label="anchor" href="#arg-chrs"></a></dt>
-<dd><p>Character vector of chromosome/name filters. Rows whose <code>chrom</code> match any value
-are retained. Defaults to common human aliases (1–22, <code>chrX</code>, <code>chrY</code>, <code>chrM</code>, etc.).</p></dd>
+<dd><p>Optional character vector of chromosome filters. If <code>NULL</code> (default),
+all chromosomes present in the data are used.</p></dd>
 
 
 <dt id="arg-samples">samples<a class="anchor" aria-label="anchor" href="#arg-samples"></a></dt>
