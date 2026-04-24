@@ -2,7 +2,7 @@
 
 ![](reference/figures/WBL_MODSEQR.png)
 
-## Version 1.1.2
+## Version 1.1.1
 
 **(Updated April 24th 2026)**
 
