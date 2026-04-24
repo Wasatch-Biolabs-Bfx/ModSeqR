@@ -152,10 +152,6 @@ regions <- get_mod_table(mod_db, "regions")
 
 ```
 
-***Warning*** *- If using samples other than human or with unique chromosome names, remember to adjust the chrs argument in each function!*
-
-
-
 
 ### Convenience Functions
 
