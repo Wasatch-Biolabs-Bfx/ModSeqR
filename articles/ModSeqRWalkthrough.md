@@ -104,7 +104,7 @@ builds the DuckDB database from one or more `.ch3` Parquet files.
 
 It requires two arguments: `ch3_files`, which can be a directory or a
 vector of file paths, and `db_name`, which is the path where the DuckDB
-file will be created (the .ch3.db suffix is added if missing).
+file will be created (the .mod.db suffix is added if missing).
 
 You may optionally pass a named character vector to assign explicit
 `sample_name`s; otherwise, `sample_name` is derived from the file’s
@@ -170,8 +170,9 @@ or a novel “a”).
 Labels are formed by removing spaces/“+” (so `"m + h"` becomes `mh`).
 The unmodified class is defined by `unmod_code` (default `"-"`) and
 named by `unmod_label` (default `"c"`, yielding `c_counts` and
-`c_frac`). Optional `chrs`, `samples`, and `min_num_calls` let you
-filter chromosomes, samples, and minimum coverage per position.
+`c_frac`). Optional `chrs` (defaults to all chromosomes in the data),
+`samples`, and `min_num_calls` let you filter chromosomes, samples, and
+minimum coverage per position.
 
 ``` r
 # Minimal usage: default m/h classes
@@ -203,8 +204,8 @@ region matches.
 As with positions, you specify any set of `mod_code` values (single or
 combined like “m + h”), `unmod_code`, `unmod_label`, and filters
 (`chrs`, `samples`, `min_num_calls`). Output columns include
-`sample_name`, `region_name`, `chrom`, `start`, `end`, `num_CpGs`
-(number of positions aggregated), `num_calls`, and the
+`sample_name`, `region_name`, `chrom`, `start`, `end`, `num_sites`
+(number of unique positions aggregated), `num_calls`, and the
 `<label>_counts/<label>_frac` columns for all requested labels.
 
 ``` r
@@ -230,13 +231,14 @@ windows table.
 
 By default it tiles with 1,000 bp windows and 10 bp offsets so positions
 are assigned to multiple staggered windows. The output contains
-`num_CpGs`, `num_calls`, and `<label>_counts/<label>_frac` for all
+`num_sites`, `num_calls`, and `<label>_counts/<label>_frac` for all
 requested modification labels (as defined by `mod_code`, `unmod_code`,
 and `unmod_label`).
 
 You can adjust `window_size`, `step_size`, `min_num_calls`, limit to
-particular `chrs` or `samples`, and choose to `overwrite` an existing
-table. Default overwrite is TRUE.
+particular `chrs` (defaults to all chromosomes in the data) or
+`samples`, and choose to `overwrite` an existing table. Default
+overwrite is TRUE.
 
 ``` r
 # 100 bp windows, non-overlapping (step_size = window_size)
@@ -260,7 +262,7 @@ reads. A table called “reads” will be built into the database.
 
 ``` r
 # Specify the path to the database
-mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
 # Calculate windows
 summarize_mod_reads(mod_db)
@@ -268,7 +270,7 @@ summarize_mod_reads(mod_db)
 
 There is only 1 required arguments. `mod_db` is a list containing the
 database file path. This should be a string representing a path to the
-database, or a valid “ch3_db” class object. Optionally, `key_table` is a
+database, or a valid “mod_db” class object. Optionally, `key_table` is a
 path to an external table which can be used to filter for unique windows
 of interest. It should have a “chrom”, “start”, and “end” column to
 specify which windows are of interest. The reads table will be filtered
@@ -286,11 +288,11 @@ lightweight wrappers around DuckDB/DBI that do exactly that.
 
 Prints a quick summary of the database: on-disk size, a list of tables,
 and the distinct sample_names (if a calls table exists). Invisibly
-returns the closed ch3_db object.
+returns the closed mod_db object.
 
 ``` r
-# Path or ch3_db object both work
-get_mod_dbinfo("my_data.ch3.db")
+# Path or mod_db object both work
+get_mod_dbinfo("my_data.mod.db")
 ```
 
 ### get_mod_tableinfo()
@@ -300,7 +302,7 @@ table has a sample_name column), and a list of columns. Good first check
 after creating a table.
 
 ``` r
-get_mod_tableinfo("my_data.ch3.db", table_name = "positions")
+get_mod_tableinfo("my_data.mod.db", table_name = "positions")
 ```
 
 ### get_mod_cols()
@@ -309,7 +311,7 @@ Returns (and prints) the column names for a given table. Handy when
 you’re about to write a query and can’t remember exact column names.
 
 ``` r
-get_mod_cols("my_data.ch3.db", "windows")
+get_mod_cols("my_data.mod.db", "windows")
 ```
 
 ### get_mod_cpg_count()
@@ -319,7 +321,7 @@ distinct (start, end) pairs. Prints a small summary and invisibly
 returns the count.
 
 ``` r
-n_cpg <- get_mod_cpg_count("my_data.ch3.db", table_name = "calls")
+n_cpg <- get_mod_cpg_count("my_data.mod.db", table_name = "calls")
 ```
 
 ### rename_mod_samples()
@@ -333,7 +335,7 @@ with old and new. The function validates inputs, updates in place, and
 ``` r
 # Rename in the 'positions' table
 rename_mod_samples(
-  "my_data.ch3.db",
+  "my_data.mod.db",
   table       = "positions",
   samples_map = c("Cortical_Neurons" = "Cortex", "Blood" = "PBMC"),
   preview     = TRUE
@@ -346,11 +348,11 @@ Deletes a table by name if it exists, with a clear message either way
 (no error if the table is missing). Useful to clean up experiments.
 
 ``` r
-remove_mod_table("my_data.ch3.db", "tmp_debug_table")
+remove_mod_table("my_data.mod.db", "tmp_debug_table")
 ```
 
-*Tip*: All helpers accept either a path to the *.ch3.db file or an
-existing ch3_db object. They open a connection, do the work, and close
+*Tip*: All helpers accept either a path to the *.mod.db file or an
+existing mod_db object. They open a connection, do the work, and close
 it for you.*
 
 ## Differential Methylation
@@ -379,6 +381,14 @@ Calling
 again on the same type of data will overwrite the existing
 `mod_diff_{type}` table (e.g. `mod_diff_windows` will be rewritten if
 you run it again on window data).
+
+#### Modification type (mod_type)
+
+The `mod_type` argument specifies which modification to test. The
+default is `"mh"` (methylation/hydroxymethylation). Other codes include
+`"a"` for 6mA, `"17596"` for inosine, and `"17802"` for pseudouridine.
+Bare numeric codes are automatically prefixed with `"m_"`, so
+`mod_type = "17596"` and `mod_type = "m_17596"` are equivalent.
 
 #### Automatic choice of statistical test (calc_type)
 
@@ -426,7 +436,7 @@ yourself.
 
 ``` r
 # Specify the path to the database
-mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
   
 # Get methylation statistics for the 'positions' call type without plotting
 calc_mod_diff(mod_db = mod_db,
@@ -452,10 +462,10 @@ absolute methylation difference required for inclusion in the analysis
 
 ``` r
 # Specify the path to the database
-mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
   
 # Collapse significant windows
-collapse_mod_windows("my_data.ch3.db")
+collapse_mod_windows("my_data.mod.db")
 ```
 
 ### run_mod_analysis
@@ -486,7 +496,7 @@ methylated, based on the p_val_max threshold.
 
 ``` r
 # Specify the path to the database
-mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
   
 # Collapse significant windows
 run_mod_analysis(mod_db, 
@@ -509,7 +519,7 @@ positional and regional methylation data.
 
 ``` r
 # Specify the path to the database
-mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
 # Get coverage statistics for the 'positions' call type
 plot_mod_cov(mod_db = mod_db, call_type = "positions")
@@ -524,7 +534,7 @@ methylation values, depending on the user’s preference.
 
 ``` r
 # Specify the path to the database
-mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
 # Get methylation statistics for the 'positions' call type without plotting
 plot_mod_modfrac(mod_db = mod_db, call_type = "positions")
@@ -539,7 +549,7 @@ visualization using ggplot2.
 
 ``` r
 # Specify the path to the database
-mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
 # Run the correlation matrix function using the 'positions' call type and plot the results
 calc_mod_samplecor(mod_db = mod_db, call_type = "positions", plot = TRUE)
@@ -553,7 +563,7 @@ data based on the specified call type and prepares it for PCA analysis.
 
 ``` r
 # Specify the path to the database
-mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
 # Calculate PCA
 plot_mod_pca(mod_db)
@@ -566,7 +576,7 @@ all QC checks on methylation data at the same time.
 
 ``` r
 # Specify the path to the database
-mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
 # Calculate windows
 run_mod_qc(mod_db)
@@ -585,14 +595,14 @@ and name of the table to be retrieved.
 
 ``` r
 # Specify the path to the database
-mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
 # Get any table in your database and create a variable in R to work with
-positions = get_mod_table("my_data.ch3.db", "positions")
-regions = get_mod_table("my_data.ch3.db", "regions")
+positions = get_mod_table("my_data.mod.db", "positions")
+regions = get_mod_table("my_data.mod.db", "regions")
 
-mod_diff_regions = get_mod_table("my_data.ch3.db", "mod_diff_regions")
-collapsed_windows = get_mod_table("my_data.ch3.db", "collapsed_windows")
+mod_diff_regions = get_mod_table("my_data.mod.db", "mod_diff_regions")
+collapsed_windows = get_mod_table("my_data.mod.db", "collapsed_windows")
 ```
 
 ### export_mod_table
@@ -603,14 +613,14 @@ export, and the path where the CSV files will be saved.
 
 ``` r
 # Specify the path to the database
-mod_db <- system.file("my_data.ch3.db", package = "ModSeqR")
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
 # Export the table to your computer
-export_mod_table("my_data.ch3.db", 
+export_mod_table("my_data.mod.db", 
              table = "windows", 
              out_path = "/Desktop/My_Folder/windows.csv")
 
-export_mod_table("my_data.ch3.db", 
+export_mod_table("my_data.mod.db", 
              table = "mod_diff_windows", 
              out_path = "/Desktop/My_Folder/mod_diff_windows.csv")
 ```

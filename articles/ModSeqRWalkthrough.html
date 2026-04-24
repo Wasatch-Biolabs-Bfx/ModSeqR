@@ -168,7 +168,7 @@ file.</p>
 more <code>.ch3</code> Parquet files.</p>
 <p>It requires two arguments: <code>ch3_files</code>, which can be a
 directory or a vector of file paths, and <code>db_name</code>, which is
-the path where the DuckDB file will be created (the .ch3.db suffix is
+the path where the DuckDB file will be created (the .mod.db suffix is
 added if missing).</p>
 <p>You may optionally pass a named character vector to assign explicit
 <code>sample_name</code>s; otherwise, <code>sample_name</code> is
@@ -230,9 +230,9 @@ becomes <code>mh</code>). The unmodified class is defined by
 <code>unmod_code</code> (default <code>"-"</code>) and named by
 <code>unmod_label</code> (default <code>"c"</code>, yielding
 <code>c_counts</code> and <code>c_frac</code>). Optional
-<code>chrs</code>, <code>samples</code>, and <code>min_num_calls</code>
-let you filter chromosomes, samples, and minimum coverage per
-position.</p>
+<code>chrs</code> (defaults to all chromosomes in the data),
+<code>samples</code>, and <code>min_num_calls</code> let you filter
+chromosomes, samples, and minimum coverage per position.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Minimal usage: default m/h classes</span></span>
 <span><span class="fu"><a href="../reference/summarize_mod_positions.html">summarize_mod_positions</a></span><span class="op">(</span><span class="va">mod_db</span><span class="op">)</span></span>
@@ -266,7 +266,7 @@ values (single or combined like “m + h”), <code>unmod_code</code>,
 <code>samples</code>, <code>min_num_calls</code>). Output columns
 include <code>sample_name</code>, <code>region_name</code>,
 <code>chrom</code>, <code>start</code>, <code>end</code>,
-<code>num_CpGs</code> (number of positions aggregated),
+<code>num_sites</code> (number of unique positions aggregated),
 <code>num_calls</code>, and the
 <code>&lt;label&gt;_counts/&lt;label&gt;_frac</code> columns for all
 requested labels.</p>
@@ -291,14 +291,15 @@ requested labels.</p>
 from per-position counts and writes a windows table.</p>
 <p>By default it tiles with 1,000 bp windows and 10 bp offsets so
 positions are assigned to multiple staggered windows. The output
-contains <code>num_CpGs</code>, <code>num_calls</code>, and
+contains <code>num_sites</code>, <code>num_calls</code>, and
 <code>&lt;label&gt;_counts/&lt;label&gt;_frac</code> for all requested
 modification labels (as defined by <code>mod_code</code>,
 <code>unmod_code</code>, and <code>unmod_label</code>).</p>
 <p>You can adjust <code>window_size</code>, <code>step_size</code>,
-<code>min_num_calls</code>, limit to particular <code>chrs</code> or
-<code>samples</code>, and choose to <code>overwrite</code> an existing
-table. Default overwrite is TRUE.</p>
+<code>min_num_calls</code>, limit to particular <code>chrs</code>
+(defaults to all chromosomes in the data) or <code>samples</code>, and
+choose to <code>overwrite</code> an existing table. Default overwrite is
+TRUE.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># 100 bp windows, non-overlapping (step_size = window_size)</span></span>
 <span><span class="fu"><a href="../reference/summarize_mod_windows.html">summarize_mod_windows</a></span><span class="op">(</span><span class="va">mod_db</span>, window_size <span class="op">=</span> <span class="fl">100</span>, step_size <span class="op">=</span> <span class="fl">100</span><span class="op">)</span></span>
@@ -320,13 +321,13 @@ table. Default overwrite is TRUE.</p>
 the reads. A table called “reads” will be built into the database.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Specify the path to the database</span></span>
-<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
+<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
 <span> </span>
 <span><span class="co"># Calculate windows</span></span>
 <span><span class="fu"><a href="../reference/summarize_mod_reads.html">summarize_mod_reads</a></span><span class="op">(</span><span class="va">mod_db</span><span class="op">)</span></span></code></pre></div>
 <p>There is only 1 required arguments. <code>mod_db</code> is a list
 containing the database file path. This should be a string representing
-a path to the database, or a valid “ch3_db” class object. Optionally,
+a path to the database, or a valid “mod_db” class object. Optionally,
 <code>key_table</code> is a path to an external table which can be used
 to filter for unique windows of interest. It should have a “chrom”,
 “start”, and “end” column to specify which windows are of interest. The
@@ -347,10 +348,10 @@ lightweight wrappers around DuckDB/DBI that do exactly that.</p>
 </h3>
 <p>Prints a quick summary of the database: on-disk size, a list of
 tables, and the distinct sample_names (if a calls table exists).
-Invisibly returns the closed ch3_db object.</p>
+Invisibly returns the closed mod_db object.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Path or ch3_db object both work</span></span>
-<span><span class="fu"><a href="../reference/get_mod_dbinfo.html">get_mod_dbinfo</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="co"># Path or mod_db object both work</span></span>
+<span><span class="fu"><a href="../reference/get_mod_dbinfo.html">get_mod_dbinfo</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="get_mod_tableinfo">get_mod_tableinfo()<a class="anchor" aria-label="anchor" href="#get_mod_tableinfo"></a>
@@ -359,7 +360,7 @@ Invisibly returns the closed ch3_db object.</p>
 table has a sample_name column), and a list of columns. Good first check
 after creating a table.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/get_mod_tableinfo.html">get_mod_tableinfo</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, table_name <span class="op">=</span> <span class="st">"positions"</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/get_mod_tableinfo.html">get_mod_tableinfo</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, table_name <span class="op">=</span> <span class="st">"positions"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="get_mod_cols">get_mod_cols()<a class="anchor" aria-label="anchor" href="#get_mod_cols"></a>
@@ -367,7 +368,7 @@ after creating a table.</p>
 <p>Returns (and prints) the column names for a given table. Handy when
 you’re about to write a query and can’t remember exact column names.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/get_mod_cols.html">get_mod_cols</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, <span class="st">"windows"</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/get_mod_cols.html">get_mod_cols</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, <span class="st">"windows"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="get_mod_cpg_count">get_mod_cpg_count()<a class="anchor" aria-label="anchor" href="#get_mod_cpg_count"></a>
@@ -376,7 +377,7 @@ you’re about to write a query and can’t remember exact column names.</p>
 distinct (start, end) pairs. Prints a small summary and invisibly
 returns the count.</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">n_cpg</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_mod_cpg_count.html">get_mod_cpg_count</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, table_name <span class="op">=</span> <span class="st">"calls"</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="va">n_cpg</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/get_mod_cpg_count.html">get_mod_cpg_count</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, table_name <span class="op">=</span> <span class="st">"calls"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="rename_mod_samples">rename_mod_samples()<a class="anchor" aria-label="anchor" href="#rename_mod_samples"></a>
@@ -389,7 +390,7 @@ with old and new. The function validates inputs, updates in place, and
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Rename in the 'positions' table</span></span>
 <span><span class="fu"><a href="../reference/rename_mod_samples.html">rename_mod_samples</a></span><span class="op">(</span></span>
-<span>  <span class="st">"my_data.ch3.db"</span>,</span>
+<span>  <span class="st">"my_data.mod.db"</span>,</span>
 <span>  table       <span class="op">=</span> <span class="st">"positions"</span>,</span>
 <span>  samples_map <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Cortical_Neurons"</span> <span class="op">=</span> <span class="st">"Cortex"</span>, <span class="st">"Blood"</span> <span class="op">=</span> <span class="st">"PBMC"</span><span class="op">)</span>,</span>
 <span>  preview     <span class="op">=</span> <span class="cn">TRUE</span></span>
@@ -401,9 +402,9 @@ with old and new. The function validates inputs, updates in place, and
 <p>Deletes a table by name if it exists, with a clear message either way
 (no error if the table is missing). Useful to clean up experiments.</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/remove_mod_table.html">remove_mod_table</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, <span class="st">"tmp_debug_table"</span><span class="op">)</span></span></code></pre></div>
-<p><em>Tip</em>: All helpers accept either a path to the <em>.ch3.db
-file or an existing ch3_db object. They open a connection, do the work,
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/remove_mod_table.html">remove_mod_table</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, <span class="st">"tmp_debug_table"</span><span class="op">)</span></span></code></pre></div>
+<p><em>Tip</em>: All helpers accept either a path to the <em>.mod.db
+file or an existing mod_db object. They open a connection, do the work,
 and close it for you.</em></p>
 </div>
 </div>
@@ -434,6 +435,17 @@ stored.</p>
 will overwrite the existing <code>mod_diff_{type}</code> table
 (e.g. <code>mod_diff_windows</code> will be rewritten if you run it
 again on window data).</p>
+<div class="section level4">
+<h4 id="modification-type-mod_type">Modification type (mod_type)<a class="anchor" aria-label="anchor" href="#modification-type-mod_type"></a>
+</h4>
+<p>The <code>mod_type</code> argument specifies which modification to
+test. The default is <code>"mh"</code> (methylation/hydroxymethylation).
+Other codes include <code>"a"</code> for 6mA, <code>"17596"</code> for
+inosine, and <code>"17802"</code> for pseudouridine. Bare numeric codes
+are automatically prefixed with <code>"m_"</code>, so
+<code>mod_type = "17596"</code> and <code>mod_type = "m_17596"</code>
+are equivalent.</p>
+</div>
 <div class="section level4">
 <h4 id="automatic-choice-of-statistical-test-calc_type">Automatic choice of statistical test (calc_type)<a class="anchor" aria-label="anchor" href="#automatic-choice-of-statistical-test-calc_type"></a>
 </h4>
@@ -493,7 +505,7 @@ test is more appropriate and statistically well-defined.</li>
 <code>calc_type</code> yourself.</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Specify the path to the database</span></span>
-<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
+<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
 <span>  </span>
 <span><span class="co"># Get methylation statistics for the 'positions' call type without plotting</span></span>
 <span><span class="fu"><a href="../reference/calc_mod_diff.html">calc_mod_diff</a></span><span class="op">(</span>mod_db <span class="op">=</span> <span class="va">mod_db</span>,</span>
@@ -518,10 +530,10 @@ threshold for adjusted p-values (default: 0.05). Lastly,
 difference required for inclusion in the analysis (default: 0.5).</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Specify the path to the database</span></span>
-<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
+<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
 <span>  </span>
 <span><span class="co"># Collapse significant windows</span></span>
-<span><span class="fu"><a href="../reference/collapse_mod_windows.html">collapse_mod_windows</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/collapse_mod_windows.html">collapse_mod_windows</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="run_mod_analysis">run_mod_analysis<a class="anchor" aria-label="anchor" href="#run_mod_analysis"></a>
@@ -550,7 +562,7 @@ for only those positions/regions/windows that are deemed significantly
 differentially methylated, based on the p_val_max threshold.</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Specify the path to the database</span></span>
-<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
+<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
 <span>  </span>
 <span><span class="co"># Collapse significant windows</span></span>
 <span><span class="fu"><a href="../reference/run_mod_analysis.html">run_mod_analysis</a></span><span class="op">(</span><span class="va">mod_db</span>, </span>
@@ -573,7 +585,7 @@ data from methylation sequencing experiments. It can handle both
 positional and regional methylation data.</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Specify the path to the database</span></span>
-<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
+<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
 <span> </span>
 <span><span class="co"># Get coverage statistics for the 'positions' call type</span></span>
 <span><span class="fu"><a href="../reference/plot_mod_cov.html">plot_mod_cov</a></span><span class="op">(</span>mod_db <span class="op">=</span> <span class="va">mod_db</span>, call_type <span class="op">=</span> <span class="st">"positions"</span><span class="op">)</span></span></code></pre></div>
@@ -587,7 +599,7 @@ can either return summary statistics or plot a histogram of the
 methylation values, depending on the user’s preference.</p>
 <div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Specify the path to the database</span></span>
-<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
+<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
 <span> </span>
 <span><span class="co"># Get methylation statistics for the 'positions' call type without plotting</span></span>
 <span><span class="fu"><a href="../reference/plot_mod_modfrac.html">plot_mod_modfrac</a></span><span class="op">(</span>mod_db <span class="op">=</span> <span class="va">mod_db</span>, call_type <span class="op">=</span> <span class="st">"positions"</span><span class="op">)</span></span></code></pre></div>
@@ -601,7 +613,7 @@ positions. It can handle both position-based and region-based calls and
 supports visualization using ggplot2.</p>
 <div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Specify the path to the database</span></span>
-<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
+<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
 <span> </span>
 <span><span class="co"># Run the correlation matrix function using the 'positions' call type and plot the results</span></span>
 <span><span class="fu"><a href="../reference/calc_mod_samplecor.html">calc_mod_samplecor</a></span><span class="op">(</span>mod_db <span class="op">=</span> <span class="va">mod_db</span>, call_type <span class="op">=</span> <span class="st">"positions"</span>, plot <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
@@ -615,7 +627,7 @@ methylation fraction data based on the specified call type and prepares
 it for PCA analysis.</p>
 <div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Specify the path to the database</span></span>
-<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
+<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
 <span> </span>
 <span><span class="co"># Calculate PCA</span></span>
 <span><span class="fu"><a href="../reference/plot_mod_pca.html">plot_mod_pca</a></span><span class="op">(</span><span class="va">mod_db</span><span class="op">)</span></span></code></pre></div>
@@ -627,7 +639,7 @@ it for PCA analysis.</p>
 all QC checks on methylation data at the same time.</p>
 <div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Specify the path to the database</span></span>
-<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
+<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
 <span> </span>
 <span><span class="co"># Calculate windows</span></span>
 <span><span class="fu"><a href="../reference/run_mod_qc.html">run_mod_qc</a></span><span class="op">(</span><span class="va">mod_db</span><span class="op">)</span></span></code></pre></div>
@@ -647,14 +659,14 @@ into a tibble and store it into a variable. Arguments required includes
 the database, and name of the table to be retrieved.</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Specify the path to the database</span></span>
-<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
+<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
 <span> </span>
 <span><span class="co"># Get any table in your database and create a variable in R to work with</span></span>
-<span><span class="va">positions</span> <span class="op">=</span> <span class="fu"><a href="../reference/get_mod_table.html">get_mod_table</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, <span class="st">"positions"</span><span class="op">)</span></span>
-<span><span class="va">regions</span> <span class="op">=</span> <span class="fu"><a href="../reference/get_mod_table.html">get_mod_table</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, <span class="st">"regions"</span><span class="op">)</span></span>
+<span><span class="va">positions</span> <span class="op">=</span> <span class="fu"><a href="../reference/get_mod_table.html">get_mod_table</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, <span class="st">"positions"</span><span class="op">)</span></span>
+<span><span class="va">regions</span> <span class="op">=</span> <span class="fu"><a href="../reference/get_mod_table.html">get_mod_table</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, <span class="st">"regions"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">mod_diff_regions</span> <span class="op">=</span> <span class="fu"><a href="../reference/get_mod_table.html">get_mod_table</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, <span class="st">"mod_diff_regions"</span><span class="op">)</span></span>
-<span><span class="va">collapsed_windows</span> <span class="op">=</span> <span class="fu"><a href="../reference/get_mod_table.html">get_mod_table</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, <span class="st">"collapsed_windows"</span><span class="op">)</span></span></code></pre></div>
+<span><span class="va">mod_diff_regions</span> <span class="op">=</span> <span class="fu"><a href="../reference/get_mod_table.html">get_mod_table</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, <span class="st">"mod_diff_regions"</span><span class="op">)</span></span>
+<span><span class="va">collapsed_windows</span> <span class="op">=</span> <span class="fu"><a href="../reference/get_mod_table.html">get_mod_table</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, <span class="st">"collapsed_windows"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="export_mod_table">export_mod_table<a class="anchor" aria-label="anchor" href="#export_mod_table"></a>
@@ -665,14 +677,14 @@ database, which tables to export, and the path where the CSV files will
 be saved.</p>
 <div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Specify the path to the database</span></span>
-<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
+<span><span class="va">mod_db</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, package <span class="op">=</span> <span class="st">"ModSeqR"</span><span class="op">)</span></span>
 <span> </span>
 <span><span class="co"># Export the table to your computer</span></span>
-<span><span class="fu"><a href="../reference/export_mod_table.html">export_mod_table</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, </span>
+<span><span class="fu"><a href="../reference/export_mod_table.html">export_mod_table</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, </span>
 <span>             table <span class="op">=</span> <span class="st">"windows"</span>, </span>
 <span>             out_path <span class="op">=</span> <span class="st">"/Desktop/My_Folder/windows.csv"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="../reference/export_mod_table.html">export_mod_table</a></span><span class="op">(</span><span class="st">"my_data.ch3.db"</span>, </span>
+<span><span class="fu"><a href="../reference/export_mod_table.html">export_mod_table</a></span><span class="op">(</span><span class="st">"my_data.mod.db"</span>, </span>
 <span>             table <span class="op">=</span> <span class="st">"mod_diff_windows"</span>, </span>
 <span>             out_path <span class="op">=</span> <span class="st">"/Desktop/My_Folder/mod_diff_windows.csv"</span><span class="op">)</span></span></code></pre></div>
 </div>
