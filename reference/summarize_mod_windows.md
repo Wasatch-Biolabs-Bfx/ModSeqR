@@ -5,7 +5,8 @@ per-sample window summaries written to `output_table` (default
 `"windows"`). Windows are created using a **tiling + offsets** strategy
 so that every `start` position is assigned to one or more windows
 depending on the `step_size`. For each window the function computes:
-total CpG sites, total calls, per-class counts, and per-class fractions.
+total modification sites, total calls, per-class counts, and per-class
+fractions.
 
 ## Usage
 
@@ -113,7 +114,7 @@ summarize_mod_windows(
 (Invisibly) a `"mod_db"` object pointing to the same DB file with
 `current_table` set to `output_table`. The created table has columns:
 
-- `sample_name`, `chrom`, `start`, `end`, `num_CpGs`, `num_calls`,
+- `sample_name`, `chrom`, `start`, `end`, `num_sites`, `num_calls`,
 
 - for each label in `c(unmod_label, parsed(mod_code))`:
   `<label>_counts`, `<label>_frac`.
@@ -130,7 +131,7 @@ window start computed as: \$\$temp\\start = start - ((start - offset)
 `seq(1, window_size - 1, by = step_size)`, it sums counts over
 `[temp_start, temp_start + window_size - 1]` and writes:
 
-- `num_CpGs`: number of positions aggregated in the window
+- `num_sites`: number of positions aggregated in the window
 
 - `num_calls`: sum of `num_calls`
 

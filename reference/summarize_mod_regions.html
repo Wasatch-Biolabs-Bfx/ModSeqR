@@ -4,13 +4,13 @@ into per-sample region summaries written to output_table (default
 "regions"). Regions are provided via a BED/TSV/CSV file with columns
 chrom, start, end, and optional region_name.
 For each region the function computes:
-number of CpG positions (rows), total calls, per-class counts, and per-class
+number of unique positions where modification could occur (rows), total calls, per-class counts, and per-class
 fractions.'><meta property="og:description" content='Aggregates call-level rows from input_table (typically "calls")
 into per-sample region summaries written to output_table (default
 "regions"). Regions are provided via a BED/TSV/CSV file with columns
 chrom, start, end, and optional region_name.
 For each region the function computes:
-number of CpG positions (rows), total calls, per-class counts, and per-class
+number of unique positions where modification could occur (rows), total calls, per-class counts, and per-class
 fractions.'></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
@@ -51,7 +51,7 @@ into per-sample region summaries written to <code>output_table</code> (default
 <code>"regions"</code>). Regions are provided via a BED/TSV/CSV file with columns
 <code>chrom</code>, <code>start</code>, <code>end</code>, and optional <code>region_name</code>.
 For each region the function computes:
-number of CpG positions (rows), total calls, per-class counts, and per-class
+number of unique positions where modification could occur (rows), total calls, per-class counts, and per-class
 fractions.</p>
     </div>
 
@@ -161,7 +161,7 @@ If <code>NULL</code>, an internal heuristic (~80% of RAM) is used.</p></dd>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>(Invisibly) a <code>"mod_db"</code> object pointing to the same DB file with
   <code>current_table</code> set to <code>output_table</code>. The created table has columns:</p><ul><li><p><code>sample_name</code>, <code>region_name</code>, <code>chrom</code>, <code>start</code>, <code>end</code>,
-          <code>num_CpGs</code>, <code>num_calls</code>,</p></li>
+          <code>num_sites</code>, <code>num_calls</code>,</p></li>
 <li><p>for each label in <code>c(unmod_label, parsed(mod_code))</code>:
           <code>&lt;label&gt;_counts</code>, <code>&lt;label&gt;_frac</code>.</p></li>
 </ul></div>
@@ -176,7 +176,7 @@ If <code>NULL</code>, an internal heuristic (~80% of RAM) is used.</p></dd>
         aggregation is computed chromosome-by-chromosome per sample to reduce peak
         <code>GROUP BY</code> resource usage.</p></li>
 <li><p>Joins positions to regions using the chosen <code>join</code> type and aggregates per region:
-        <code>num_CpGs</code>, <code>num_calls</code>, <code>&lt;label&gt;_counts</code>, and
+        <code>num_sites</code>, <code>num_calls</code>, <code>&lt;label&gt;_counts</code>, and
         <code>&lt;label&gt;_frac</code> = <code>&lt;label&gt;_counts / num_calls</code>.
         Region processing can be split into annotation-sized batches via <code>batch_size</code>.</p></li>
 </ol></div>

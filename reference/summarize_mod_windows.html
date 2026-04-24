@@ -4,12 +4,12 @@ into per-sample window summaries written to output_table (default "windows").
 Windows are created using a tiling + offsets strategy so that every
 start position is assigned to one or more windows depending on the
 step_size. For each window the function computes:
-total CpG sites, total calls, per-class counts, and per-class fractions.'><meta property="og:description" content='Aggregates call-level rows from input_table (typically "calls")
+total modification sites, total calls, per-class counts, and per-class fractions.'><meta property="og:description" content='Aggregates call-level rows from input_table (typically "calls")
 into per-sample window summaries written to output_table (default "windows").
 Windows are created using a tiling + offsets strategy so that every
 start position is assigned to one or more windows depending on the
 step_size. For each window the function computes:
-total CpG sites, total calls, per-class counts, and per-class fractions.'></head><body>
+total modification sites, total calls, per-class counts, and per-class fractions.'></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -49,7 +49,7 @@ into per-sample window summaries written to <code>output_table</code> (default <
 Windows are created using a <strong>tiling + offsets</strong> strategy so that every
 <code>start</code> position is assigned to one or more windows depending on the
 <code>step_size</code>. For each window the function computes:
-total CpG sites, total calls, per-class counts, and per-class fractions.</p>
+total modification sites, total calls, per-class counts, and per-class fractions.</p>
     </div>
 
     <div class="section level2">
@@ -156,7 +156,7 @@ If <code>NULL</code>, an internal heuristic (~80% of RAM) is used.</p></dd>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>(Invisibly) a <code>"mod_db"</code> object pointing to the same DB file with
   <code>current_table</code> set to <code>output_table</code>. The created table has columns:</p><ul><li><p><code>sample_name</code>, <code>chrom</code>, <code>start</code>, <code>end</code>,
-          <code>num_CpGs</code>, <code>num_calls</code>,</p></li>
+          <code>num_sites</code>, <code>num_calls</code>,</p></li>
 <li><p>for each label in <code>c(unmod_label, parsed(mod_code))</code>:
           <code>&lt;label&gt;_counts</code>, <code>&lt;label&gt;_frac</code>.</p></li>
 </ul></div>
@@ -170,7 +170,7 @@ aggregation is computed chromosome-by-chromosome per sample to reduce peak
 sliding windows by assigning each position to a window start computed as:
 $$temp\_start = start - ((start - offset) \bmod window\_size).$$
 For each <code>offset</code> in <code>seq(1, window_size - 1, by = step_size)</code>, it
-sums counts over <code>[temp_start, temp_start + window_size - 1]</code> and writes:</p><ul><li><p><code>num_CpGs</code>: number of positions aggregated in the window</p></li>
+sums counts over <code>[temp_start, temp_start + window_size - 1]</code> and writes:</p><ul><li><p><code>num_sites</code>: number of positions aggregated in the window</p></li>
 <li><p><code>num_calls</code>: sum of <code>num_calls</code></p></li>
 <li><p><code>&lt;label&gt;_counts</code>: summed counts for each label</p></li>
 <li><p><code>&lt;label&gt;_frac</code>: <code>&lt;label&gt;_counts / num_calls</code> (NULL if <code>num_calls == 0</code>)</p></li>

@@ -4,8 +4,8 @@ Aggregates call-level rows from `input_table` (typically `"calls"`) into
 per-sample region summaries written to `output_table` (default
 `"regions"`). Regions are provided via a BED/TSV/CSV file with columns
 `chrom`, `start`, `end`, and optional `region_name`. For each region the
-function computes: number of CpG positions (rows), total calls,
-per-class counts, and per-class fractions.
+function computes: number of unique positions where modification could
+occur (rows), total calls, per-class counts, and per-class fractions.
 
 ## Usage
 
@@ -114,7 +114,7 @@ summarize_mod_regions(
 (Invisibly) a `"mod_db"` object pointing to the same DB file with
 `current_table` set to `output_table`. The created table has columns:
 
-- `sample_name`, `region_name`, `chrom`, `start`, `end`, `num_CpGs`,
+- `sample_name`, `region_name`, `chrom`, `start`, `end`, `num_sites`,
   `num_calls`,
 
 - for each label in `c(unmod_label, parsed(mod_code))`:
@@ -138,7 +138,7 @@ The function:
     per sample to reduce peak `GROUP BY` resource usage.
 
 4.  Joins positions to regions using the chosen `join` type and
-    aggregates per region: `num_CpGs`, `num_calls`, `<label>_counts`,
+    aggregates per region: `num_sites`, `num_calls`, `<label>_counts`,
     and `<label>_frac` = `<label>_counts / num_calls`. Region processing
     can be split into annotation-sized batches via `batch_size`.
 
