@@ -23,8 +23,8 @@
 #' @param window_size Integer window width in bases (default \code{1000}).
 #' @param step_size Step, in bases, used to create staggered window offsets
 #'   (default \code{10}). Offsets are \code{seq(1, window_size - 1, by = step_size)}.
-#' @param chrs Character vector of chromosome filters; rows whose \code{chrom} match any
-#'   value are retained. Defaults to common human aliases (1–22, \code{chrX}, \code{chrY}, \code{chrM}, …).
+#' @param chrs Optional character vector of chromosome filters. If \code{NULL} (default),
+#'   all chromosomes present in the data are used.
 #' @param samples Optional character vector of \code{sample_name}s to include. If \code{NULL},
 #'   all samples present in \code{input_table} are processed.
 #' @param mod_code Character vector of modification specs to count (single codes or
@@ -109,9 +109,7 @@ summarize_mod_windows <- function(mod_db,
                                   output_table = "windows",
                                   window_size = 1000,
                                   step_size = 10,
-                                  chrs = c(as.character(1:22),
-                                           paste0("chr", 1:22), "chrX", "chrY", "chrM",
-                                           paste0("Chr", 1:22), "ChrX", "ChrY", "ChrM"),
+                                  chrs = NULL,
                                   samples = NULL,             # NULL = all samples
                                   mod_code    = c("m", "h", "m + h"),
                                   unmod_code  = "-",
@@ -176,7 +174,17 @@ summarize_mod_windows <- function(mod_db,
   DBI::dbExecute(mod_db$con, schema_sql)
   
   offsets <- seq(1, window_size - 1, by = step_size)
+  
+  # If no chromosomes specified, use all unique chroms in the data
+  if (is.null(chrs)) {
+    chrs <- DBI::dbGetQuery(
+      mod_db$con,
+      sprintf("SELECT DISTINCT chrom FROM %s ORDER BY chrom", in_id)
+    )[, 1]
+  }
+  
   chr_clause <- .chrom_filter_sql(chrs)
+  
   chrom_batch_size <- if (is.null(batch_size)) {
     NA_integer_
   } else {

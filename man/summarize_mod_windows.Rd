@@ -10,8 +10,7 @@ summarize_mod_windows(
   output_table = "windows",
   window_size = 1000,
   step_size = 10,
-  chrs = c(as.character(1:22), paste0("chr", 1:22), "chrX", "chrY", "chrM", paste0("Chr",
-    1:22), "ChrX", "ChrY", "ChrM"),
+  chrs = NULL,
   samples = NULL,
   mod_code = c("m", "h", "m + h"),
   unmod_code = "-",
@@ -38,8 +37,8 @@ Must contain at least: \code{sample_name}, \code{chrom}, \code{start}, \code{cal
 \item{step_size}{Step, in bases, used to create staggered window offsets
 (default \code{10}). Offsets are \code{seq(1, window_size - 1, by = step_size)}.}
 
-\item{chrs}{Character vector of chromosome filters; rows whose \code{chrom} match any
-value are retained. Defaults to common human aliases (1–22, \code{chrX}, \code{chrY}, \code{chrM}, …).}
+\item{chrs}{Optional character vector of chromosome filters. If \code{NULL} (default),
+all chromosomes present in the data are used.}
 
 \item{samples}{Optional character vector of \code{sample_name}s to include. If \code{NULL},
 all samples present in \code{input_table} are processed.}

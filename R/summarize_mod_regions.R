@@ -26,8 +26,8 @@
 #'   \code{"chrom_start_end"}.
 #' @param join Join type between positions and regions: one of \code{"inner"}, \code{"left"},
 #'   or \code{"right"} (default \code{"inner"}).
-#' @param chrs Character vector of chromosome filters; rows whose \code{chrom} match any
-#'   value are retained. Defaults to common human aliases (1–22, \code{chrX}, \code{chrY}, \code{chrM}, …).
+#' @param chrs Optional character vector of chromosome filters. If \code{NULL} (default),
+#'   all chromosomes present in the data are used.
 #' @param samples Optional character vector of \code{sample_name}s to include. If \code{NULL},
 #'   all samples present in \code{input_table} are processed.
 #' @param mod_code Character vector of modification specs to count (single codes or
@@ -106,9 +106,7 @@ summarize_mod_regions <- function(mod_db,
                                   output_table = "regions",
                                   region_file,
                                   join = c("inner","left","right"),
-                                  chrs = c(as.character(1:22),
-                                           paste0("chr", 1:22), "chrX", "chrY", "chrM",
-                                           paste0("Chr", 1:22), "ChrX", "ChrY", "ChrM"),
+                                  chrs = NULL,
                                   samples = NULL,             # NULL = all samples
                                   mod_code    = c("m", "h", "m + h"),
                                   unmod_code  = "-",
@@ -207,6 +205,14 @@ summarize_mod_regions <- function(mod_db,
   # ---- Upload annotation to temp table -----------------------------------------
   DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_annotation;")
   DBI::dbWriteTable(mod_db$con, "temp_annotation", annotation, temporary = TRUE)
+  
+  # If no chromosomes specified, use all unique chroms in the data
+  if (is.null(chrs)) {
+    chrs <- DBI::dbGetQuery(
+      mod_db$con,
+      sprintf("SELECT DISTINCT chrom FROM %s ORDER BY chrom", in_id)
+    )[, 1]
+  }
   
   # ---- Chromosome filter clause ------------------------------------------------
   chr_clause <- .chrom_filter_sql(chrs)

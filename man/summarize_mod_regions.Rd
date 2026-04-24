@@ -10,8 +10,7 @@ summarize_mod_regions(
   output_table = "regions",
   region_file,
   join = c("inner", "left", "right"),
-  chrs = c(as.character(1:22), paste0("chr", 1:22), "chrX", "chrY", "chrM", paste0("Chr",
-    1:22), "ChrX", "ChrY", "ChrM"),
+  chrs = NULL,
   samples = NULL,
   mod_code = c("m", "h", "m + h"),
   unmod_code = "-",
@@ -40,8 +39,8 @@ and optional \code{region_name}. If missing, \code{region_name} is synthesized a
 \item{join}{Join type between positions and regions: one of \code{"inner"}, \code{"left"},
 or \code{"right"} (default \code{"inner"}).}
 
-\item{chrs}{Character vector of chromosome filters; rows whose \code{chrom} match any
-value are retained. Defaults to common human aliases (1–22, \code{chrX}, \code{chrY}, \code{chrM}, …).}
+\item{chrs}{Optional character vector of chromosome filters. If \code{NULL} (default),
+all chromosomes present in the data are used.}
 
 \item{samples}{Optional character vector of \code{sample_name}s to include. If \code{NULL},
 all samples present in \code{input_table} are processed.}

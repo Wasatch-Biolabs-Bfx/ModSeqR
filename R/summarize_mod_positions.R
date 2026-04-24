@@ -21,8 +21,8 @@
 #' @param input_table Name of the source table containing call-level records (default \code{"calls"}).
 #'   Must include at least: \code{sample_name}, \code{chrom}, \code{start}, \code{call_code}.
 #' @param output_table Name of the destination positions table to create/extend (default \code{"positions"}).
-#' @param chrs Character vector of chromosome/name filters. Rows whose \code{chrom} match any value
-#'   are retained. Defaults to common human aliases (1–22, \code{chrX}, \code{chrY}, \code{chrM}, etc.).
+#' @param chrs Optional character vector of chromosome filters. If \code{NULL} (default),
+#'   all chromosomes present in the data are used.
 #' @param samples Optional character vector of \code{sample_name}s to include. If \code{NULL},
 #'   all samples present in \code{input_table} are processed.
 #' @param mod_code Character vector of modification specifications to count. Each entry is either
@@ -110,9 +110,7 @@
 summarize_mod_positions <- function(mod_db,
                                     input_table  = "calls",
                                     output_table = "positions",
-                                    chrs = c(as.character(1:22),
-                                             paste0("chr", 1:22), "chrX", "chrY", "chrM",
-                                             paste0("Chr", 1:22), "ChrX", "ChrY", "ChrM"),
+                                    chrs = NULL,
                                     samples = NULL,             # NULL = all samples
                                     mod_code    = c("m", "h", "m + h"),
                                     unmod_code  = "-",
@@ -172,6 +170,14 @@ summarize_mod_positions <- function(mod_db,
     WHERE 1=0;
   ")
   DBI::dbExecute(mod_db$con, schema_sql)
+  
+  # If no chromosomes specified, use all unique chroms in the data
+  if (is.null(chrs)) {
+    chrs <- DBI::dbGetQuery(
+      mod_db$con,
+      sprintf("SELECT DISTINCT chrom FROM %s ORDER BY chrom", in_id)
+    )[, 1]
+  }
   
   chr_clause <- .chrom_filter_sql(chrs)
   pos_batch_size <- if (is.null(batch_size)) {
