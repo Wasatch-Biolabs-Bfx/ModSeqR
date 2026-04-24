@@ -5,7 +5,7 @@
 #' Windows are created using a \strong{tiling + offsets} strategy so that every
 #' \code{start} position is assigned to one or more windows depending on the
 #' \code{step_size}. For each window the function computes:
-#' total CpG sites, total calls, per-class counts, and per-class fractions.
+#' total modification sites, total calls, per-class counts, and per-class fractions.
 #'
 #' @section How modification codes work:
 #' Pass \code{mod_code} as single codes (e.g. \code{"m"}, \code{"h"}, \code{"a"})
@@ -53,7 +53,7 @@
 #' For each \code{offset} in \code{seq(1, window_size - 1, by = step_size)}, it
 #' sums counts over \code{[temp_start, temp_start + window_size - 1]} and writes:
 #' \itemize{
-#'   \item \code{num_CpGs}: number of positions aggregated in the window
+#'   \item \code{num_sites}: number of positions aggregated in the window
 #'   \item \code{num_calls}: sum of \code{num_calls}
 #'   \item \code{<label>_counts}: summed counts for each label
 #'   \item \code{<label>_frac}: \code{<label>_counts / num_calls} (NULL if \code{num_calls == 0})
@@ -66,7 +66,7 @@
 #'   \code{current_table} set to \code{output_table}. The created table has columns:
 #'   \itemize{
 #'     \item \code{sample_name}, \code{chrom}, \code{start}, \code{end},
-#'           \code{num_CpGs}, \code{num_calls},
+#'           \code{num_sites}, \code{num_calls},
 #'     \item for each label in \code{c(unmod_label, parsed(mod_code))}:
 #'           \code{<label>_counts}, \code{<label>_frac}.
 #'   }
@@ -165,7 +165,7 @@ summarize_mod_windows <- function(mod_db,
       CAST(NULL AS VARCHAR) AS chrom,
       CAST(NULL AS BIGINT)  AS start,
       CAST(NULL AS BIGINT)  AS \"end\",
-      CAST(NULL AS BIGINT)  AS num_CpGs,
+      CAST(NULL AS BIGINT)  AS num_sites,
       CAST(NULL AS BIGINT)  AS num_calls,
       {count_nulls},
       {frac_nulls}
@@ -280,7 +280,7 @@ summarize_mod_windows <- function(mod_db,
             chrom,
             temp_start AS start,
             temp_start + {window_size} - 1 AS \"end\",
-            COUNT(*)              AS num_CpGs,   -- one row per position
+            COUNT(*)              AS num_sites,   -- one row per position
             SUM(num_calls)        AS num_calls,
             {sum_counts},
             {frac_cols}

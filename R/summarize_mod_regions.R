@@ -5,7 +5,7 @@
 #' \code{"regions"}). Regions are provided via a BED/TSV/CSV file with columns
 #' \code{chrom}, \code{start}, \code{end}, and optional \code{region_name}.
 #' For each region the function computes:
-#' number of CpG positions (rows), total calls, per-class counts, and per-class
+#' number of unique positions where modification could occur (rows), total calls, per-class counts, and per-class
 #' fractions.
 #'
 #' @section How modification codes work:
@@ -57,7 +57,7 @@
 #'         aggregation is computed chromosome-by-chromosome per sample to reduce peak
 #'         \code{GROUP BY} resource usage.
 #'   \item Joins positions to regions using the chosen \code{join} type and aggregates per region:
-#'         \code{num_CpGs}, \code{num_calls}, \code{<label>_counts}, and
+#'         \code{num_sites}, \code{num_calls}, \code{<label>_counts}, and
 #'         \code{<label>_frac} = \code{<label>_counts / num_calls}.
 #'         Region processing can be split into annotation-sized batches via \code{batch_size}.
 #' }
@@ -66,7 +66,7 @@
 #'   \code{current_table} set to \code{output_table}. The created table has columns:
 #'   \itemize{
 #'     \item \code{sample_name}, \code{region_name}, \code{chrom}, \code{start}, \code{end},
-#'           \code{num_CpGs}, \code{num_calls},
+#'           \code{num_sites}, \code{num_calls},
 #'     \item for each label in \code{c(unmod_label, parsed(mod_code))}:
 #'           \code{<label>_counts}, \code{<label>_frac}.
 #'   }
@@ -194,7 +194,7 @@ summarize_mod_regions <- function(mod_db,
       CAST(NULL AS VARCHAR) AS chrom,
       CAST(NULL AS BIGINT)  AS start,
       CAST(NULL AS BIGINT)  AS \"end\",
-      CAST(NULL AS BIGINT)  AS num_CpGs,
+      CAST(NULL AS BIGINT)  AS num_sites,
       CAST(NULL AS BIGINT)  AS num_calls,
       {count_nulls},
       {frac_nulls}
@@ -342,7 +342,7 @@ summarize_mod_regions <- function(mod_db,
           a.chrom,
           a.start,
           a.\"end\",
-          COUNT(*)                       AS num_CpGs,
+          COUNT(*)                       AS num_sites,
           COALESCE(SUM(p.num_calls), 0)  AS num_calls,
           {sum_counts},
           {frac_cols}

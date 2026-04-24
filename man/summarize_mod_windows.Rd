@@ -71,7 +71,7 @@ If \code{NULL}, an internal heuristic (~80\% of RAM) is used.}
   \code{current_table} set to \code{output_table}. The created table has columns:
   \itemize{
     \item \code{sample_name}, \code{chrom}, \code{start}, \code{end},
-          \code{num_CpGs}, \code{num_calls},
+          \code{num_sites}, \code{num_calls},
     \item for each label in \code{c(unmod_label, parsed(mod_code))}:
           \code{<label>_counts}, \code{<label>_frac}.
   }
@@ -82,7 +82,7 @@ into per-sample window summaries written to \code{output_table} (default \code{"
 Windows are created using a \strong{tiling + offsets} strategy so that every
 \code{start} position is assigned to one or more windows depending on the
 \code{step_size}. For each window the function computes:
-total CpG sites, total calls, per-class counts, and per-class fractions.
+total modification sites, total calls, per-class counts, and per-class fractions.
 }
 \details{
 For each sample, the function first aggregates per-position counts from
@@ -95,7 +95,7 @@ sliding windows by assigning each position to a window start computed as:
 For each \code{offset} in \code{seq(1, window_size - 1, by = step_size)}, it
 sums counts over \code{[temp_start, temp_start + window_size - 1]} and writes:
 \itemize{
-  \item \code{num_CpGs}: number of positions aggregated in the window
+  \item \code{num_sites}: number of positions aggregated in the window
   \item \code{num_calls}: sum of \code{num_calls}
   \item \code{<label>_counts}: summed counts for each label
   \item \code{<label>_frac}: \code{<label>_counts / num_calls} (NULL if \code{num_calls == 0})

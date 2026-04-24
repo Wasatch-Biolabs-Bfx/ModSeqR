@@ -73,7 +73,7 @@ If \code{NULL}, an internal heuristic (~80\% of RAM) is used.}
   \code{current_table} set to \code{output_table}. The created table has columns:
   \itemize{
     \item \code{sample_name}, \code{region_name}, \code{chrom}, \code{start}, \code{end},
-          \code{num_CpGs}, \code{num_calls},
+          \code{num_sites}, \code{num_calls},
     \item for each label in \code{c(unmod_label, parsed(mod_code))}:
           \code{<label>_counts}, \code{<label>_frac}.
   }
@@ -84,7 +84,7 @@ into per-sample region summaries written to \code{output_table} (default
 \code{"regions"}). Regions are provided via a BED/TSV/CSV file with columns
 \code{chrom}, \code{start}, \code{end}, and optional \code{region_name}.
 For each region the function computes:
-number of CpG positions (rows), total calls, per-class counts, and per-class
+number of unique positions where modification could occur (rows), total calls, per-class counts, and per-class
 fractions.
 }
 \details{
@@ -99,7 +99,7 @@ The function:
         aggregation is computed chromosome-by-chromosome per sample to reduce peak
         \code{GROUP BY} resource usage.
   \item Joins positions to regions using the chosen \code{join} type and aggregates per region:
-        \code{num_CpGs}, \code{num_calls}, \code{<label>_counts}, and
+        \code{num_sites}, \code{num_calls}, \code{<label>_counts}, and
         \code{<label>_frac} = \code{<label>_counts / num_calls}.
         Region processing can be split into annotation-sized batches via \code{batch_size}.
 }
