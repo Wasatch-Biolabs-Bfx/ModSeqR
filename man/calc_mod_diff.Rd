@@ -35,10 +35,14 @@ Default is "mh" for methylation/hydroxymethylation. Other codes include
   "a" for 6mA, "17596" for inosine, and "17802" for pseudouridine.
   Bare numeric codes are automatically prefixed with "m_".}
 
-\item{calc_type}{A string specifying the statistical method to use for calculating p-values. 
-Options include "wilcox", "fast_fisher", "r_fisher", and "log_reg". 
-Default is NULL, in which case "wilcox" is used if there are replicates in either
-group, otherwise "fast_fisher" is used.}
+\item{calc_type}{A string specifying the statistical method to use.
+Options: "wilcox", "beta_bin", "fast_fisher", "r_fisher", "log_reg".
+Default is NULL, in which case:
+\itemize{
+  \item "wilcox" if both groups have >= 5 samples
+  \item "beta_bin" if both groups have >= 2 samples (accounts for overdispersion)
+  \item "fast_fisher" if either group has only 1 sample
+}}
 
 \item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
 

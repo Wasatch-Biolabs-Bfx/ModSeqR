@@ -13,10 +13,14 @@
 #' Default is "mh" for methylation/hydroxymethylation. Other codes include
 #'   "a" for 6mA, "17596" for inosine, and "17802" for pseudouridine.
 #'   Bare numeric codes are automatically prefixed with "m_".
-#' @param calc_type A string specifying the statistical method to use for calculating p-values. 
-#' Options include "wilcox", "fast_fisher", "r_fisher", and "log_reg". 
-#' Default is NULL, in which case "wilcox" is used if there are replicates in either
-#' group, otherwise "fast_fisher" is used.
+#' @param calc_type A string specifying the statistical method to use.
+#'   Options: "wilcox", "beta_bin", "fast_fisher", "r_fisher", "log_reg".
+#'   Default is NULL, in which case:
+#'   \itemize{
+#'     \item "wilcox" if both groups have >= 5 samples
+#'     \item "beta_bin" if both groups have >= 2 samples (accounts for overdispersion)
+#'     \item "fast_fisher" if either group has only 1 sample
+#'   }
 #' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
 #' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic
 #'   (typically all-but-one core) is used.
@@ -48,7 +52,7 @@
 #' @importFrom duckdb duckdb
 #' @importFrom dplyr tbl select any_of mutate case_when filter pull summarize inner_join join_by rename_with collect arrange
 #' @importFrom tidyr pivot_wider
-#' @importFrom stats fisher.test p.adjust dhyper phyper glm.fit pchisq
+#' @importFrom stats fisher.test p.adjust dhyper phyper glm.fit pchisq optim plogis qlogis var
 #'
 #' @export
 
@@ -156,13 +160,10 @@ calc_mod_diff <- function(mod_db,
     n_case    <- length(cases)
     n_control <- length(controls)
     
-    # if (n_case > 1 || n_control > 1) {
-    #   calc_type <- "wilcox"
-    # } else {
-    #   calc_type <- "fast_fisher"
-    # }
     if (min(n_case, n_control) >= 5) {
       calc_type <- "wilcox"
+    # } else if (min(n_case, n_control) >= 2) {
+    #   calc_type <- "beta_bin"
     } else {
       calc_type <- "fast_fisher"
     }
@@ -178,12 +179,13 @@ calc_mod_diff <- function(mod_db,
   # Compute p-values / diffs
   result <- switch(calc_type,
                    wilcox      = .calc_diff_wilcox(in_dat),
+                   beta_bin    = .calc_diff_betabin(in_dat),
                    fast_fisher = .calc_diff_fisher(in_dat, calc_type = "fast_fisher"),
                    r_fisher    = .calc_diff_fisher(in_dat, calc_type = "r_fisher"),
                    log_reg     = .calc_diff_logreg(in_dat),
-                   stop("Unknown calc_type: ", calc_type, ". Use 'fast_fisher', 'r_fisher', or 'log_reg'.")
+                   stop("Unknown calc_type: ", calc_type,
+                        ". Use 'beta_bin', 'fast_fisher', 'r_fisher', 'wilcox', or 'log_reg'.")
   ) |>
-    # rename mod_* columns to e.g. a_* or mh_* to reflect the chosen mod_type
     dplyr::rename_with(~ gsub("^mod", mod_type, .x))
   
   # Build your final table...
