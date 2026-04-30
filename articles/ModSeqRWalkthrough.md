@@ -59,6 +59,7 @@ at the directory containing them (or pass their paths directly), and the
 package will take care of the rest.
 
 ``` r
+
 # Convert a modkit TSV to a compressed .ch3 archive
 make_mod_archive(
   file_name   = "/path/to/modkit_calls.tsv",  # tab-delimited input
@@ -122,6 +123,7 @@ tables, and creates a `calls` table with: `sample_name`, `chrom`,
 Here is an example:
 
 ``` r
+
 # Example: directory of CH3 files; auto-derived sample names
 ch3_files <- system.file("TEST_DATA", package = "ModSeqR")   # adjust as needed
 mod_db    <- tempfile("example_db")
@@ -175,6 +177,7 @@ named by `unmod_label` (default `"c"`, yielding `c_counts` and
 minimum coverage per position.
 
 ``` r
+
 # Minimal usage: default m/h classes
 summarize_mod_positions(mod_db)
 
@@ -209,6 +212,7 @@ combined like “m + h”), `unmod_code`, `unmod_label`, and filters
 `<label>_counts/<label>_frac` columns for all requested labels.
 
 ``` r
+
 region_bed = system.file("Islands_hg38_test.csv", package = "ModSeqR")
 # Minimal call
 summarize_mod_regions(mod_db, region_file = region_bed)
@@ -241,6 +245,7 @@ particular `chrs` (defaults to all chromosomes in the data) or
 overwrite is TRUE.
 
 ``` r
+
 # 100 bp windows, non-overlapping (step_size = window_size)
 summarize_mod_windows(mod_db, window_size = 100, step_size = 100)
 
@@ -261,6 +266,7 @@ This function summarizes methylation data from a mod_db database by the
 reads. A table called “reads” will be built into the database.
 
 ``` r
+
 # Specify the path to the database
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
@@ -291,6 +297,7 @@ and the distinct sample_names (if a calls table exists). Invisibly
 returns the closed mod_db object.
 
 ``` r
+
 # Path or mod_db object both work
 get_mod_dbinfo("my_data.mod.db")
 ```
@@ -302,6 +309,7 @@ table has a sample_name column), and a list of columns. Good first check
 after creating a table.
 
 ``` r
+
 get_mod_tableinfo("my_data.mod.db", table_name = "positions")
 ```
 
@@ -311,6 +319,7 @@ Returns (and prints) the column names for a given table. Handy when
 you’re about to write a query and can’t remember exact column names.
 
 ``` r
+
 get_mod_cols("my_data.mod.db", "windows")
 ```
 
@@ -321,6 +330,7 @@ distinct (start, end) pairs. Prints a small summary and invisibly
 returns the count.
 
 ``` r
+
 n_cpg <- get_mod_cpg_count("my_data.mod.db", table_name = "calls")
 ```
 
@@ -333,6 +343,7 @@ with old and new. The function validates inputs, updates in place, and
 (optionally) prints a before/after list of distinct names.
 
 ``` r
+
 # Rename in the 'positions' table
 rename_mod_samples(
   "my_data.mod.db",
@@ -348,6 +359,7 @@ Deletes a table by name if it exists, with a clear message either way
 (no error if the table is missing). Useful to clean up experiments.
 
 ``` r
+
 remove_mod_table("my_data.mod.db", "tmp_debug_table")
 ```
 
@@ -435,6 +447,7 @@ You can always override this behavior by explicitly setting `calc_type`
 yourself.
 
 ``` r
+
 # Specify the path to the database
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
   
@@ -461,6 +474,7 @@ absolute methylation difference required for inclusion in the analysis
 (default: 0.5).
 
 ``` r
+
 # Specify the path to the database
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
   
@@ -495,6 +509,7 @@ positions/regions/windows that are deemed significantly differentially
 methylated, based on the p_val_max threshold.
 
 ``` r
+
 # Specify the path to the database
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
   
@@ -518,6 +533,7 @@ data from methylation sequencing experiments. It can handle both
 positional and regional methylation data.
 
 ``` r
+
 # Specify the path to the database
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
@@ -533,6 +549,7 @@ can either return summary statistics or plot a histogram of the
 methylation values, depending on the user’s preference.
 
 ``` r
+
 # Specify the path to the database
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
@@ -548,6 +565,7 @@ It can handle both position-based and region-based calls and supports
 visualization using ggplot2.
 
 ``` r
+
 # Specify the path to the database
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
@@ -562,6 +580,7 @@ data retrieved from the database.It aggregates the methylation fraction
 data based on the specified call type and prepares it for PCA analysis.
 
 ``` r
+
 # Specify the path to the database
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
@@ -575,6 +594,7 @@ Combining all functions above, the \`run_mod_qc()\`\` function computes
 all QC checks on methylation data at the same time.
 
 ``` r
+
 # Specify the path to the database
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
@@ -594,6 +614,7 @@ and store it into a variable. Arguments required includes the database,
 and name of the table to be retrieved.
 
 ``` r
+
 # Specify the path to the database
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  
@@ -612,6 +633,7 @@ This function takes three arguments, the database, which tables to
 export, and the path where the CSV files will be saved.
 
 ``` r
+
 # Specify the path to the database
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  

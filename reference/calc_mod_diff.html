@@ -90,10 +90,12 @@ Default is "mh" for methylation/hydroxymethylation. Other codes include
 
 
 <dt id="arg-calc-type">calc_type<a class="anchor" aria-label="anchor" href="#arg-calc-type"></a></dt>
-<dd><p>A string specifying the statistical method to use for calculating p-values.
-Options include "wilcox", "fast_fisher", "r_fisher", and "log_reg".
-Default is NULL, in which case "wilcox" is used if there are replicates in either
-group, otherwise "fast_fisher" is used.</p></dd>
+<dd><p>A string specifying the statistical method to use.
+Options: "wilcox", "beta_bin", "fast_fisher", "r_fisher", "log_reg".
+Default is NULL, in which case:</p><ul><li><p>"wilcox" if both groups have &gt;= 5 samples</p></li>
+<li><p>"beta_bin" if both groups have &gt;= 2 samples (accounts for overdispersion)</p></li>
+<li><p>"fast_fisher" if either group has only 1 sample</p></li>
+</ul></dd>
 
 
 <dt id="arg-temp-dir">temp_dir<a class="anchor" aria-label="anchor" href="#arg-temp-dir"></a></dt>

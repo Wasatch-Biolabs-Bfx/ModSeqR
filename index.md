@@ -29,6 +29,7 @@ and use RStudio. RStudio download instructions can be found
 [here](https://posit.co/download/rstudio-desktop/).
 
 ``` r
+
 # Install ModSeqR from GitHub (pick one, install the package first if needed)
 install.packages("remotes")
 remotes::install_github("Wasatch-Biolabs-Bfx/ModSeqR", build_vignettes = FALSE)
@@ -61,6 +62,7 @@ file of methylation calls (such as the output of modkit extract-calls)
 and compresses it into .ch3 format for downstream use.
 
 ``` r
+
 # Convert a calls.tsv file to compressed .ch3 format
 make_mod_archive(
   file_name   = "calls.tsv",   # input modkit calls file
@@ -93,6 +95,7 @@ These test files can be used to practice building a database and running
 the full analysis workflow.
 
 ``` r
+
 # Example: build a test database using included example files
 example_path <- system.file("extdata/ch3_files", package = "ModSeqR")
 mod_db <- make_mod_db(example_path, db_name = "example_db")
@@ -161,6 +164,7 @@ You can pipe your functions together, or feel free to call each function
 one line at a time. Below are two examples of this.
 
 ``` r
+
 setwd("/home/directory/analysis")
 
 # Build database and run analysis in a pipe
@@ -211,6 +215,7 @@ ModSeqR also provides a few helper utilities to make it easier to
 inspect and manage your database:
 
 ``` r
+
 # View all column names in a given table
 get_mod_cols(mod_db, "calls")
 
@@ -237,6 +242,7 @@ To see detailed documentation on a specific function in R, call
 `?{function}`. Example:
 
 ``` r
+
 ?make_mod_db()
 ```
 
@@ -252,6 +258,7 @@ download and view our vignette in this github repo at
 Or, build and follow along the vignette by calling:
 
 ``` r
+
 browseVignettes("ModSeqR")
 ```
 
@@ -259,6 +266,7 @@ in R and click on HTML in your browser. Or, to browse the vignette in
 your R environment, call
 
 ``` r
+
 vignette("ModSeqRWalkthrough")
 ```
 

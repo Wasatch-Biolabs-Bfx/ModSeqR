@@ -56,10 +56,16 @@ calc_mod_diff(
 
 - calc_type:
 
-  A string specifying the statistical method to use for calculating
-  p-values. Options include "wilcox", "fast_fisher", "r_fisher", and
-  "log_reg". Default is NULL, in which case "wilcox" is used if there
-  are replicates in either group, otherwise "fast_fisher" is used.
+  A string specifying the statistical method to use. Options: "wilcox",
+  "beta_bin", "fast_fisher", "r_fisher", "log_reg". Default is NULL, in
+  which case:
+
+  - "wilcox" if both groups have \>= 5 samples
+
+  - "beta_bin" if both groups have \>= 2 samples (accounts for
+    overdispersion)
+
+  - "fast_fisher" if either group has only 1 sample
 
 - temp_dir:
 
