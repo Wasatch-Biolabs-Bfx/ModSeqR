@@ -1,0 +1,44 @@
+name: Build and Push ModSeqR to ECR
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: bioinformatics
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          FULL_IMAGE="${ECR_REGISTRY}/${{ env.ECR_REPOSITORY }}"
+
+          docker build -t modseqr .
+          docker tag modseqr:latest ${FULL_IMAGE}:modseqr-latest
+          docker push ${FULL_IMAGE}:modseqr-latest
+
+          echo "Pushed ${FULL_IMAGE}:modseqr-latest"
