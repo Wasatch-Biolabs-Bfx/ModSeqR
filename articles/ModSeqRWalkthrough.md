@@ -394,6 +394,18 @@ again on the same type of data will overwrite the existing
 `mod_diff_{type}` table (e.g. `mod_diff_windows` will be rewritten if
 you run it again on window data).
 
+``` r
+
+# Specify the path to the database
+mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
+  
+# Get methylation statistics for the 'positions' call type without plotting
+calc_mod_diff(mod_db = mod_db,
+              call_type = "positions",
+              cases = "blood",
+              controls = "sperm")
+```
+
 #### Modification type (mod_type)
 
 The `mod_type` argument specifies which modification to test. The
@@ -406,6 +418,9 @@ Bare numeric codes are automatically prefixed with `"m_"`, so
 
 The argument `calc_type` controls which statistical method is used to
 test for differential methylation. It can be set manually to one of:
+
+- `"beta_bin"` – beta-binomial likelihood-ratio test (accounts for
+  overdispersion across replicates)
 
 - `"wilcox"` – Wilcoxon rank-sum test on per-sample methylation
   fractions
@@ -420,43 +435,148 @@ If `calc_type` is left as `NULL` (the default), the function
 automatically chooses an appropriate method based on how many samples
 are in each group:
 
-- **If there is more than one sample in either the case or control
-  group**
-  - `calc_type` is set to `"wilcox"`
-  - The function compares the distribution of methylation fractions
-    across samples between groups.
-- **If there is exactly one sample in the case group and one in the
-  control group**
-  - `calc_type` is set to `"fast_fisher"`
-  - The function aggregates counts and performs a Fisher’s exact test on
-    the resulting 2×2 contingency table.
+- **5 or more samples in both groups** → `"wilcox"` — enough samples for
+  a non-parametric rank-based test.
+
+- **2–4 samples in either group** → `"beta_bin"` — models biological
+  variability (overdispersion) across replicates while respecting
+  per-sample coverage differences.
+
+- **1 sample in either group** → `"fast_fisher"` — no replicate
+  information available; directly compares aggregated counts.
 
 A message is printed indicating which method was chosen.
 
 #### Why this behavior?
 
-- With replicates (more than one sample in a group), the Wilcoxon
-  rank-sum test is preferred because it uses the variation between
-  samples and compares the distributions of methylation fractions across
-  samples. This better reflects biological variability.
-- With only one sample per group, there is no between-sample variation
-  to model. In that case, collapsing to counts and using Fisher’s exact
-  test is more appropriate and statistically well-defined.
+The choice of statistical test depends on how many biological replicates
+are available:
 
-You can always override this behavior by explicitly setting `calc_type`
-yourself.
+- **With many replicates (≥ 5 per group)**, the Wilcoxon rank-sum test
+  works well. It compares the distribution of methylation fractions
+  between groups without assuming a specific distribution shape. With
+  enough samples, rank-based tests have good power and produce granular
+  p-values.
+
+- **With few replicates (2–4 per group)**, the beta-binomial test is
+  preferred. The Wilcoxon test has limited power with so few values per
+  group (e.g., with 3 vs 3 samples, the smallest possible Wilcoxon
+  p-value is 0.05, which cannot survive multiple testing correction).
+  The pooled Fisher test ignores between-sample variability entirely,
+  treating all replicates as one large observation (pseudo-replication),
+  which leads to inflated significance. The beta-binomial solves both
+  problems: it models each sample’s count data individually, accounts
+  for varying coverage across samples, and explicitly estimates
+  biological variability (overdispersion) between replicates through a
+  likelihood-ratio test.
+
+- **With no replicates (1 vs 1)**, the fast Fisher’s exact test is the
+  appropriate choice. There is no between-sample variation to model, and
+  the test directly compares modification counts in a 2×2 contingency
+  table.
+
+#### Beta-binomial test details
+
+The beta-binomial test (`calc_type = "beta_bin"`) models each sample’s
+modified-read count at a locus as a draw from a beta-binomial
+distribution. This captures two sources of variation: sampling noise
+(from finite read counts) and biological variability (different samples
+having genuinely different modification rates at the same site).
+
+The test fits two models at each locus:
+
+- **Null model:** all samples (case + control) share one mean
+  modification rate μ
+- **Alternative model:** cases have μ_(case) and controls have
+  μ_(control), with shared overdispersion
+
+The difference in log-likelihoods is compared to a χ² distribution to
+obtain a p-value. The output includes an `overdispersion` column (φ,
+ranging 0–1) that indicates how much the true modification rate varies
+across replicates at each locus. Values near 0 mean replicates are very
+consistent; higher values indicate more biological variability.
+
+Key advantages of the beta-binomial:
+
+- Samples with higher coverage naturally contribute more to the estimate
+  (a sample with 500 calls is more informative than one with 10 calls)
+- Biological variability between replicates is explicitly modeled, not
+  ignored
+- No additional R package dependencies are required (implemented in base
+  R)
 
 ``` r
 
-# Specify the path to the database
-mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
-  
-# Get methylation statistics for the 'positions' call type without plotting
-calc_mod_diff(mod_db = mod_db,
-              call_type = "positions",
-              cases = "blood",
-              controls = "sperm")
+# Auto-select: with 3 vs 3 samples, beta_bin is chosen automatically
+calc_mod_diff(mod_db,
+              call_type = "windows",
+              cases = c("case1", "case2", "case3"),
+              controls = c("ctrl1", "ctrl2", "ctrl3"))
+
+# Explicitly request beta-binomial
+calc_mod_diff(mod_db,
+              call_type = "windows",
+              cases = c("case1", "case2"),
+              controls = c("ctrl1", "ctrl2"),
+              calc_type = "beta_bin")
+
+# 1 vs 1: fast_fisher is chosen automatically
+calc_mod_diff(mod_db,
+              call_type = "windows",
+              cases = "tumor",
+              controls = "normal")
 ```
+
+You can always override the automatic selection by explicitly setting
+`calc_type` yourself.
+
+#### Coverage filtering with `min_coverage`
+
+When working with window-level data, some windows may have poor breadth
+of coverage — reads may only cover a small portion of the window in
+certain samples. The `min_coverage` parameter filters these out before
+testing.
+
+`min_coverage` is a proportion between 0 and 1 representing the minimum
+fraction of positions within a window that must have modification calls
+for each sample. It is computed per sample as
+`num_sites / (end - start + 1)`. Windows where any sample falls below
+this threshold are dropped before statistical testing.
+
+This is especially useful for larger windows (e.g., 10 kb), where uneven
+read coverage can lead to unreliable modification fraction estimates.
+Filtering improves result quality and reduces the multiple testing
+burden, since fewer windows are tested.
+
+``` r
+
+# Require each sample to cover at least 50% of positions in each window
+calc_mod_diff(mod_db,
+              call_type = "windows",
+              cases = c("sample1", "sample2", "sample3"),
+              controls = c("ctrl1", "ctrl2", "ctrl3"),
+              min_coverage = 0.5)
+
+# More stringent: 80% breadth of coverage required
+calc_mod_diff(mod_db,
+              call_type = "windows",
+              cases = c("sample1", "sample2", "sample3"),
+              controls = c("ctrl1", "ctrl2", "ctrl3"),
+              min_coverage = 0.8)
+```
+
+**Guidance on values:**
+
+- `min_coverage = 0.5` — moderate filtering; good default for most
+  analyses
+- `min_coverage = 0.8` — stringent; best for high-coverage datasets
+- `min_coverage = 0.1` — lenient; useful for sparse modifications like
+  m6A
+
+Note: `min_coverage` only applies when the input table has `num_sites`,
+`start`, and `end` columns (i.e., window data). It is silently skipped
+for position-level analyses. If the filter removes all windows, the
+function will stop with a message suggesting you lower the threshold.
 
 ### collapse_mod_windows
 

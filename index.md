@@ -2,9 +2,9 @@
 
 ![](reference/figures/WBL_MODSEQR.png)
 
-## Version 1.1.2
+## Version 1.1.3
 
-**(Updated April 24th 2026)**
+**(Updated May 14th 2026)**
 
 **Publication:** If you use ModSeqR in your research, please cite our
 paper in *BMC Genomics*:  
@@ -128,7 +128,14 @@ or by reads
 A differential methylation analysis can be conducted on positional,
 regional, or window data using
 [`calc_mod_diff()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/calc_mod_diff.md).
-After calculating methylation differences between windows, use
+The function automatically selects an appropriate statistical test based
+on your sample sizes — beta-binomial for 2–4 replicates per group,
+Wilcoxon for 5+, or Fisher’s exact test for single-sample comparisons —
+or you can set `calc_type` manually. Use `mod_type` to specify which
+modification to test (e.g., `"mh"` for 5mC/5hmC, `"a"` for m6A), and
+`min_coverage` to filter out windows with poor breadth of coverage
+before testing. After calculating methylation differences between
+windows, use
 [`collapse_mod_windows()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/collapse_mod_windows.md)
 to collapse significant windows in a methylation dataset. This merges
 contiguous regions that meet the specified criteria.

@@ -18,6 +18,7 @@ calc_mod_diff(
   temp_dir = tempdir(),
   threads = NULL,
   memory_limit = NULL,
+  min_coverage = NULL,
   overwrite = TRUE
 )
 ```
@@ -81,6 +82,17 @@ calc_mod_diff(
 
   DuckDB memory limit string (e.g. `"16384MB"`). If `NULL`, an internal
   heuristic (~80% of RAM) is used.
+
+- min_coverage:
+
+  Minimum fraction of positions within a window that must have
+  modification calls for each sample (0 to 1). Computed as
+  `num_sites / (end - start + 1)` per sample per window. Windows where
+  any sample falls below this threshold are dropped before testing. For
+  example, `min_coverage = 0.5` on a 1kb window requires at least 500
+  sites covered per sample. Only applies when the input table contains
+  `num_sites`, `start`, and `end` columns (i.e. windows). Default is
+  `NULL` (no filtering).
 
 - overwrite:
 

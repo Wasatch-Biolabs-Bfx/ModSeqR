@@ -12,13 +12,13 @@ Source:
 [`DESCRIPTION`](https://github.com/Wasatch-Biolabs-Bfx/ModSeqR/blob/main/DESCRIPTION)
 
 Zimmerman H, Hill J (2026). *ModSeqR: Process and Analyze Nanopore
-Sequencing Methylation Data*. R package version 1.1.2,
+Sequencing Methylation Data*. R package version 1.1.3,
 <https://github.com/Wasatch-Biolabs-Bfx/ModSeqR>.
 
     @Manual{,
       title = {ModSeqR: Process and Analyze Nanopore Sequencing Methylation Data},
       author = {Hailey Zimmerman and Jonathon Hill},
       year = {2026},
-      note = {R package version 1.1.2},
+      note = {R package version 1.1.3},
       url = {https://github.com/Wasatch-Biolabs-Bfx/ModSeqR},
     }
