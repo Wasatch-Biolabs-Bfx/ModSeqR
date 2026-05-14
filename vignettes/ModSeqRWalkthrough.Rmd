@@ -378,7 +378,7 @@ Key advantages of the beta-binomial:
 **Performance note:** The beta-binomial test runs `optim()` independently at every locus, which makes it substantially slower than the vectorized Fisher or Wilcoxon tests. For a typical whole-genome window analysis, expect run times on the order of **minutes to hours** depending on the number of windows, step size, and number of samples. To manage run times:
 
 * Use larger `window_size` and `step_size` in `summarize_mod_windows()` to reduce the total number of windows
-* Apply `min_coverage` filtering to drop low-quality windows before testing
+* Apply `min_sites` filtering to drop low-quality windows before testing
 * Use `threads` and `memory_limit` parameters to control resource usage
 
 ```{r eval=FALSE}
@@ -404,49 +404,37 @@ calc_mod_diff(mod_db,
 
 You can always override the automatic selection by explicitly setting `calc_type` yourself.
 
-### Coverage filtering with `min_coverage`
+### Site coverage filtering with `min_sites`
 
-When working with window-level data, some windows may have poor breadth of 
-coverage — reads may only cover a small portion of the window in certain 
-samples. The `min_coverage` parameter filters these out before testing.
+When working with window-level data, some windows may have very few
+modification sites covered in certain samples. The `min_sites` parameter
+filters these out before testing.
 
-`min_coverage` is a proportion between 0 and 1 representing the minimum 
-fraction of positions within a window that must have modification calls 
-for each sample. It is computed per sample as 
-`num_sites / (end - start + 1)`. Windows where any sample falls below 
-this threshold are dropped before statistical testing.
-
-This is especially useful for larger windows (e.g., 10 kb), where uneven 
-read coverage can lead to unreliable modification fraction estimates. 
-Filtering improves result quality and reduces the multiple testing burden, 
-since fewer windows are tested.
+`min_sites` is an integer representing the minimum number of distinct
+positions within a window that must have modification calls for each
+sample. For CpG methylation, this is the number of CpGs covered. Windows
+where any sample falls below this threshold are dropped before statistical
+testing.
 
 ```{r eval=FALSE}
-# Require each sample to cover at least 50% of positions in each window
+# Require at least 20 CpGs covered per sample per window
 calc_mod_diff(mod_db,
               call_type = "windows",
               cases = c("sample1", "sample2", "sample3"),
               controls = c("ctrl1", "ctrl2", "ctrl3"),
-              min_coverage = 0.5)
-
-# More stringent: 80% breadth of coverage required
-calc_mod_diff(mod_db,
-              call_type = "windows",
-              cases = c("sample1", "sample2", "sample3"),
-              controls = c("ctrl1", "ctrl2", "ctrl3"),
-              min_coverage = 0.8)
+              min_sites = 20)
 ```
 
 **Guidance on values:**
 
-* `min_coverage = 0.5` — moderate filtering; good default for most analyses
-* `min_coverage = 0.8` — stringent; best for high-coverage datasets
-* `min_coverage = 0.1` — lenient; useful for sparse modifications like m6A
+* `min_sites = 5` — lenient; filters only the most sparse windows
+* `min_sites = 10–20` — moderate; good default for most analyses
+* `min_sites = 50+` — stringent; for large windows with high coverage
 
-Note: `min_coverage` only applies when the input table has `num_sites`, 
-`start`, and `end` columns (i.e., window data). It is silently skipped 
-for position-level analyses. If the filter removes all windows, the 
-function will stop with a message suggesting you lower the threshold.
+Note: `min_sites` only applies when the input table has a `num_sites`
+column (i.e., window or region data). It is silently skipped for
+position-level analyses. If the filter removes all windows, the function
+will stop with a message suggesting you lower the threshold.
 
 
 ## collapse_mod_windows

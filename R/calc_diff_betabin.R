@@ -238,7 +238,7 @@
   group_vars <- setdiff(
     colnames(dat),
     c("sample_name", "exp_group", "num_calls", "mod_counts",
-      "num_sites", "site_coverage")
+      "num_sites")
   )
 
   # Split by locus and run the LRT at each one

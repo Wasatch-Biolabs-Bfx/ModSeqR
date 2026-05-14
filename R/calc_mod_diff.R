@@ -26,13 +26,11 @@
 #'   (typically all-but-one core) is used.
 #' @param memory_limit DuckDB memory limit string (e.g. \code{"16384MB"}).
 #'   If \code{NULL}, an internal heuristic (~80\% of RAM) is used.
-#' @param min_coverage Minimum fraction of positions within a window that must
-#'   have modification calls for each sample (0 to 1). Computed as
-#'   \code{num_sites / (end - start + 1)} per sample per window. Windows where
-#'   any sample falls below this threshold are dropped before testing.
-#'   For example, \code{min_coverage = 0.5} on a 1kb window requires at least
-#'   500 sites covered per sample. Only applies when the input table contains
-#'   \code{num_sites}, \code{start}, and \code{end} columns (i.e. windows).
+#' @param min_sites Minimum number of distinct modification sites (e.g., CpGs)
+#'   required per sample within a window. Windows where any sample has fewer
+#'   than this many sites with calls are dropped before testing. This filters
+#'   out windows with poor breadth of coverage. Only applies when the input
+#'   table contains a \code{num_sites} column (i.e., windows).
 #'   Default is \code{NULL} (no filtering).
 #' @param overwrite If TRUE and output_table exists, it is dropped before writing.
 #'
@@ -74,7 +72,7 @@ calc_mod_diff <- function(mod_db,
                           temp_dir = tempdir(),
                           threads = NULL,
                           memory_limit = NULL,
-                          min_coverage = NULL, 
+                          min_sites = NULL, 
                           overwrite = TRUE)
 {
   start_time <- Sys.time()
@@ -153,42 +151,32 @@ calc_mod_diff <- function(mod_db,
     ) |>
     dplyr::filter(!is.na(exp_group))
   
-  # Filter windows with poor breadth of coverage (proportional)
-  if (!is.null(min_coverage)) {
-    has_needed_cols <- all(c("num_sites", "start", "end") %in% cols)
-    
-    if (!has_needed_cols) {
-      warning("min_coverage was set but '", call_type,
-              "' is missing num_sites/start/end columns. Filter skipped.")
-    } else if (min_coverage < 0 || min_coverage > 1) {
-      stop("min_coverage must be between 0 and 1 (e.g. 0.8 for 80%).")
+  # Filter windows with insufficient site coverage
+  if (!is.null(min_sites) && min_sites > 0) {
+    if (!"num_sites" %in% cols) {
+      warning("min_sites was set but '", call_type,
+              "' has no 'num_sites' column. Filter skipped. ",
+              "num_sites is only available for window/region tables.")
     } else {
-      # Count rows before filtering
       n_before <- in_dat |> dplyr::count() |> dplyr::pull(n)
       
       in_dat <- in_dat |>
-        dplyr::mutate(
-          site_coverage = num_sites / (end - start + 1)
-        ) |>
-        dplyr::filter(site_coverage >= min_coverage)
+        dplyr::filter(num_sites >= min_sites)
       
-      # Count rows after filtering
       n_after <- in_dat |> dplyr::count() |> dplyr::pull(n)
-      n_dropped <- n_before - n_after
       
       message(
-        "Coverage filter (min_coverage = ", min_coverage * 100, "%): ",
+        "Site filter (min_sites = ", min_sites, "): ",
         format(n_after, big.mark = ","), " of ",
         format(n_before, big.mark = ","), " sample-windows passed ",
-        "(dropped ", format(n_dropped, big.mark = ","), ")."
+        "(dropped ", format(n_before - n_after, big.mark = ","), ")."
       )
       
       if (n_after == 0) {
-        stop("All windows were removed by the coverage filter. ",
-             "Try a lower min_coverage value (current: ", min_coverage, ").")
+        stop("All windows were removed by the min_sites filter. ",
+             "Try a lower value (current: ", min_sites, ").")
       }
       
-      # Warn if entire groups were lost
       remaining_samples <- in_dat |>
         dplyr::distinct(sample_name, exp_group) |>
         dplyr::collect()
@@ -197,14 +185,14 @@ calc_mod_diff <- function(mod_db,
       missing_ctrls <- controls[!controls %in% remaining_samples$sample_name]
       
       if (length(missing_cases) > 0) {
-        warning("Coverage filter removed ALL windows for case sample(s): ",
+        warning("min_sites filter removed ALL windows for case sample(s): ",
                 paste(missing_cases, collapse = ", "),
-                ". Consider lowering min_coverage.")
+                ". Consider lowering min_sites.")
       }
       if (length(missing_ctrls) > 0) {
-        warning("Coverage filter removed ALL windows for control sample(s): ",
+        warning("min_sites filter removed ALL windows for control sample(s): ",
                 paste(missing_ctrls, collapse = ", "),
-                ". Consider lowering min_coverage.")
+                ". Consider lowering min_sites.")
       }
     }
   }
@@ -316,7 +304,7 @@ calc_mod_diff <- function(mod_db,
   group_vars <- setdiff(
     colnames(frac_dat),
     c("sample_name", "exp_group", "num_calls", "mod_counts", "mod_frac", 
-      "num_sites", "site_coverage")
+      "num_sites")
   )
   
   # Summarize per region/window and run Wilcoxon tests
