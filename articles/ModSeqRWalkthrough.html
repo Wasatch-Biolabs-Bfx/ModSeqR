@@ -56,7 +56,7 @@ Zimmerman and Jonathon T. Hill, PhD</h4>
             
             <h4 data-toc-skip class="date">2026-05-14</h4>
       
-      <small class="dont-index">Source: <a href="https://github.com/Wasatch-Biolabs-Bfx/ModSeqR/blob/main/vignettes/ModSeqRWalkthrough.Rmd" class="external-link"><code>vignettes/ModSeqRWalkthrough.Rmd</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/Wasatch-Biolabs-Bfx/ModSeqR/blob/v1.1.3/vignettes/ModSeqRWalkthrough.Rmd" class="external-link"><code>vignettes/ModSeqRWalkthrough.Rmd</code></a></small>
       <div class="d-none name"><code>ModSeqRWalkthrough.Rmd</code></div>
     </div>
 
@@ -550,21 +550,6 @@ ignored</li>
 <li>No additional R package dependencies are required (implemented in
 base R)</li>
 </ul>
-<p><strong>Performance note:</strong> The beta-binomial test runs
-<code><a href="https://rdrr.io/r/stats/optim.html" class="external-link">optim()</a></code> independently at every locus, which makes it
-substantially slower than the vectorized Fisher or Wilcoxon tests. For a
-typical whole-genome window analysis, expect run times on the order of
-<strong>minutes to hours</strong> depending on the number of windows,
-step size, and number of samples. To manage run times:</p>
-<ul>
-<li>Use larger <code>window_size</code> and <code>step_size</code> in
-<code><a href="../reference/summarize_mod_windows.html">summarize_mod_windows()</a></code> to reduce the total number of
-windows</li>
-<li>Apply <code>min_sites</code> filtering to drop low-quality windows
-before testing</li>
-<li>Use <code>threads</code> and <code>memory_limit</code> parameters to
-control resource usage</li>
-</ul>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Auto-select: with 3 vs 3 samples, beta_bin is chosen automatically</span></span>
 <span><span class="fu"><a href="../reference/calc_mod_diff.html">calc_mod_diff</a></span><span class="op">(</span><span class="va">mod_db</span>,</span>
@@ -588,40 +573,52 @@ control resource usage</li>
 <code>calc_type</code> yourself.</p>
 </div>
 <div class="section level4">
-<h4 id="site-coverage-filtering-with-min_sites">Site coverage filtering with <code>min_sites</code><a class="anchor" aria-label="anchor" href="#site-coverage-filtering-with-min_sites"></a>
+<h4 id="coverage-filtering-with-min_coverage">Coverage filtering with <code>min_coverage</code><a class="anchor" aria-label="anchor" href="#coverage-filtering-with-min_coverage"></a>
 </h4>
-<p>When working with window-level data, some windows may have very few
-modification sites covered in certain samples. The
-<code>min_sites</code> parameter filters these out before testing.</p>
-<p><code>min_sites</code> is an integer representing the minimum number
-of distinct positions within a window that must have modification calls
-for each sample. For CpG methylation, this is the number of CpGs
-covered. Windows where any sample falls below this threshold are dropped
-before statistical testing.</p>
+<p>When working with window-level data, some windows may have poor
+breadth of coverage — reads may only cover a small portion of the window
+in certain samples. The <code>min_coverage</code> parameter filters
+these out before testing.</p>
+<p><code>min_coverage</code> is a proportion between 0 and 1
+representing the minimum fraction of positions within a window that must
+have modification calls for each sample. It is computed per sample as
+<code>num_sites / (end - start + 1)</code>. Windows where any sample
+falls below this threshold are dropped before statistical testing.</p>
+<p>This is especially useful for larger windows (e.g., 10 kb), where
+uneven read coverage can lead to unreliable modification fraction
+estimates. Filtering improves result quality and reduces the multiple
+testing burden, since fewer windows are tested.</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Require at least 20 CpGs covered per sample per window</span></span>
+<code class="sourceCode R"><span><span class="co"># Require each sample to cover at least 50% of positions in each window</span></span>
 <span><span class="fu"><a href="../reference/calc_mod_diff.html">calc_mod_diff</a></span><span class="op">(</span><span class="va">mod_db</span>,</span>
 <span>              call_type <span class="op">=</span> <span class="st">"windows"</span>,</span>
 <span>              cases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"sample1"</span>, <span class="st">"sample2"</span>, <span class="st">"sample3"</span><span class="op">)</span>,</span>
 <span>              controls <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ctrl1"</span>, <span class="st">"ctrl2"</span>, <span class="st">"ctrl3"</span><span class="op">)</span>,</span>
-<span>              min_sites <span class="op">=</span> <span class="fl">20</span><span class="op">)</span></span></code></pre></div>
+<span>              min_coverage <span class="op">=</span> <span class="fl">0.5</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># More stringent: 80% breadth of coverage required</span></span>
+<span><span class="fu"><a href="../reference/calc_mod_diff.html">calc_mod_diff</a></span><span class="op">(</span><span class="va">mod_db</span>,</span>
+<span>              call_type <span class="op">=</span> <span class="st">"windows"</span>,</span>
+<span>              cases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"sample1"</span>, <span class="st">"sample2"</span>, <span class="st">"sample3"</span><span class="op">)</span>,</span>
+<span>              controls <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"ctrl1"</span>, <span class="st">"ctrl2"</span>, <span class="st">"ctrl3"</span><span class="op">)</span>,</span>
+<span>              min_coverage <span class="op">=</span> <span class="fl">0.8</span><span class="op">)</span></span></code></pre></div>
 <p><strong>Guidance on values:</strong></p>
 <ul>
 <li>
-<code>min_sites = 5</code> — lenient; filters only the most sparse
-windows</li>
+<code>min_coverage = 0.5</code> — moderate filtering; good default
+for most analyses</li>
 <li>
-<code>min_sites = 10–20</code> — moderate; good default for most
-analyses</li>
+<code>min_coverage = 0.8</code> — stringent; best for high-coverage
+datasets</li>
 <li>
-<code>min_sites = 50+</code> — stringent; for large windows with
-high coverage</li>
+<code>min_coverage = 0.1</code> — lenient; useful for sparse
+modifications like m6A</li>
 </ul>
-<p>Note: <code>min_sites</code> only applies when the input table has a
-<code>num_sites</code> column (i.e., window or region data). It is
-silently skipped for position-level analyses. If the filter removes all
-windows, the function will stop with a message suggesting you lower the
-threshold.</p>
+<p>Note: <code>min_coverage</code> only applies when the input table has
+<code>num_sites</code>, <code>start</code>, and <code>end</code> columns
+(i.e., window data). It is silently skipped for position-level analyses.
+If the filter removes all windows, the function will stop with a message
+suggesting you lower the threshold.</p>
 </div>
 </div>
 <div class="section level3">

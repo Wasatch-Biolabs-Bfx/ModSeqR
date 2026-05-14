@@ -133,18 +133,12 @@ on your sample sizes — beta-binomial for 2–4 replicates per group,
 Wilcoxon for 5+, or Fisher’s exact test for single-sample comparisons —
 or you can set `calc_type` manually. Use `mod_type` to specify which
 modification to test (e.g., `"mh"` for 5mC/5hmC, `"a"` for m6A), and
-`min_sites` to filter out windows with poor modification call coverage.
-After calculating methylation differences between windows, use
+`min_coverage` to filter out windows with poor breadth of coverage
+before testing. After calculating methylation differences between
+windows, use
 [`collapse_mod_windows()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/collapse_mod_windows.md)
 to collapse significant windows in a methylation dataset. This merges
 contiguous regions that meet the specified criteria.
-
-**Note:** The beta-binomial test (`calc_type = "beta_bin"`) fits a model
-at every individual locus, which can be significantly slower than other
-methods. For genome-wide window analyses, expect run times of **minutes
-to hours** depending on the number of windows and samples. Consider
-using larger window sizes, larger step sizes, or `min_sites` filtering
-the number of modification sites.
 
 ### Get Database Stats
 
