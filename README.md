@@ -87,6 +87,8 @@ After a database is created, a user can summarize their data by position (`summa
 ### Differential Methylation
 A differential methylation analysis can be conducted on positional, regional, or window data using `calc_mod_diff()`. The function automatically selects an appropriate statistical test based on your sample sizes — beta-binomial for 2–4 replicates per group, Wilcoxon for 5+, or Fisher's exact test for single-sample comparisons — or you can set `calc_type` manually. Use `mod_type` to specify which modification to test (e.g., `"mh"` for 5mC/5hmC, `"a"` for m6A), and `min_coverage` to filter out windows with poor breadth of coverage before testing. After calculating methylation differences between windows, use `collapse_mod_windows()` to collapse significant windows in a methylation dataset. This merges contiguous regions that meet the specified criteria.
 
+**Note:** The beta-binomial test (`calc_type = "beta_bin"`) fits a model at every individual locus, which can be significantly slower than other methods. For genome-wide window analyses, expect run times of **minutes to hours** depending on the number of windows and samples. Consider using larger window sizes, larger step sizes, or `min_coverage` filtering to reduce the number of loci tested.
+
 ### Get Database Stats
 If you would like to see key stats on your database at any time, including what unique sample names are in the data for a differential analysis, call `get_mod_dbinfo()`. 
 To see what columns are in a table in your database and how many records (rows) there are, call `get_mod_tableinfo()` with your database and desired table name.
