@@ -2,8 +2,8 @@
 
 # ModSeqR
 
-## Version 1.1.2
-**(Updated April 24th 2026)**
+## Version 1.1.3
+**(Updated May 14th 2026)**
 
 **Publication:** If you use ModSeqR in your research, please cite our paper in *BMC Genomics*:  
 [ModSeqR: An R package for managing direct whole methylome sequencing data](https://link.springer.com/article/10.1186/s12864-026-12655-5)
@@ -84,12 +84,8 @@ This will at first hold a calls table. If you would like to see key stats on you
 ### Summarize Data
 After a database is created, a user can summarize their data by position (`summarize_mod_positions()`), by regions (`summarize_mod_regions()`), by windows (`summarize_mod_windows()`), or by reads ((`summarize_mod_reads()`). 
 
-
-
 ### Differential Methylation
-A differential methylation analysis can be conducted on positional, regional, or window data using `calc_mod_diff()`. After calculating methylation differences between windows, use `collapse_mod_windows()` to collapse significant windows in a methylation dataset. This merges contiguous regions that meet the specified criteria.
-
-
+A differential methylation analysis can be conducted on positional, regional, or window data using `calc_mod_diff()`. The function automatically selects an appropriate statistical test based on your sample sizes — beta-binomial for 2–4 replicates per group, Wilcoxon for 5+, or Fisher's exact test for single-sample comparisons — or you can set `calc_type` manually. Use `mod_type` to specify which modification to test (e.g., `"mh"` for 5mC/5hmC, `"a"` for m6A), and `min_coverage` to filter out windows with poor breadth of coverage before testing. After calculating methylation differences between windows, use `collapse_mod_windows()` to collapse significant windows in a methylation dataset. This merges contiguous regions that meet the specified criteria.
 
 ### Get Database Stats
 If you would like to see key stats on your database at any time, including what unique sample names are in the data for a differential analysis, call `get_mod_dbinfo()`. 

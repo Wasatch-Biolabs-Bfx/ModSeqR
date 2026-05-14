@@ -237,7 +237,8 @@
   # Identify grouping columns (everything except sample-level fields)
   group_vars <- setdiff(
     colnames(dat),
-    c("sample_name", "exp_group", "num_calls", "mod_counts")
+    c("sample_name", "exp_group", "num_calls", "mod_counts",
+      "num_sites", "site_coverage")
   )
 
   # Split by locus and run the LRT at each one

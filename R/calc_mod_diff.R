@@ -26,6 +26,14 @@
 #'   (typically all-but-one core) is used.
 #' @param memory_limit DuckDB memory limit string (e.g. \code{"16384MB"}).
 #'   If \code{NULL}, an internal heuristic (~80\% of RAM) is used.
+#' @param min_coverage Minimum fraction of positions within a window that must
+#'   have modification calls for each sample (0 to 1). Computed as
+#'   \code{num_sites / (end - start + 1)} per sample per window. Windows where
+#'   any sample falls below this threshold are dropped before testing.
+#'   For example, \code{min_coverage = 0.5} on a 1kb window requires at least
+#'   500 sites covered per sample. Only applies when the input table contains
+#'   \code{num_sites}, \code{start}, and \code{end} columns (i.e. windows).
+#'   Default is \code{NULL} (no filtering).
 #' @param overwrite If TRUE and output_table exists, it is dropped before writing.
 #'
 #' @details
@@ -66,6 +74,7 @@ calc_mod_diff <- function(mod_db,
                           temp_dir = tempdir(),
                           threads = NULL,
                           memory_limit = NULL,
+                          min_coverage = NULL, 
                           overwrite = TRUE)
 {
   start_time <- Sys.time()
@@ -131,7 +140,7 @@ calc_mod_diff <- function(mod_db,
     dplyr::tbl(mod_db$con, call_type) |>
     dplyr::select(
       sample_name,
-      dplyr::any_of(c("region_name", "chrom", "start", "end")),
+      dplyr::any_of(c("region_name", "chrom", "start", "end", "num_sites")),
       num_calls,
       mod_counts = dplyr::all_of(mod_counts_col)
     ) |>
@@ -143,6 +152,62 @@ calc_mod_diff <- function(mod_db,
       )
     ) |>
     dplyr::filter(!is.na(exp_group))
+  
+  # Filter windows with poor breadth of coverage (proportional)
+  if (!is.null(min_coverage)) {
+    has_needed_cols <- all(c("num_sites", "start", "end") %in% cols)
+    
+    if (!has_needed_cols) {
+      warning("min_coverage was set but '", call_type,
+              "' is missing num_sites/start/end columns. Filter skipped.")
+    } else if (min_coverage < 0 || min_coverage > 1) {
+      stop("min_coverage must be between 0 and 1 (e.g. 0.8 for 80%).")
+    } else {
+      # Count rows before filtering
+      n_before <- in_dat |> dplyr::count() |> dplyr::pull(n)
+      
+      in_dat <- in_dat |>
+        dplyr::mutate(
+          site_coverage = num_sites / (end - start + 1)
+        ) |>
+        dplyr::filter(site_coverage >= min_coverage)
+      
+      # Count rows after filtering
+      n_after <- in_dat |> dplyr::count() |> dplyr::pull(n)
+      n_dropped <- n_before - n_after
+      
+      message(
+        "Coverage filter (min_coverage = ", min_coverage * 100, "%): ",
+        format(n_after, big.mark = ","), " of ",
+        format(n_before, big.mark = ","), " sample-windows passed ",
+        "(dropped ", format(n_dropped, big.mark = ","), ")."
+      )
+      
+      if (n_after == 0) {
+        stop("All windows were removed by the coverage filter. ",
+             "Try a lower min_coverage value (current: ", min_coverage, ").")
+      }
+      
+      # Warn if entire groups were lost
+      remaining_samples <- in_dat |>
+        dplyr::distinct(sample_name, exp_group) |>
+        dplyr::collect()
+      
+      missing_cases <- cases[!cases %in% remaining_samples$sample_name]
+      missing_ctrls <- controls[!controls %in% remaining_samples$sample_name]
+      
+      if (length(missing_cases) > 0) {
+        warning("Coverage filter removed ALL windows for case sample(s): ",
+                paste(missing_cases, collapse = ", "),
+                ". Consider lowering min_coverage.")
+      }
+      if (length(missing_ctrls) > 0) {
+        warning("Coverage filter removed ALL windows for control sample(s): ",
+                paste(missing_ctrls, collapse = ", "),
+                ". Consider lowering min_coverage.")
+      }
+    }
+  }
   
   # Check sample names present
   all_samples <- unique(dplyr::pull(in_dat, sample_name))
@@ -250,7 +315,8 @@ calc_mod_diff <- function(mod_db,
   # Figure out which columns define the genomic unit (region/window/position)
   group_vars <- setdiff(
     colnames(frac_dat),
-    c("sample_name", "exp_group", "num_calls", "mod_counts", "mod_frac")
+    c("sample_name", "exp_group", "num_calls", "mod_counts", "mod_frac", 
+      "num_sites", "site_coverage")
   )
   
   # Summarize per region/window and run Wilcoxon tests

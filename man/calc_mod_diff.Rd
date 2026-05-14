@@ -15,6 +15,7 @@ calc_mod_diff(
   temp_dir = tempdir(),
   threads = NULL,
   memory_limit = NULL,
+  min_coverage = NULL,
   overwrite = TRUE
 )
 }
@@ -51,6 +52,15 @@ Default is NULL, in which case:
 
 \item{memory_limit}{DuckDB memory limit string (e.g. \code{"16384MB"}).
 If \code{NULL}, an internal heuristic (~80\% of RAM) is used.}
+
+\item{min_coverage}{Minimum fraction of positions within a window that must
+have modification calls for each sample (0 to 1). Computed as
+\code{num_sites / (end - start + 1)} per sample per window. Windows where
+any sample falls below this threshold are dropped before testing.
+For example, \code{min_coverage = 0.5} on a 1kb window requires at least
+500 sites covered per sample. Only applies when the input table contains
+\code{num_sites}, \code{start}, and \code{end} columns (i.e. windows).
+Default is \code{NULL} (no filtering).}
 
 \item{overwrite}{If TRUE and output_table exists, it is dropped before writing.}
 }
