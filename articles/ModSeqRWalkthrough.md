@@ -505,6 +505,20 @@ Key advantages of the beta-binomial:
 - No additional R package dependencies are required (implemented in base
   R)
 
+**Performance note:** The beta-binomial test runs
+[`optim()`](https://rdrr.io/r/stats/optim.html) independently at every
+locus, which makes it substantially slower than the vectorized Fisher or
+Wilcoxon tests. For a typical whole-genome window analysis, expect run
+times on the order of **minutes to hours** depending on the number of
+windows, step size, and number of samples. To manage run times:
+
+- Use larger `window_size` and `step_size` in
+  [`summarize_mod_windows()`](https://wasatch-biolabs-bfx.github.io/ModSeqR/reference/summarize_mod_windows.md)
+  to reduce the total number of windows
+- Apply `min_coverage` filtering to drop low-quality windows before
+  testing
+- Use `threads` and `memory_limit` parameters to control resource usage
+
 ``` r
 
 # Auto-select: with 3 vs 3 samples, beta_bin is chosen automatically

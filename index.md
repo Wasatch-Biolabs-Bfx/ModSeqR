@@ -140,6 +140,13 @@ windows, use
 to collapse significant windows in a methylation dataset. This merges
 contiguous regions that meet the specified criteria.
 
+**Note:** The beta-binomial test (`calc_type = "beta_bin"`) fits a model
+at every individual locus, which can be significantly slower than other
+methods. For genome-wide window analyses, expect run times of **minutes
+to hours** depending on the number of windows and samples. Consider
+using larger window sizes, larger step sizes, or `min_coverage`
+filtering to reduce the number of loci tested.
+
 ### Get Database Stats
 
 If you would like to see key stats on your database at any time,
