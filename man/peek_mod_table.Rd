@@ -15,28 +15,20 @@ peek_mod_table(mod_db, table_name = NULL, n = 6)
 \item{n}{Integer. Number of rows to return. Default: \code{6}.}
 }
 \value{
-Invisibly returns \code{mod_db} with \code{last_result} set to the
-  collected preview tibble. Retrieve it with \code{get_mod_result(mod_db)} or
-  \code{mod_db$last_result}.
+Invisibly returns a tibble of the first \code{n} rows.
 }
 \description{
-Prints and captures the first \code{n} rows of a table in the \code{.mod.db}
-database. Defaults to the \code{current_table} when \code{table_name} is
-omitted, so it fits naturally at any point in a pipe.
+Prints and returns the first \code{n} rows of a table in the \code{.mod.db}
+database. Defaults to \code{mod_db$current_table} when \code{table_name} is
+omitted.
 }
 \examples{
 \dontrun{
-# Peek at the current table mid-pipe
-mod_db <- make_mod_db(ch3_files, "my_db") |>
-  summarize_mod_windows() |>
-  peek_mod_table()
+# Print and capture a preview
+preview <- peek_mod_table(mod_db, "mod_windows", n = 10)
 
-# Peek at a specific table
-peek_mod_table(mod_db, "mod_windows", n = 10)
-
-# Capture the preview
-mod_db  <- peek_mod_table(mod_db)
-preview <- get_mod_result(mod_db)
+# Use current_table default
+preview <- peek_mod_table(mod_db)
 }
 
 }

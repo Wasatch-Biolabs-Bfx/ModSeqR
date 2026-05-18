@@ -80,10 +80,9 @@ ModSeqR uses verb prefixes to signal what a function returns:
 | Prefix | Returns | Pipe-compatible? | Examples |
 |---|---|---|---|
 | `make_*`, `summarize_*`, `calc_*`, `plot_*`, `filter_*`, `collapse_*`, `trim_*`, `classify_*`, `run_*`, `export_*`, `rename_*` | `invisible(mod_db)` | Yes | `summarize_mod_windows()`, `calc_mod_diff()` |
-| `get_*` | A data object (tibble, list, vector) | No — ends the pipe | `get_mod_table()`, `get_mod_dbinfo()` |
-| `peek_*` | `invisible(mod_db)` | Yes — prints and stores in `last_result` | `peek_mod_table()` |
+| `get_*`, `peek_*` | A data object (tibble, list, vector) | No — ends the pipe | `get_mod_table()`, `peek_mod_table()` |
 
-The key rule: **`get_*` functions return data, not `mod_db`.** They are exit points — use them to pull data out of the database at the end of a workflow, not as intermediate pipe steps.
+The key rule: **`get_*` and `peek_*` functions return data, not `mod_db`.** They are exit points — use them to pull data out of the database at the end of a workflow, not as intermediate pipe steps.
 
 ```{r eval=FALSE}
 # Pipeline steps return mod_db and can be chained
