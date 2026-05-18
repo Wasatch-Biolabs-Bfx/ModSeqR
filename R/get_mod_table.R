@@ -7,17 +7,17 @@
 #' @param max_rows The maximum amount of rows wanted for calculation. This argument can help analysis run faster when there is a lot of data.
 #'
 #' @details
-#' The function establishes a connection to the DuckDB database using \code{.helper_connectDB}.
-#' It retrieves the specified table as a tibble. If an error occurs during table retrieval, 
-#' a message with the error is displayed. The database connection is closed after retrieving 
-#' the data, regardless of success or failure.
+#' The function establishes a connection to the DuckDB database using \code{.modhelper_connectDB}.
+#' It retrieves the specified table as a tibble. If the table does not exist,
+#' a message is printed and an empty tibble is returned.
 #'
 #' @return A tibble containing the collected data from the specified database table. If the table retrieval fails, an empty tibble is returned.
 #'
 #' @examples
-#' # Assuming mod_db is a valid database object and "positions" is a table in the database
-#' mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
-#' positions = get_mod_table(mod_db, "positions")
+#' \dontrun{
+#' mod_db <- "my_data.mod.db"
+#' positions <- get_mod_table(mod_db, "positions")
+#' }
 #'
 #' @importFrom DBI dbConnect dbDisconnect dbListTables
 #' @importFrom duckdb duckdb

@@ -10,7 +10,7 @@
 #' @param ... Filtering expressions (e.g., `score > 0.5`, `gene_id == "abc"`). These are unquoted expressions
 #'   passed directly to `dplyr::filter()`.
 #'
-#' @return Invisibly returns the path to the DuckDB file (invisibly).
+#' @return Invisibly returns the updated \code{"mod_db"} object.
 #'
 #' @examples
 #' \dontrun{

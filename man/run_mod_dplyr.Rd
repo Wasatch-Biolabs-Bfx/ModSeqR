@@ -27,7 +27,7 @@ a data frame in R. If `"compute"`, the result is stored as a new table in the da
 with the result of `expr(tbl_ref)`.}
 }
 \value{
-If `mode = "collect"`, returns a data frame. If `mode = "compute"`, returns `NULL` invisibly.
+If `mode = "collect"`, returns a data frame. If `mode = "compute"`, invisibly returns the \code{"mod_db"} object (connection closed).
 }
 \description{
 Connects to a DuckDB database, evaluates a user-supplied expression on a specified table,

@@ -6,7 +6,8 @@
 #' @param mod_db Path to the DuckDB database file (e.g., `"my_data.mod.db"`).
 #' @param table_name Name of the table whose column names are to be retrieved.
 #'
-#' @return A character vector of column names from the specified table.
+#' @return Invisibly returns the \code{"mod_db"} object (connection closed on return).
+#'   Column names are printed to the console.
 #'
 #' @examples
 #' \dontrun{

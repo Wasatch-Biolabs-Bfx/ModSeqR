@@ -12,7 +12,8 @@ get_mod_cols(mod_db, table_name)
 \item{table_name}{Name of the table whose column names are to be retrieved.}
 }
 \value{
-A character vector of column names from the specified table.
+Invisibly returns the \code{"mod_db"} object (connection closed on return).
+  Column names are printed to the console.
 }
 \description{
 Returns a character vector of column names from a specified table

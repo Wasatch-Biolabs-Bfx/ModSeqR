@@ -7,11 +7,9 @@
 #' @param table_name Name of the table to summarize.
 #'
 #' @examples
-#' # Specify the path to the database
-#' mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
-#'
-#' # Get information about the 'calls' table
-#' get_mod_tableinfo(mod_db = mod_db, table_name = "calls")
+#' \dontrun{
+#' get_mod_tableinfo(mod_db = "my_data.mod.db", table_name = "calls")
+#' }
 #'
 #' @return Invisibly returns the closed `mod_db` object after summarizing the specified table.
 #'

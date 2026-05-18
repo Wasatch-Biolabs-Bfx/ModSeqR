@@ -34,8 +34,9 @@ significant windows for merging (default: 1000).}
 for inclusion in the analysis (default: 0.5).}
 }
 \value{
-This function does not return an object; it creates or replaces the
-        `collapsed_windows` table in the database.
+Invisibly returns the updated \code{"mod_db"} object with
+  \code{current_table} set to \code{table_name}. The collapsed results are
+  written to \code{table_name} inside the database.
 }
 \description{
 This function collapses significant windows in a methylation dataset by merging

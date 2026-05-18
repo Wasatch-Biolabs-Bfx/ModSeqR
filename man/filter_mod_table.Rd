@@ -17,7 +17,7 @@ filter_mod_table(mod_db, input_table, output_table, ...)
 passed directly to `dplyr::filter()`.}
 }
 \value{
-Invisibly returns the path to the DuckDB file (invisibly).
+Invisibly returns the updated \code{"mod_db"} object.
 }
 \description{
 Applies filter conditions to a table in a DuckDB database and saves the result

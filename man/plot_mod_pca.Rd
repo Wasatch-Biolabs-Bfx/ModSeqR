@@ -7,7 +7,7 @@
 plot_mod_pca(
   mod_db,
   call_type = "positions",
-  value = m_frac,
+  value = mh_frac,
   save_path = NULL,
   max_rows = NULL
 )
@@ -19,7 +19,7 @@ plot_mod_pca(
 Default is "positions".}
 
 \item{value}{Column to use as the measurement for PCA (e.g., `mh_frac`, `m_frac`). Accepts a bare column
-name or a single string. Default: `m_frac`.}
+name or a single string. Default: `mh_frac`.}
 
 \item{save_path}{Path to save the plot (e.g., .pdf or .png). If NULL, the plot is not saved.}
 
@@ -40,12 +40,12 @@ features, then runs PCA on samples (transpose before `prcomp`).
 }
 \examples{
 \dontrun{
-# Default (m_frac)
+# Default (mh_frac)
  plot_mod_pca(mod_db)
- # Use mh_frac instead
- plot_mod_pca(mod_db, call_type = "regions", value = mh_frac)
+ # Use m_frac instead
+ plot_mod_pca(mod_db, call_type = "regions", value = m_frac)
  # Or as a string
- plot_mod_pca(mod_db, call_type = "windows", value = "mh_frac")
+ plot_mod_pca(mod_db, call_type = "windows", value = "m_frac")
 }
 
 }

@@ -18,8 +18,7 @@
 #'   Default is NULL, in which case:
 #'   \itemize{
 #'     \item "wilcox" if both groups have >= 5 samples
-#'     \item "beta_bin" if both groups have >= 2 samples (accounts for overdispersion)
-#'     \item "fast_fisher" if either group has only 1 sample
+#'     \item "fast_fisher" if either group has fewer than 5 samples
 #'   }
 #' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
 #' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic

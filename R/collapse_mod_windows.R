@@ -18,8 +18,9 @@
 #' @param min_diff Numeric. The minimum absolute methylation difference required
 #'        for inclusion in the analysis (default: 0.5).
 #'
-#' @return This function does not return an object; it creates or replaces the
-#'         `collapsed_windows` table in the database.
+#' @return Invisibly returns the updated \code{"mod_db"} object with
+#'   \code{current_table} set to \code{table_name}. The collapsed results are
+#'   written to \code{table_name} inside the database.
 #'
 #' @details
 #' The function performs the following steps:

@@ -12,7 +12,7 @@
 #' @param output_table Required if `mode = "compute"`. Name of the output table to create or overwrite
 #'   with the result of `expr(tbl_ref)`.
 #'
-#' @return If `mode = "collect"`, returns a data frame. If `mode = "compute"`, returns `NULL` invisibly.
+#' @return If `mode = "collect"`, returns a data frame. If `mode = "compute"`, invisibly returns the \code{"mod_db"} object (connection closed).
 #'
 #' @examples
 #' \dontrun{

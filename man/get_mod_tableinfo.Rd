@@ -19,10 +19,8 @@ Provides a summary of a specified table within a `.mod.db` database, including t
 sample-level record counts (if applicable), and column names.
 }
 \examples{
-# Specify the path to the database
-mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
-
-# Get information about the 'calls' table
-get_mod_tableinfo(mod_db = mod_db, table_name = "calls")
+\dontrun{
+get_mod_tableinfo(mod_db = "my_data.mod.db", table_name = "calls")
+}
 
 }

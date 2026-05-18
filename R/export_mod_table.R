@@ -1,23 +1,21 @@
-#' Export Tables from the mod Database
+#' Export a Table from the mod Database to CSV
 #'
-#' This function exports specified tables from the mod database to CSV files. Can export one or multiple tables as a time. It checks whether each table exists in the database 
-#' before exporting, and provides informative messages for any missing tables. The output CSV files are saved at the specified path.
+#' Exports a single table from a mod database to a CSV file using DuckDB's
+#' native \code{COPY} command (efficient; does not pull data into R).
 #'
-#' @param mod_db A string. The path to the database containing ch3 files from nanopore data.
-#' @param table A character vector specifying the table to be exported from the database. Default is "positions".
-#' @param out_path A string. The path to the directory where the CSV files will be saved. The file will automatically be named "{table name}.csv". 
+#' @param mod_db A string. The path to the \code{.mod.db} DuckDB database.
+#' @param table A string specifying the table to export from the database.
+#'   Default is \code{"positions"}.
+#' @param out_path A string. Either a directory path (the file is named
+#'   \code{<table>.csv} automatically) or a full \code{.csv} file path.
 #'
 #' @details
-#' The function connects to the specified database and iterates through the list of table names provided in the `tables` parameter. 
-#' For each table that exists in the database, it reads the table into R and writes it as a CSV file to the location specified by `out_path`. 
-#' If a table does not exist in the database, a message is printed indicating this.
+#' The function connects to the database, checks that \code{table} exists,
+#' and runs a \code{COPY ... TO} statement entirely inside DuckDB.
+#' If \code{out_path} does not end in \code{.csv}, the table name is appended
+#' as the filename.
 #'
-#' In case of any error during the execution, a custom error message is displayed. The function ensures that the database connection 
-#' is closed safely using the `finally` block.
-#'
-#' @note The function assumes that the tables specified in `tables` exist in the database and can be accessed via the `DBI` package.
-#' 
-#' @return NULL. The function writes the specified tables to CSV files.
+#' @return Invisibly returns the \code{"mod_db"} object (connection closed on return).
 #' 
 #' @importFrom DBI dbExistsTable dbQuoteIdentifier dbQuoteString dbExecute
 #'

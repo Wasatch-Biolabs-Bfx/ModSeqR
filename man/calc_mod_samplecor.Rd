@@ -7,7 +7,7 @@
 calc_mod_samplecor(
   mod_db,
   call_type = c("positions"),
-  value = m_frac,
+  value = mh_frac,
   agg_fun = mean,
   plot = TRUE,
   save_path = NULL,
