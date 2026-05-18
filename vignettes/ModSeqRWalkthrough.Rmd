@@ -73,9 +73,34 @@ mod_db <- make_mod_db(ch3_files, "my_db") |>
   calc_mod_diff(cases = c("A","B"), controls = c("C","D"))
 ```
 
+## Function naming conventions
+
+ModSeqR uses verb prefixes to signal what a function returns:
+
+| Prefix | Returns | Pipe-compatible? | Examples |
+|---|---|---|---|
+| `make_*`, `summarize_*`, `calc_*`, `plot_*`, `filter_*`, `collapse_*`, `trim_*`, `classify_*`, `run_*`, `export_*`, `rename_*` | `invisible(mod_db)` | Yes | `summarize_mod_windows()`, `calc_mod_diff()` |
+| `get_*` | A data object (tibble, list, vector) | No — ends the pipe | `get_mod_table()`, `get_mod_dbinfo()` |
+| `peek_*` | `invisible(mod_db)` | Yes — prints and stores in `last_result` | `peek_mod_table()` |
+
+The key rule: **`get_*` functions return data, not `mod_db`.** They are exit points — use them to pull data out of the database at the end of a workflow, not as intermediate pipe steps.
+
+```{r eval=FALSE}
+# Pipeline steps return mod_db and can be chained
+mod_db <- make_mod_db(ch3_files, "my_db") |>
+  summarize_mod_windows()                 |>
+  calc_mod_diff(cases = c("A","B"), controls = c("C","D"))
+
+# get_* functions exit the pipe and return data
+result_df <- get_mod_table(mod_db, mod_db$current_table)
+tables    <- get_mod_tablelist(mod_db)   # character vector
+info      <- get_mod_dbinfo(mod_db)      # named list
+cols      <- get_mod_cols(mod_db, "mod_windows")  # character vector
+```
+
 ## Capturing in-memory results with `get_mod_result()`
 
-Some functions compute a result that is printed to the console but not otherwise accessible.
+Some pipeline functions compute a result that is printed to the console but not otherwise accessible.
 These functions store the result in `mod_db$last_result` so you can retrieve it after the pipe
 without breaking the chain:
 
