@@ -6,18 +6,16 @@
 #'
 #' @param mod_db A \code{"mod_db"} object or a character path to a \code{.mod.db} file.
 #'
-#' @return Invisibly returns \code{mod_db} with \code{last_result} set to a named
-#'   list with elements \code{tables} (character vector of table names),
-#'   \code{sample_names} (character vector), and \code{num_samples} (integer).
-#'   Retrieve it with \code{get_mod_result(mod_db)} or \code{mod_db$last_result}.
+#' @return Invisibly returns a named list with elements \code{tables} (character
+#'   vector of table names), \code{sample_names} (character vector), and
+#'   \code{num_samples} (integer).
 #'
 #' @examples
 #' \dontrun{
 #' get_mod_dbinfo("my_data.mod.db")
 #'
 #' # Capture stats programmatically
-#' mod_db <- get_mod_dbinfo(mod_db)
-#' info   <- get_mod_result(mod_db)   # list(tables, sample_names, num_samples)
+#' info <- get_mod_dbinfo("my_data.mod.db")   # list(tables, sample_names, num_samples)
 #' }
 #'
 #' @importFrom DBI dbConnect dbDisconnect dbGetQuery dbListTables
@@ -83,7 +81,6 @@ get_mod_dbinfo <- function(mod_db)
     num_samples = length(sample_names)
   )
   
-  mod_db$last_result <- stats
-  mod_db <- .modhelper_closeDB(mod_db)
-  invisible(mod_db)
+  .modhelper_closeDB(mod_db)
+  invisible(stats)
 }

@@ -12,7 +12,9 @@ get_mod_tableinfo(mod_db, table_name)
 \item{table_name}{Character. Name of the table to summarize.}
 }
 \value{
-Invisibly returns \code{mod_db} after printing the table summary.
+Invisibly returns a named list with elements \code{table} (table name),
+  \code{num_records} (integer), \code{sample_counts} (data frame or \code{NULL}),
+  and \code{columns} (character vector of column names).
 }
 \description{
 Prints a summary of a specified table in a \code{.mod.db} database, including
@@ -22,6 +24,11 @@ exists), and column names.
 \examples{
 \dontrun{
 get_mod_tableinfo("my_data.mod.db", table_name = "mod_windows")
+
+# Capture programmatically
+info <- get_mod_tableinfo(mod_db, "mod_windows")
+info$num_records
+info$columns
 }
 
 }

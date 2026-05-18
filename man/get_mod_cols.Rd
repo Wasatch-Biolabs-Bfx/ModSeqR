@@ -7,21 +7,21 @@
 get_mod_cols(mod_db, table_name)
 }
 \arguments{
-\item{mod_db}{Path to the DuckDB database file (e.g., `"my_data.mod.db"`).}
+\item{mod_db}{A \code{"mod_db"} object or a character path to a \code{.mod.db} file.}
 
-\item{table_name}{Name of the table whose column names are to be retrieved.}
+\item{table_name}{Character. Name of the table whose column names are to be retrieved.}
 }
 \value{
-Invisibly returns the \code{"mod_db"} object (connection closed on return).
-  Column names are printed to the console.
+Invisibly returns a character vector of column names. Also prints the
+  names to the console.
 }
 \description{
 Returns a character vector of column names from a specified table
-in a DuckDB database file.
+in a \code{.mod.db} database.
 }
 \examples{
 \dontrun{
-get_mod_cols("my_data.mod.db", "windows")
+cols <- get_mod_cols("my_data.mod.db", "mod_windows")
 }
 
 }

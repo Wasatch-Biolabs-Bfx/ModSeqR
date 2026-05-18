@@ -10,10 +10,9 @@ get_mod_dbinfo(mod_db)
 \item{mod_db}{A \code{"mod_db"} object or a character path to a \code{.mod.db} file.}
 }
 \value{
-Invisibly returns \code{mod_db} with \code{last_result} set to a named
-  list with elements \code{tables} (character vector of table names),
-  \code{sample_names} (character vector), and \code{num_samples} (integer).
-  Retrieve it with \code{get_mod_result(mod_db)} or \code{mod_db$last_result}.
+Invisibly returns a named list with elements \code{tables} (character
+  vector of table names), \code{sample_names} (character vector), and
+  \code{num_samples} (integer).
 }
 \description{
 Prints a summary of the mod database, including file size, table names, and
@@ -25,8 +24,7 @@ so the information is accessible programmatically after a pipe step.
 get_mod_dbinfo("my_data.mod.db")
 
 # Capture stats programmatically
-mod_db <- get_mod_dbinfo(mod_db)
-info   <- get_mod_result(mod_db)   # list(tables, sample_names, num_samples)
+info <- get_mod_dbinfo("my_data.mod.db")   # list(tables, sample_names, num_samples)
 }
 
 }
