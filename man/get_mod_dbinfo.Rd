@@ -7,19 +7,26 @@
 get_mod_dbinfo(mod_db)
 }
 \arguments{
-\item{mod_db}{Path to the `.mod.db` file or a `mod_db` object.}
+\item{mod_db}{A \code{"mod_db"} object or a character path to a \code{.mod.db} file.}
 }
 \value{
-Invisibly returns a list of stats from the database.
+Invisibly returns \code{mod_db} with \code{last_result} set to a named
+  list with elements \code{tables} (character vector of table names),
+  \code{sample_names} (character vector), and \code{num_samples} (integer).
+  Retrieve it with \code{get_mod_result(mod_db)} or \code{mod_db$last_result}.
 }
 \description{
-Prints out a summary of the mod database, including size, tables, and unique sample names.
+Prints a summary of the mod database, including file size, table names, and
+unique sample names. Also stores a stats list in \code{mod_db$last_result}
+so the information is accessible programmatically after a pipe step.
 }
 \examples{
- # Specify the path to the database
- mod_db <- system.file("my_data.mod.db", package = "MethylSeqR")
- 
- # Get database statistics
- get_mod_dbinfo(mod_db = mod_db)
+\dontrun{
+get_mod_dbinfo("my_data.mod.db")
+
+# Capture stats programmatically
+mod_db <- get_mod_dbinfo(mod_db)
+info   <- get_mod_result(mod_db)   # list(tables, sample_names, num_samples)
+}
 
 }

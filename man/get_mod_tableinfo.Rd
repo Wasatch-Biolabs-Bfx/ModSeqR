@@ -7,20 +7,21 @@
 get_mod_tableinfo(mod_db, table_name)
 }
 \arguments{
-\item{mod_db}{Path to the `.mod.db` file or a `mod_db` object.}
+\item{mod_db}{A \code{"mod_db"} object or a character path to a \code{.mod.db} file.}
 
-\item{table_name}{Name of the table to summarize.}
+\item{table_name}{Character. Name of the table to summarize.}
 }
 \value{
-Invisibly returns the closed `mod_db` object after summarizing the specified table.
+Invisibly returns \code{mod_db} after printing the table summary.
 }
 \description{
-Provides a summary of a specified table within a `.mod.db` database, including total number of records,
-sample-level record counts (if applicable), and column names.
+Prints a summary of a specified table in a \code{.mod.db} database, including
+total record count, per-sample record counts (when a \code{sample_name} column
+exists), and column names.
 }
 \examples{
 \dontrun{
-get_mod_tableinfo(mod_db = "my_data.mod.db", table_name = "calls")
+get_mod_tableinfo("my_data.mod.db", table_name = "mod_windows")
 }
 
 }

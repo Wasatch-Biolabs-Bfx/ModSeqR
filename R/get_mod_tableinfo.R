@@ -1,17 +1,18 @@
 #' Get Table Information from mod Database
 #'
-#' Provides a summary of a specified table within a `.mod.db` database, including total number of records,
-#' sample-level record counts (if applicable), and column names.
+#' Prints a summary of a specified table in a \code{.mod.db} database, including
+#' total record count, per-sample record counts (when a \code{sample_name} column
+#' exists), and column names.
 #'
-#' @param mod_db Path to the `.mod.db` file or a `mod_db` object.
-#' @param table_name Name of the table to summarize.
+#' @param mod_db A \code{"mod_db"} object or a character path to a \code{.mod.db} file.
+#' @param table_name Character. Name of the table to summarize.
+#'
+#' @return Invisibly returns \code{mod_db} after printing the table summary.
 #'
 #' @examples
 #' \dontrun{
-#' get_mod_tableinfo(mod_db = "my_data.mod.db", table_name = "calls")
+#' get_mod_tableinfo("my_data.mod.db", table_name = "mod_windows")
 #' }
-#'
-#' @return Invisibly returns the closed `mod_db` object after summarizing the specified table.
 #'
 #' @importFrom DBI dbConnect dbDisconnect dbGetQuery dbListTables dbListFields
 #'
