@@ -37,6 +37,72 @@ If not delivered through Wasatch Biolabs, `.ch3` files can be built using this p
 It's most helpful to store all the sample CH3 files from a run you want to 
 analyze within a single directory to get started. 
 
+# The mod_db object and piping
+
+Most ModSeqR functions return an object of class `mod_db` — a lightweight list that holds four
+pieces of state:
+
+| Slot | Contents |
+|---|---|
+| `db_file` | Path to the `.mod.db` DuckDB file on disk |
+| `current_table` | Name of the most recently written table (updated automatically) |
+| `con` | Active DBI connection while a function runs; `"none"` when closed |
+| `last_result` | The most recently computed in-memory result (see below) |
+
+Typing a `mod_db` variable — or calling `print()` on it — shows all four slots:
+
+```{r eval=FALSE}
+print(mod_db)
+# <mod_db object>
+# Database file:
+#   my_data.mod.db
+# Current table:
+#   mod_diff_windows
+# Connection:
+#   NULL
+# Last result: <matrix> [6 x 6]
+```
+
+## Piping
+
+Because every pipeline function returns `invisible(mod_db)`, you can chain them with `|>`:
+
+```{r eval=FALSE}
+mod_db <- make_mod_db(ch3_files, "my_db") |>
+  summarize_mod_windows()                 |>
+  calc_mod_diff(cases = c("A","B"), controls = c("C","D"))
+```
+
+## Capturing in-memory results with `get_mod_result()`
+
+Some functions compute a result that is printed to the console but not otherwise accessible.
+These functions store the result in `mod_db$last_result` so you can retrieve it after the pipe
+without breaking the chain:
+
+| Function | What `get_mod_result()` returns |
+|---|---|
+| `calc_mod_samplecor()` | Numeric correlation `matrix` |
+| `plot_mod_pca()` | `list(pca = <prcomp object>, scores = <data frame>)` |
+| `calc_mod_diff()` | `data.frame` preview (head) of the result table |
+
+```{r eval=FALSE}
+# Correlation matrix
+mod_db  <- calc_mod_samplecor(mod_db, call_type = "windows")
+cor_mat <- get_mod_result(mod_db)      # numeric matrix
+corrplot::corrplot(cor_mat)            # pass to any downstream function
+
+# PCA
+mod_db    <- plot_mod_pca(mod_db)
+pca_list  <- get_mod_result(mod_db)
+pca_list$scores                        # data frame of PC coordinates per sample
+biplot(pca_list$pca)                   # use the prcomp object directly
+
+# Differential methylation preview
+mod_db  <- calc_mod_diff(mod_db, cases = ..., controls = ...)
+preview <- get_mod_result(mod_db)      # head() of the result table
+full_df <- get_mod_table(mod_db, mod_db$current_table)  # full table
+```
+
 # Creating `.ch3` files from a TSV (optional)
 
 If your methylation calls are in a delimited text file (e.g., from a `modkit extract-calls` TSV),
@@ -218,6 +284,30 @@ Sometimes you just want to peek at what’s in your database, check a table’s
 shape, or quickly fix sample names. The helpers below are lightweight wrappers
 around DuckDB/DBI that do exactly that.
 
+## get_mod_stats()
+
+Before or after building a database, you can compute summary statistics directly
+from a `.ch3` file using `get_mod_stats()`. This operates on the raw Parquet file
+(not the database) and reports total calls, unique reads, mean read length, CpG
+coverage at several minimum-read thresholds, flag distributions, and high-confidence
+call rates.
+
+Results are printed to the console. Because the function returns the list
+*invisibly*, you can also capture it for programmatic use:
+
+```{r eval=FALSE}
+# Print stats to console
+get_mod_stats("sample1.ch3")
+
+# Capture for downstream use
+stats <- get_mod_stats("sample1.ch3")
+stats$num_reads
+stats$cpg_coverage
+
+# Write to a log file instead of the console
+get_mod_stats("sample1.ch3", log_file = "sample1_stats.log", silently = TRUE)
+```
+
 ## get_mod_dbinfo()
 
 Prints a quick summary of the database: on-disk size, a list of tables, and the
@@ -342,11 +432,9 @@ If `calc_type` is left as `NULL` (the default), the function automatically choos
 
 * **5 or more samples in both groups** → `"wilcox"` — enough samples for a non-parametric rank-based test.
 
-* **2–4 samples in either group** → `"beta_bin"` — models biological variability (overdispersion) across replicates while respecting per-sample coverage differences.
+* **Fewer than 5 samples in either group** → `"fast_fisher"` — directly compares aggregated counts.
 
-* **1 sample in either group** → `"fast_fisher"` — no replicate information available; directly compares aggregated counts.
-
-A message is printed indicating which method was chosen.
+A message is printed indicating which method was chosen. You can always override the automatic selection by explicitly setting `calc_type` yourself — for example, to use `"beta_bin"` with 2–4 replicates per group (see *Beta-binomial test details* below).
 
 ### Why this behavior?
 
@@ -354,9 +442,7 @@ The choice of statistical test depends on how many biological replicates are ava
 
 * **With many replicates (≥ 5 per group)**, the Wilcoxon rank-sum test works well. It compares the distribution of methylation fractions between groups without assuming a specific distribution shape. With enough samples, rank-based tests have good power and produce granular p-values.
 
-* **With few replicates (2–4 per group)**, the beta-binomial test is preferred. The Wilcoxon test has limited power with so few values per group (e.g., with 3 vs 3 samples, the smallest possible Wilcoxon p-value is 0.05, which cannot survive multiple testing correction). The pooled Fisher test ignores between-sample variability entirely, treating all replicates as one large observation (pseudo-replication), which leads to inflated significance. The beta-binomial solves both problems: it models each sample's count data individually, accounts for varying coverage across samples, and explicitly estimates biological variability (overdispersion) between replicates through a likelihood-ratio test.
-
-* **With no replicates (1 vs 1)**, the fast Fisher's exact test is the appropriate choice. There is no between-sample variation to model, and the test directly compares modification counts in a 2×2 contingency table.
+* **With no or few replicates (< 5 per group)**, the fast Fisher's exact test is used by default. There is limited between-sample variation to model, and the test directly compares modification counts in a 2×2 contingency table. For 2–4 replicates where biological overdispersion is a concern, consider explicitly setting `calc_type = "beta_bin"` (see below).
 
 ### Beta-binomial test details
 
@@ -382,27 +468,25 @@ Key advantages of the beta-binomial:
 * Use `threads` and `memory_limit` parameters to control resource usage
 
 ```{r eval=FALSE}
-# Auto-select: with 3 vs 3 samples, beta_bin is chosen automatically
+# Auto-select: >= 5 per group → wilcox
 calc_mod_diff(mod_db,
               call_type = "windows",
-              cases = c("case1", "case2", "case3"),
+              cases    = c("case1", "case2", "case3", "case4", "case5"),
+              controls = c("ctrl1", "ctrl2", "ctrl3", "ctrl4", "ctrl5"))
+
+# Auto-select: < 5 per group → fast_fisher
+calc_mod_diff(mod_db,
+              call_type = "windows",
+              cases    = c("case1", "case2", "case3"),
               controls = c("ctrl1", "ctrl2", "ctrl3"))
 
-# Explicitly request beta-binomial
+# Explicitly request beta-binomial for 2–4 replicates
 calc_mod_diff(mod_db,
               call_type = "windows",
-              cases = c("case1", "case2"),
-              controls = c("ctrl1", "ctrl2"),
+              cases     = c("case1", "case2", "case3"),
+              controls  = c("ctrl1", "ctrl2", "ctrl3"),
               calc_type = "beta_bin")
-
-# 1 vs 1: fast_fisher is chosen automatically
-calc_mod_diff(mod_db,
-              call_type = "windows",
-              cases = "tumor",
-              controls = "normal")
 ```
-
-You can always override the automatic selection by explicitly setting `calc_type` yourself.
 
 ### Site coverage filtering with `min_sites`
 
@@ -512,29 +596,35 @@ plot_mod_modfrac(mod_db = mod_db, call_type = "positions")
 ``` 
 
 ## calc_mod_samplecor
-This function calculates and optionally plots a correlation matrix for 
-methylation or other modification fraction data from genomic positions. 
-It can handle both position-based and region-based calls and supports 
+This function calculates and optionally plots a correlation matrix for
+methylation or other modification fraction data from genomic positions.
+It can handle both position-based and region-based calls and supports
 visualization using ggplot2.
 
+The correlation matrix is stored in `mod_db$last_result` and can be retrieved
+with `get_mod_result()` after the call.
+
 ```{r eval=FALSE}
-# Specify the path to the database
-mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
- 
-# Run the correlation matrix function using the 'positions' call type and plot the results
-calc_mod_samplecor(mod_db = mod_db, call_type = "positions", plot = TRUE)
-``` 
+mod_db  <- calc_mod_samplecor(mod_db = mod_db, call_type = "positions", plot = TRUE)
+
+# Capture the correlation matrix for downstream use
+cor_mat <- get_mod_result(mod_db)
+```
 
 ## plot_mod_pca
-This function performs Principal Component Analysis (PCA) on methylation data 
-retrieved from the database.It aggregates the methylation fraction data 
+This function performs Principal Component Analysis (PCA) on methylation data
+retrieved from the database. It aggregates the methylation fraction data
 based on the specified call type and prepares it for PCA analysis.
+
+The PCA result is stored in `mod_db$last_result` as a list with elements `pca`
+(the `prcomp` object) and `scores` (a data frame of PC coordinates per sample).
+
 ```{r eval=FALSE}
-# Specify the path to the database
-mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
- 
-# Calculate PCA
-plot_mod_pca(mod_db)
+mod_db   <- plot_mod_pca(mod_db)
+
+# Capture the PCA result for downstream use
+pca_list <- get_mod_result(mod_db)
+pca_list$scores   # PC coordinates per sample
 ``` 
 
 

@@ -17,20 +17,22 @@
 #' @param silently Logical. If \code{TRUE}, suppresses console output. 
 #' Default: \code{FALSE}.
 #'
-#' @return A list containing:
+#' @return Invisibly returns a list with elements:
 #' \describe{
 #'   \item{\code{num_calls}}{Total number of modification calls in the file.}
 #'   \item{\code{num_reads}}{Total number of unique reads in the file.}
-#'   \item{\code{cpg_coverage}}{A matrix with CpG coverage counts at different 
+#'   \item{\code{cpg_coverage}}{A matrix with CpG coverage counts at different
 #'   \code{min_reads} thresholds.}
-#'   \item{\code{flag_counts}}{A data frame with the count and percentage of 
+#'   \item{\code{flag_counts}}{A data frame with the count and percentage of
 #'   calls per flag value.}
-#'   \item{\code{high_conf_calls}}{A data frame with the count and percentage 
+#'   \item{\code{high_conf_calls}}{A data frame with the count and percentage
 #'   of calls with modification probability above \code{call_prob_threshold}.}
-#'   \item{\code{high_qual_calls}}{A data frame with the count and percentage 
+#'   \item{\code{high_qual_calls}}{A data frame with the count and percentage
 #'   of calls with base quality above \code{base_qual_threshold}.}
 #'   \item{\code{avg_read_length}}{The mean read length.}
 #' }
+#' The list is returned invisibly so it does not auto-print; assign it to capture
+#' the values programmatically: \code{stats <- get_mod_stats("file.ch3")}.
 #'
 #' @details 
 #' The function reads the Ch3 file as a dataset and computes basic statistics 

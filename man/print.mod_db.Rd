@@ -2,35 +2,42 @@
 % Please edit documentation in R/modhelper_print.R
 \name{print.mod_db}
 \alias{print.mod_db}
-\title{Helper Function to Print Database Tables}
+\title{Print a mod_db Object}
 \usage{
 \method{print}{mod_db}(mod_db)
 }
 \arguments{
-\item{mod_db}{A character string or an object of class mod_db representing the DuckDB database to connect to.}
-
-\item{tables}{A character vector specifying the names of tables to print. Defaults to the last table given, which 
-will print all tables. If specific table names are provided, it will only print those (ex. "positions", "regions", "meth_diff").
-If tables ="all", the function will print out all table sin the database...}
+\item{mod_db}{An object of class \code{"mod_db"}.}
 }
 \value{
-None. This function is called for its side effects (printing information).
+Called for its side effects (printing). Invisibly returns \code{mod_db}.
 }
 \description{
-This function connects to a DuckDB database and prints the names of all tables currently in the 
-database. It can also print the first few rows of specific tables.
+S3 print method for objects of class \code{"mod_db"}. Displays the database
+file path, the current active table, the connection status, and — if a
+result has been stored — the class and dimensions of \code{last_result}.
 }
 \details{
-The function establishes a connection to the database, retrieves the list of tables, and prints their 
-names. If the specified table exists, it also prints the first few rows of that table. If a specified 
-table does not exist, a message is printed to indicate this.
+Output example:
+\preformatted{
+<mod_db object>
+Database file:
+  my_data.mod.db
+Current table:
+  mod_diff_windows
+Connection:
+  NULL
+Last result: <matrix> [6 x 6]
+}
+
+\code{last_result} is set by functions that compute an in-memory result
+(\code{calc_mod_samplecor}, \code{plot_mod_pca}, \code{calc_mod_diff}).
+Retrieve it with \code{get_mod_result(mod_db)} or \code{mod_db$last_result}.
 }
 \examples{
-# Specify the path to the database
- mod_files <- system.file("test_data", package = "MethylSeqR")
- mod_db <- tempfile("example_db")
- 
- # Print out tables in the database
- make_pos_db(mod_files, mod_db) |> print()
- 
+\dontrun{
+mod_db <- calc_mod_samplecor(mod_db)
+print(mod_db)   # shows Last result: <matrix> [N x N]
+}
+
 }
