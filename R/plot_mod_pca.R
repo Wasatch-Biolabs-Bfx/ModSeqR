@@ -17,7 +17,10 @@
 #' to a features × samples matrix (features are regions/windows/positions; columns are samples), scales
 #' features, then runs PCA on samples (transpose before `prcomp`).
 #'
-#' @return Produces a PCA plot (PC1 vs PC2) and prints a PCA summary and the PCA scores.
+#' @return Invisibly returns the \code{"mod_db"} object with \code{last_result} set to a named
+#'   list with elements \code{pca} (the \code{prcomp} object) and \code{scores} (a data frame of
+#'   PC coordinates per sample). Retrieve with \code{get_mod_result(mod_db)}. Also prints the PCA
+#'   summary, scores table, and a PC1 vs PC2 plot.
 #'
 #' @examples
 #' \dontrun{
@@ -141,7 +144,8 @@ plot_mod_pca <- function(mod_db,
   
   end_time <- Sys.time()
   message("Time elapsed: ", end_time - start_time, "\n")
-  
+
+  mod_db$last_result <- list(pca = pca_result, scores = pca_data)
   .modhelper_closeDB(mod_db)
   invisible(mod_db)
 }

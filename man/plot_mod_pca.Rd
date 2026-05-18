@@ -26,7 +26,10 @@ name or a single string. Default: `mh_frac`.}
 \item{max_rows}{Optional maximum number of rows to sample from the table (for speed on large datasets).}
 }
 \value{
-Produces a PCA plot (PC1 vs PC2) and prints a PCA summary and the PCA scores.
+Invisibly returns the \code{"mod_db"} object with \code{last_result} set to a named
+  list with elements \code{pca} (the \code{prcomp} object) and \code{scores} (a data frame of
+  PC coordinates per sample). Retrieve with \code{get_mod_result(mod_db)}. Also prints the PCA
+  summary, scores table, and a PC1 vs PC2 plot.
 }
 \description{
 This function performs Principal Component Analysis (PCA) on methylation (or other) data

@@ -39,8 +39,9 @@ Accepts a bare column name or a string. Default: mh_frac.}
 \item{max_rows}{Optional integer to randomly sample rows from the table for faster runs.}
 }
 \value{
-Invisibly returns the connection wrapper; prints the correlation matrix and (optionally)
-  a ggplot heatmap.
+Invisibly returns the \code{"mod_db"} object with \code{last_result} set to the
+  numeric correlation \code{matrix}. Retrieve it with \code{get_mod_result(mod_db)} or
+  \code{mod_db$last_result}. Also prints the matrix and (optionally) a ggplot heatmap.
 }
 \description{
 This function calculates and optionally plots a correlation matrix for methylation or other

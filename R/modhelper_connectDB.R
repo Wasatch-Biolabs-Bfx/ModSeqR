@@ -32,7 +32,7 @@
       }
     }
     # make mod_object
-    database <- list(db_file = mod_db, current_table = NULL, con = NULL)
+    database <- list(db_file = mod_db, current_table = NULL, con = NULL, last_result = NULL)
     class(database) <- "mod_db"
     
     #add in the connection

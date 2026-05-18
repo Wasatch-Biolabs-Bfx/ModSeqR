@@ -39,7 +39,10 @@
 #' "meth_diff" table. Resource pragmas (\code{temp_directory}, \code{threads},
 #' \code{memory_limit}) are set via internal heuristics unless overridden.
 #'
-#' @return A list containing the updated "mod_db" object with the latest tables in the database, including "meth_diff".
+#' @return Invisibly returns the updated \code{"mod_db"} object with \code{current_table} set to
+#'   the output table name and \code{last_result} set to a data frame preview (head) of the result
+#'   table. Retrieve the preview with \code{get_mod_result(mod_db)}; retrieve the full table with
+#'   \code{get_mod_table(mod_db, mod_db\$current_table)}.
 #' 
 #' @examples
 #' \dontrun{
@@ -274,9 +277,11 @@ calc_mod_diff <- function(mod_db,
   } 
   
   # Print a preview of what table looks like
-  print(head(dplyr::tbl(mod_db$con, mod_diff_table)))
-  
-  mod_db$current_table = mod_diff_table
+  result_head <- dplyr::tbl(mod_db$con, mod_diff_table) |> head() |> dplyr::collect()
+  print(result_head)
+
+  mod_db$current_table <- mod_diff_table
+  mod_db$last_result   <- result_head
   mod_db <- .modhelper_cleanup(mod_db)
   invisible(mod_db)
 }

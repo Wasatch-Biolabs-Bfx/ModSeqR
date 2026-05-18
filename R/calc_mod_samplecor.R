@@ -22,8 +22,9 @@
 #' to a samples x samples matrix, and computes Pearson correlations using
 #' `use = "pairwise.complete.obs"`. The `value` column controls which measurement is used.
 #'
-#' @return Invisibly returns the connection wrapper; prints the correlation matrix and (optionally)
-#'   a ggplot heatmap.
+#' @return Invisibly returns the \code{"mod_db"} object with \code{last_result} set to the
+#'   numeric correlation \code{matrix}. Retrieve it with \code{get_mod_result(mod_db)} or
+#'   \code{mod_db$last_result}. Also prints the matrix and (optionally) a ggplot heatmap.
 #'
 #' @examples
 #' \dontrun{
@@ -213,6 +214,7 @@ calc_mod_samplecor <- function(mod_db,
     }
   }
   
+  mod_db$last_result <- correlation_matrix
   .modhelper_closeDB(mod_db)
   invisible(mod_db)
 }

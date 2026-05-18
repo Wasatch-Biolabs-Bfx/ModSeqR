@@ -62,7 +62,10 @@ Default is \code{NULL} (no filtering).}
 \item{overwrite}{If TRUE and output_table exists, it is dropped before writing.}
 }
 \value{
-A list containing the updated "mod_db" object with the latest tables in the database, including "meth_diff".
+Invisibly returns the updated \code{"mod_db"} object with \code{current_table} set to
+  the output table name and \code{last_result} set to a data frame preview (head) of the result
+  table. Retrieve the preview with \code{get_mod_result(mod_db)}; retrieve the full table with
+  \code{get_mod_table(mod_db, mod_db\$current_table)}.
 }
 \description{
 This function calculates differential methylation between specified case and control groups using various statistical methods. 

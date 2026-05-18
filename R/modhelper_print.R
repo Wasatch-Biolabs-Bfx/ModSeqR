@@ -38,7 +38,7 @@ print.mod_db <- function(mod_db) {
   cat("  ", ifelse(is.null(mod_db$current_table), "NULL", mod_db$current_table), "\n")
   
   cat("Connection:\n")
-  
+
   if (is.character(mod_db$con) && mod_db$con == "none") {
     cat("  NULL\n")
   } else if (!dbIsValid(mod_db$con))
@@ -47,5 +47,15 @@ print.mod_db <- function(mod_db) {
   } else
   {
     cat("  Active DBI connection\n")
+  }
+
+  if (!is.null(mod_db$last_result)) {
+    r <- mod_db$last_result
+    dims <- if (is.data.frame(r) || is.matrix(r)) {
+      paste0(" [", nrow(r), " x ", ncol(r), "]")
+    } else if (is.list(r)) {
+      paste0(" (", paste(names(r), collapse = ", "), ")")
+    } else ""
+    cat("Last result: <", class(r)[1], ">", dims, "\n", sep = "")
   }
 }
