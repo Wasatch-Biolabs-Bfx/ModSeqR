@@ -7,6 +7,6 @@
 # * https://testthat.r-lib.org/articles/special-files.html
 
 library(testthat)
-library(MethylSeqR)
+library(ModSeqR)
 
-test_check("MethylSeqR")
+test_check("ModSeqR")
