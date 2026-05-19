@@ -1,0 +1,46 @@
+# ModSeqR v1.2.0 Release Notes
+
+---
+
+## Bug Fixes
+
+- **`log_reg`** — Fixed two pre-existing bugs: coverage was incorrectly computed as `num_calls + mod_counts` instead of `num_calls`, and a dead code block referenced a removed `ref_position` column. The likelihood-ratio test is also corrected to properly compare intercept-only vs. intercept+group models.
+- **`get_mod_*` functions** — Now consistently return data objects rather than `mod_db` objects.
+
+---
+
+## Performance & Memory
+
+Several functions could exhaust available RAM on large datasets due to missing DuckDB disk-spill configuration and the use of temporary tables that cannot be paged to disk. The following functions have been fixed:
+
+`summarize_mod_positions` · `summarize_mod_windows` · `summarize_mod_regions` · `filter_mod_table` · `collapse_mod_windows` · `classify_mod_reads` · `calc_mod_diff`
+
+Key changes:
+- DuckDB temp directory, memory limit, and thread pragmas are now set consistently so spilling to disk works as intended
+- All staging tables converted from `TEMP` to persistent (DuckDB can only page persistent tables to disk)
+- Processing is chunked one chromosome at a time with a `CHECKPOINT` after each sample
+- BH p-value adjustment and result sorting in `calc_mod_diff` are now performed entirely in DuckDB using window functions — previously these pulled the full result set into R
+
+---
+
+## New Features
+
+- **`wilcox` fully in SQL** — The Wilcoxon rank-sum test now runs entirely inside DuckDB using window functions for midranks and tie correction. No locus-level data enters R memory regardless of dataset size. Note: uses the normal approximation with continuity correction (`exact=FALSE, correct=TRUE`), which is equivalent to R's behavior when ties are present.
+- **`get_mod_result()`** — New getter function that retrieves the most recent computed result from a `mod_db` object, allowing results to be captured mid-pipe without breaking the chain.
+- **`peek_mod_table()`** — New convenience function to preview a table without leaving the pipeline.
+- **`get_mod_tablelist()`** — New convenience function to list all tables in the database.
+
+---
+
+## Other Changes
+
+- **`beta_bin`** — Still requires R for MLE fitting (`stats::optim()`), but now fetches only the columns needed for the likelihood-ratio test and processes one chromosome at a time to cap peak memory usage. See documentation for guidance on when to prefer `fast_fisher` or `wilcox` on memory-constrained hardware.
+- **Parameter naming** — Standardized to `input_table` / `output_table` across all pipeline functions. Previous parameter names are retained as deprecated aliases and will warn on use.
+- **`last_result` slot** — All pipeline functions now populate `mod_db$last_result` with a preview of their output, accessible via `get_mod_result()`.
+- **Maintainer** — Updated to Wasatch Biolabs.
+
+---
+
+## Tests
+
+Replaced the stale `MethylSeqR`/`ch3_db` test suite with 53 new tests covering `calc_mod_diff` (all five calc types including SQL wilcox correctness), `filter_mod_table`, and `collapse_mod_windows`.
