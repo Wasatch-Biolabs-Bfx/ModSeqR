@@ -18,8 +18,9 @@
 #' @param n_kde Integer. Grid resolution passed to \code{MASS::kde2d} (default \code{250}).
 #'   Higher values produce a smoother surface at the cost of speed.
 #'
-#' @return Invisibly returns the closed \code{mod_db} object. The plot is printed to the
-#'   current graphics device.
+#' @return Invisibly returns the \code{"mod_db"} object (connection closed on return). The plot
+#'   is printed to the current graphics device. \code{last_result} is set to the \code{ggplot}
+#'   object.
 #'
 #' @details
 #' The function pulls \code{mh_frac_case} and \code{mh_frac_control} from \code{table},

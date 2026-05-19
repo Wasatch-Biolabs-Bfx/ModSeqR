@@ -24,6 +24,7 @@ of distinct sample names.}
 }
 \value{
 (Invisibly) the updated \code{"mod_db"} object (connection closed on return).
+  \code{last_result} is set to a character vector of the distinct sample names after renaming.
 }
 \description{
 Update \code{sample_name} values in a specified DuckDB table using a mapping

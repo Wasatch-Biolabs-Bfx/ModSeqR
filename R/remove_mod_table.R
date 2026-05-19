@@ -6,7 +6,8 @@
 #' @param mod_db A database object.
 #' @param table_name A string specifying the name of the table to remove.
 #'
-#' @return Invisibly returns the database with the removed table.
+#' @return Invisibly returns the \code{"mod_db"} object (connection closed on return).
+#'   \code{last_result} is set to the name of the removed table (character).
 #'
 #' @importFrom DBI dbExistsTable dbRemoveTable
 #' @importFrom glue glue

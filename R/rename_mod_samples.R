@@ -17,6 +17,7 @@
 #'   of distinct sample names.
 #'
 #' @return (Invisibly) the updated \code{"mod_db"} object (connection closed on return).
+#'   \code{last_result} is set to a character vector of the distinct sample names after renaming.
 #'
 #' @examples
 #' \dontrun{

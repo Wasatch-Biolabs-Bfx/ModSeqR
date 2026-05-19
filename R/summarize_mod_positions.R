@@ -65,6 +65,8 @@
 #'           \code{num_calls},
 #'     \item for each label in \code{c(unmod_label, parsed(mod_code))}: \code{<label>_counts}, \code{<label>_frac}.
 #'   }
+#'   \code{last_result} is set to a tibble with columns \code{sample_name} and \code{n}
+#'   (row count per sample in the output table).
 #'
 #' @examples
 #' \dontrun{

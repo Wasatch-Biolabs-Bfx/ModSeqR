@@ -25,9 +25,9 @@ the coverage data. Default is \code{FALSE}.}
 \item{max_rows}{The maximum amount of rows wanted for calculation. This argument can help analysis run faster when there is a lot of data.}
 }
 \value{
-If \code{plot} is \code{FALSE}, the function prints summary statistics
-and percentiles of the coverage data. If \code{plot} is \code{TRUE}, it prints a
-histogram of the log-transformed coverage data.
+Invisibly returns the \code{"mod_db"} object (connection closed on return). Prints
+  summary statistics when \code{plot = FALSE}, or a histogram when \code{plot = TRUE}.
+  \code{last_result} is set to the \code{ggplot} object when \code{plot = TRUE}.
 }
 \description{
 This function calculates and optionally plots statistics for coverage data from

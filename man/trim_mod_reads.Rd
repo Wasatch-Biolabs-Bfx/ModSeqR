@@ -44,7 +44,8 @@ samples are copied through unchanged.}
 }
 \value{
 Invisibly returns the updated \code{mod_db} object, with
-  \code{current_table} set to \code{output_table}.
+  \code{current_table} set to \code{output_table}. \code{last_result} is set to a tibble
+  with columns \code{sample_name} and \code{n} (row count per sample).
 }
 \description{
 Creates a new table in a mod database that keeps only methylation calls

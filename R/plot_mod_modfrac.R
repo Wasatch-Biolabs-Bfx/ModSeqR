@@ -22,8 +22,9 @@
 #' (e.g., "positions", "regions"). It also expects specific columns for methylation data to exist.
 
 #'
-#' @return If `plot` is FALSE, the function prints a summary of the methylation statistics and quantiles. 
-#' If `plot` is TRUE, it displays a histogram of methylation values.
+#' @return Invisibly returns the \code{"mod_db"} object (connection closed on return). Prints
+#'   summary statistics when \code{plot = FALSE}, or a histogram when \code{plot = TRUE}.
+#'   \code{last_result} is set to the \code{ggplot} object when \code{plot = TRUE}.
 #'
 #' @examples
 #'  # Specify the path to the database

@@ -11,7 +11,9 @@
 #' @param min_length An integer specifying the the minimum read_length.
 #' @param min_CGs An integer specifying the minimum number of CG sites required for a read to be included in the summary.
 #'
-#' @return Invisibly returns the database object. The function also outputs a success message and the first few rows of the summarized `reads` table.
+#' @return Invisibly returns the \code{"mod_db"} object with \code{current_table} set to
+#'   \code{output_reads_table}. \code{last_result} is set to a tibble with columns
+#'   \code{sample_name} and \code{n} (row count per sample).
 #'
 #' @details
 #' The function connects to the provided DuckDB database, optionally filters reads based on the key table, and then summarizes the read data. It creates a temporary table for the filtered reads (if a key table is provided) and creates a summary table called `reads` with information on the total number of calls, the positions of the first and last CG sites, and counts for different types of calls (`m`, `h`, and `-`).

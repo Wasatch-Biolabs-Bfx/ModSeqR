@@ -34,9 +34,10 @@
 #' It then proceeds with a differential modification analysis between the provided case and control samples.
 #' The analysis is tailored based on the selected modification type (`mod_type`) and calculation method (`calc_type`).
 #'
-#' @return The result of the differential analysis, typically in the form of a table or data frame with
-#'   calculated statistics and p-values for each position, region, or window, depending on the `call_type`.
-#'   The result is printed to the console.
+#' @return Invisibly returns the \code{"mod_db"} object (connection closed on return).
+#'   \code{last_result} is set to a named character vector of exported file paths:
+#'   \code{mod_diff} (full differential results), \code{all_cpgs} (all CpG data), and
+#'   \code{sig_cpgs} (significant sites only).
 #'
 #' @importFrom dplyr select filter matches semi_join
 #' @importFrom tidyr pivot_longer pivot_wider unite

@@ -27,7 +27,10 @@ a data frame in R. If `"compute"`, the result is stored as a new table in the da
 with the result of `expr(tbl_ref)`.}
 }
 \value{
-If `mode = "collect"`, returns a data frame. If `mode = "compute"`, invisibly returns the \code{"mod_db"} object (connection closed).
+If \code{mode = "collect"}, returns a data frame directly. If \code{mode = "compute"},
+  invisibly returns the \code{"mod_db"} object (connection closed). In compute mode,
+  \code{last_result} is set to a tibble with columns \code{sample_name} and \code{n} if the
+  output table contains a \code{sample_name} column, otherwise a single integer row count.
 }
 \description{
 Connects to a DuckDB database, evaluates a user-supplied expression on a specified table,

@@ -17,7 +17,9 @@ filter_mod_table(mod_db, input_table, output_table, ...)
 passed directly to `dplyr::filter()`.}
 }
 \value{
-Invisibly returns the updated \code{"mod_db"} object.
+Invisibly returns the updated \code{"mod_db"} object. \code{last_result} is set to a
+  tibble with columns \code{sample_name} and \code{n} (row count per sample) if the output
+  table contains a \code{sample_name} column, otherwise a single integer row count.
 }
 \description{
 Applies filter conditions to a table in a DuckDB database and saves the result

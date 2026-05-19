@@ -10,7 +10,9 @@
 #' @param ... Filtering expressions (e.g., `score > 0.5`, `gene_id == "abc"`). These are unquoted expressions
 #'   passed directly to `dplyr::filter()`.
 #'
-#' @return Invisibly returns the updated \code{"mod_db"} object.
+#' @return Invisibly returns the updated \code{"mod_db"} object. \code{last_result} is set to a
+#'   tibble with columns \code{sample_name} and \code{n} (row count per sample) if the output
+#'   table contains a \code{sample_name} column, otherwise a single integer row count.
 #'
 #' @examples
 #' \dontrun{

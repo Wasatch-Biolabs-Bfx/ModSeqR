@@ -31,8 +31,9 @@ If \code{NULL}, no threshold lines are drawn.}
 Higher values produce a smoother surface at the cost of speed.}
 }
 \value{
-Invisibly returns the closed \code{mod_db} object. The plot is printed to the
-  current graphics device.
+Invisibly returns the \code{"mod_db"} object (connection closed on return). The plot
+  is printed to the current graphics device. \code{last_result} is set to the \code{ggplot}
+  object.
 }
 \description{
 Generates a 2-D density heatmap of `mh_frac_case` vs `mh_frac_control` methylation

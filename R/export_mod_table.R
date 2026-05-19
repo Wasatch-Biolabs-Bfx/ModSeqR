@@ -16,6 +16,7 @@
 #' as the filename.
 #'
 #' @return Invisibly returns the \code{"mod_db"} object (connection closed on return).
+#'   \code{last_result} is set to the output file path (character).
 #' 
 #' @importFrom DBI dbExistsTable dbQuoteIdentifier dbQuoteString dbExecute
 #'

@@ -55,6 +55,8 @@ If \code{NULL}, all files are processed in one batch.}
     \item \code{con}: connection is closed by cleanup and set to \code{"none"}.
   }
   The database contains at least the \code{calls} table.
+  \code{last_result} is set to a tibble with columns \code{sample_name} and \code{n}
+  (row count per sample in the \code{calls} table).
 }
 \description{
 Build a DuckDB database containing filtered modification call data from one or

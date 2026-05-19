@@ -25,8 +25,9 @@ Default is "positions". Can also be "regions".}
 \item{max_rows}{The maximum amount of rows wanted for calculation. This argument can help analysis run faster when there is a lot of data.}
 }
 \value{
-If `plot` is FALSE, the function prints a summary of the methylation statistics and quantiles. 
-If `plot` is TRUE, it displays a histogram of methylation values.
+Invisibly returns the \code{"mod_db"} object (connection closed on return). Prints
+  summary statistics when \code{plot = FALSE}, or a histogram when \code{plot = TRUE}.
+  \code{last_result} is set to the \code{ggplot} object when \code{plot = TRUE}.
 }
 \description{
 This function retrieves and calculates methylation statistics (mean methylation fractions) 

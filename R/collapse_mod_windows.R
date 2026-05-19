@@ -20,7 +20,9 @@
 #'
 #' @return Invisibly returns the updated \code{"mod_db"} object with
 #'   \code{current_table} set to \code{table_name}. The collapsed results are
-#'   written to \code{table_name} inside the database.
+#'   written to \code{table_name} inside the database. \code{last_result} is set to a tibble
+#'   with columns \code{sample_name} and \code{n} if the table contains a \code{sample_name}
+#'   column, otherwise a single integer row count.
 #'
 #' @details
 #' The function performs the following steps:

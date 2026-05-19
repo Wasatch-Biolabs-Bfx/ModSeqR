@@ -54,9 +54,10 @@ The default is `"fast_fisher"`, but other calculation methods can be implemented
 will be written out in the final directory.}
 }
 \value{
-The result of the differential analysis, typically in the form of a table or data frame with
-  calculated statistics and p-values for each position, region, or window, depending on the `call_type`.
-  The result is printed to the console.
+Invisibly returns the \code{"mod_db"} object (connection closed on return).
+  \code{last_result} is set to a named character vector of exported file paths:
+  \code{mod_diff} (full differential results), \code{all_cpgs} (all CpG data), and
+  \code{sig_cpgs} (significant sites only).
 }
 \description{
 This function performs a differential analysis on methylation data based on the specified call type

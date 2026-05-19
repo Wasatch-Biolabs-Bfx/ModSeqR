@@ -23,7 +23,9 @@ summarize_mod_reads(
 \item{table_name}{A string specifying what the user would like the name to be called in the database. Default is "reads".}
 }
 \value{
-Invisibly returns the database object. The function also outputs a success message and the first few rows of the summarized `reads` table.
+Invisibly returns the \code{"mod_db"} object with \code{current_table} set to
+  \code{output_reads_table}. \code{last_result} is set to a tibble with columns
+  \code{sample_name} and \code{n} (row count per sample).
 }
 \description{
 This function summarizes reads from a database, filtering and processing 

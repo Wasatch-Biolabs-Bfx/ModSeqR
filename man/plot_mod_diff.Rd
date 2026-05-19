@@ -14,7 +14,9 @@ The database must contain a table with differential methylation results.}
 The table must contain at least the following columns: `meth_diff` and `p_val`.}
 }
 \value{
-Invisibly returns the `mod_db` object after closing the database connection. The function prints the ggplot2 raster plot to the active R graphics device.
+Invisibly returns the \code{"mod_db"} object (connection closed on return). The plot
+  is printed to the active graphics device. \code{last_result} is set to the \code{ggplot}
+  object.
 }
 \description{
 Creates a volcano-style raster plot of differential methylation results using database-backed plotting via `dbplot`. 

@@ -9,7 +9,9 @@
 #' @param table A character string specifying the name of the table in the database containing the differential methylation data.
 #'        The table must contain at least the following columns: `meth_diff` and `p_val`.
 #'
-#' @return Invisibly returns the `mod_db` object after closing the database connection. The function prints the ggplot2 raster plot to the active R graphics device.
+#' @return Invisibly returns the \code{"mod_db"} object (connection closed on return). The plot
+#'   is printed to the active graphics device. \code{last_result} is set to the \code{ggplot}
+#'   object.
 #' 
 #' @details
 #' The plot uses `dbplot::dbplot_raster()` to efficiently create a raster visualization of large-scale methylation difference data. 

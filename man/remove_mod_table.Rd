@@ -12,7 +12,8 @@ remove_mod_table(mod_db, table_name)
 \item{table_name}{A string specifying the name of the table to remove.}
 }
 \value{
-Invisibly returns the database with the removed table.
+Invisibly returns the \code{"mod_db"} object (connection closed on return).
+  \code{last_result} is set to the name of the removed table (character).
 }
 \description{
 This function checks if a table exists and, if so, removes it.

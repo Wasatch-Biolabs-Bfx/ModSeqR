@@ -41,8 +41,10 @@ Invisibly returns the \code{"mod_db"} object (connection closed on return) with
   \item \code{first_cpg_pos} – First CpG position of the read
   \item \code{last_cpg_pos} – Last CpG position of the read
   \item \code{mh_frac} – Methylation fraction of the read
-  \item \code{classification} – `"case"`, `"control"`, or `"unknown"`
+  \item \code{classification} – \code{"case"}, \code{"control"}, or \code{"unknown"}
 }
+  \code{last_result} is set to a tibble with columns \code{classification} and \code{n}
+  (read count per class).
 }
 \description{
 This function classifies reads in the `reads` table of a DuckDB database
