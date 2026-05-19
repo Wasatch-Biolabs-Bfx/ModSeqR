@@ -1,8 +1,7 @@
 #' Get Database Statistics
 #'
 #' Prints a summary of the mod database, including file size, table names, and
-#' unique sample names. Also stores a stats list in \code{mod_db$last_result}
-#' so the information is accessible programmatically after a pipe step.
+#' unique sample names.
 #'
 #' @param mod_db A \code{"mod_db"} object or a character path to a \code{.mod.db} file.
 #'

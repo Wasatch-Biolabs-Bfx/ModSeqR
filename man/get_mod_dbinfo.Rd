@@ -16,8 +16,7 @@ Invisibly returns a named list with elements \code{tables} (character
 }
 \description{
 Prints a summary of the mod database, including file size, table names, and
-unique sample names. Also stores a stats list in \code{mod_db$last_result}
-so the information is accessible programmatically after a pipe step.
+unique sample names.
 }
 \examples{
 \dontrun{
