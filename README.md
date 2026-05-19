@@ -2,8 +2,8 @@
 
 # ModSeqR
 
-## Version 1.1.3
-**(Updated May 14th 2026)**
+## Version 1.2.0
+**(Updated May 19th 2026)**
 
 **Publication:** If you use ModSeqR in your research, please cite our paper in *BMC Genomics*:  
 [ModSeqR: An R package for managing direct whole methylome sequencing data](https://link.springer.com/article/10.1186/s12864-026-12655-5)
@@ -85,9 +85,9 @@ This will at first hold a calls table. If you would like to see key stats on you
 After a database is created, a user can summarize their data by position (`summarize_mod_positions()`), by regions (`summarize_mod_regions()`), by windows (`summarize_mod_windows()`), or by reads ((`summarize_mod_reads()`). 
 
 ### Differential Methylation
-A differential methylation analysis can be conducted on positional, regional, or window data using `calc_mod_diff()`. The function automatically selects an appropriate statistical test based on your sample sizes — beta-binomial for 2–4 replicates per group, Wilcoxon for 5+, or Fisher's exact test for single-sample comparisons — or you can set `calc_type` manually. Use `mod_type` to specify which modification to test (e.g., `"mh"` for 5mC/5hmC, `"a"` for m6A), and `min_sites` to filter out windows with poor modification call coverage. After calculating methylation differences between windows, use `collapse_mod_windows()` to collapse significant windows in a methylation dataset. This merges contiguous regions that meet the specified criteria.
+A differential methylation analysis can be conducted on positional, regional, or window data using `calc_mod_diff()`. The function automatically selects an appropriate statistical test based on your sample sizes — Wilcoxon rank-sum for 5+ replicates per group, or Fisher's exact test otherwise — or you can set `calc_type` manually. Available options are `"wilcox"`, `"fast_fisher"`, `"r_fisher"`, `"log_reg"`, and `"beta_bin"`. Use `mod_type` to specify which modification to test (e.g., `"mh"` for 5mC/5hmC, `"a"` for m6A), and `min_sites` to filter out windows with poor modification call coverage. After calculating methylation differences between windows, use `collapse_mod_windows()` to collapse significant windows in a methylation dataset. This merges contiguous regions that meet the specified criteria.
 
-**Note:** The beta-binomial test (`calc_type = "beta_bin"`) fits a model at every individual locus, which can be significantly slower than other methods. For genome-wide window analyses, expect run times of **minutes to hours** depending on the number of windows and samples. Consider using larger window sizes, larger step sizes, or `min_sites` filtering the number of modification sites.
+**Memory note:** All methods except `"beta_bin"` run entirely inside DuckDB — no locus-level data enters R memory regardless of dataset size. `"beta_bin"` collects data into R one chromosome at a time; on memory-constrained hardware with large datasets, prefer `"fast_fisher"` or `"wilcox"` instead. The beta-binomial test also fits a model at every individual locus, which can be significantly slower than other methods.
 
 ### Get Database Stats
 If you would like to see key stats on your database at any time, including what unique sample names are in the data for a differential analysis, call `get_mod_dbinfo()`. 
@@ -109,21 +109,22 @@ setwd("/home/directory/analysis")
 
 # Build database and run analysis in a pipe
 mod_db <- make_mod_db(
-  ch3_files = "../ch3_files_directory", 
-             db_name = "my_data") |>
+  ch3_files = "../ch3_files_directory",
+  db_name   = "my_data") |>
   summarize_mod_windows() |>
-  calc_mod_diff(call_type = "windows",
-              cases =
-                c("sperm"),
-              controls =
-                c("blood")) |>
-  collapse_mod_windows() 
-  
+  calc_mod_diff(input_table = "windows",
+                cases    = c("sperm"),
+                controls = c("blood")) |>
+  collapse_mod_windows()
+
+# Retrieve the last computed result without breaking the pipe
+collapsed <- get_mod_result(mod_db)
+
 # Build and analyze through separate lines
 mod_db <- make_mod_db(ch3_files = "../ch3_files_directory", db_name = "my_data")
 mod_db <- summarize_mod_windows(mod_db)
-mod_db <- calc_mod_diff(mod_db, call_type = "windows", cases = c("sperm"), controls = c("blood"))
-mod_db <- collapse_mod_windows(mod_db) 
+mod_db <- calc_mod_diff(mod_db, input_table = "windows", cases = c("sperm"), controls = c("blood"))
+mod_db <- collapse_mod_windows(mod_db)
 
 # Run entire differential methylation analysis in one function
 run_mod_analysis(mod_db, 
@@ -168,6 +169,15 @@ get_mod_dbinfo(mod_db)
 # Get detailed information about a specific table
 get_mod_tableinfo(mod_db, "positions")
 
+# List all tables currently in the database
+get_mod_tablelist(mod_db)
+
+# Preview a table without leaving the pipeline
+peek_mod_table(mod_db, "windows")
+
+# Retrieve the result stored by the most recent pipeline function
+get_mod_result(mod_db)
+
 # Rename sample names inside any table
 rename_mod_samples(mod_db, "positions",
                    samples_map = c("old_name" = "new_name"))
@@ -207,8 +217,6 @@ This package is distributed under the **Personal and Internal Research License (
 See the full license text in the [LICENSE](./LICENSE) file included with this repository.
 
 If you have any suggestions or requested features, please email Jonathon Hill at jhill@byu.edu.
-
-## Citation
 
 ## Citation
 
