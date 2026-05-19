@@ -231,56 +231,73 @@
 # ===========================================================================
 .calc_diff_betabin <- function(in_dat)
 {
-  # Collect from DuckDB into local memory
-  dat <- dplyr::collect(in_dat)
-
-  # Identify grouping columns (everything except sample-level fields)
+  # Determine grouping columns without collecting any data
   group_vars <- setdiff(
-    colnames(dat),
-    c("sample_name", "exp_group", "num_calls", "mod_counts",
-      "num_sites")
+    colnames(in_dat),
+    c("sample_name", "exp_group", "num_calls", "mod_counts", "num_sites")
   )
 
-  # Split by locus and run the LRT at each one
-  result <- dat |>
-    dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
-    dplyr::summarise(
-      num_samples_case    = sum(exp_group == "case"),
-      num_samples_control = sum(exp_group == "control"),
+  # Only pull the columns the LRT actually needs — skip all pre-computed
+  # fraction/count columns that may be wide in position/window tables.
+  needed <- c(group_vars, "sample_name", "exp_group", "num_calls", "mod_counts")
+  slim   <- dplyr::select(in_dat, dplyr::any_of(needed))
 
-      num_calls_case     = sum(num_calls[exp_group == "case"],    na.rm = TRUE),
-      num_calls_control  = sum(num_calls[exp_group == "control"], na.rm = TRUE),
+  # Helper: run the LRT on one in-memory data frame and return a summarised tibble
+  .run_lrt <- function(dat) {
+    dat |>
+      dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
+      dplyr::summarise(
+        num_samples_case    = sum(exp_group == "case"),
+        num_samples_control = sum(exp_group == "control"),
 
-      mod_counts_case    = sum(mod_counts[exp_group == "case"],    na.rm = TRUE),
-      mod_counts_control = sum(mod_counts[exp_group == "control"], na.rm = TRUE),
+        num_calls_case     = sum(num_calls[exp_group == "case"],    na.rm = TRUE),
+        num_calls_control  = sum(num_calls[exp_group == "control"], na.rm = TRUE),
 
-      mod_frac_case = mean(
-        mod_counts[exp_group == "case"] / pmax(num_calls[exp_group == "case"], 1),
-        na.rm = TRUE
-      ),
-      mod_frac_control = mean(
-        mod_counts[exp_group == "control"] / pmax(num_calls[exp_group == "control"], 1),
-        na.rm = TRUE
-      ),
+        mod_counts_case    = sum(mod_counts[exp_group == "case"],    na.rm = TRUE),
+        mod_counts_control = sum(mod_counts[exp_group == "control"], na.rm = TRUE),
 
-      # Run beta-binomial LRT
-      {
-        x_case <- mod_counts[exp_group == "case"]
-        n_case <- num_calls[exp_group == "case"]
-        x_ctrl <- mod_counts[exp_group == "control"]
-        n_ctrl <- num_calls[exp_group == "control"]
+        mod_frac_case = mean(
+          mod_counts[exp_group == "case"] / pmax(num_calls[exp_group == "case"], 1),
+          na.rm = TRUE
+        ),
+        mod_frac_control = mean(
+          mod_counts[exp_group == "control"] / pmax(num_calls[exp_group == "control"], 1),
+          na.rm = TRUE
+        ),
 
-        res <- .bb_lrt(x_case, n_case, x_ctrl, n_ctrl)
+        {
+          x_case <- mod_counts[exp_group == "case"]
+          n_case <- num_calls[exp_group == "case"]
+          x_ctrl <- mod_counts[exp_group == "control"]
+          n_ctrl <- num_calls[exp_group == "control"]
 
-        data.frame(
-          meth_diff      = res$mu_case - res$mu_ctrl,
-          overdispersion = res$phi,
-          p_val          = res$p_val
-        )
-      },
+          res <- .bb_lrt(x_case, n_case, x_ctrl, n_ctrl)
 
-      .groups = "drop"
-    )
+          data.frame(
+            meth_diff      = res$mu_case - res$mu_ctrl,
+            overdispersion = res$phi,
+            p_val          = res$p_val
+          )
+        },
 
-  result
+        .groups = "drop"
+      )
+  }
+
+  # If chrom is a grouping column, process one chromosome at a time so only
+  # one chromosome's rows are in R memory at once.
+  if ("chrom" %in% group_vars) {
+    chroms <- dplyr::pull(dplyr::distinct(dplyr::select(slim, chrom)))
+
+    chunks <- lapply(chroms, function(chr) {
+      slim |>
+        dplyr::filter(chrom == chr) |>
+        dplyr::collect() |>
+        .run_lrt()
+    })
+
+    do.call(rbind, chunks)
+  } else {
+    dplyr::collect(slim) |> .run_lrt()
+  }
 }

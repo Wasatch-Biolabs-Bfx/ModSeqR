@@ -15,12 +15,15 @@
 #'   "a" for 6mA, "17596" for inosine, and "17802" for pseudouridine.
 #'   Bare numeric codes are automatically prefixed with "m_".
 #' @param calc_type A string specifying the statistical method to use.
-#'   Options: "wilcox", "beta_bin", "fast_fisher", "r_fisher", "log_reg".
-#'   Default is NULL, in which case:
+#'   Options: \code{"wilcox"}, \code{"beta_bin"}, \code{"fast_fisher"}, \code{"r_fisher"},
+#'   \code{"log_reg"}. Default is \code{NULL}, in which case:
 #'   \itemize{
-#'     \item "wilcox" if both groups have >= 5 samples
-#'     \item "fast_fisher" if either group has fewer than 5 samples
+#'     \item \code{"wilcox"} if both groups have >= 5 samples
+#'     \item \code{"fast_fisher"} if either group has fewer than 5 samples
 #'   }
+#'   All methods except \code{"beta_bin"} run entirely in DuckDB and do not load
+#'   locus-level data into R. \code{"beta_bin"} collects data into R one chromosome
+#'   at a time; avoid it on memory-constrained hardware with large datasets.
 #' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
 #' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic
 #'   (typically all-but-one core) is used.
@@ -38,13 +41,21 @@
 #' @details
 #' The function connects to the specified DuckDB database, retrieves methylation data from
 #' \code{input_table}, and summarizes it for cases and controls. For SQL-backed calc types
-#' (\code{fast_fisher}, \code{r_fisher}, \code{log_reg}), the statistical results are written
-#' directly from DuckDB to the output table without passing through R memory. BH p-value
-#' adjustment and final sorting are performed entirely in DuckDB using window functions.
-#' For R-backed calc types (\code{wilcox}, \code{beta_bin}), per-locus tests require
-#' collecting data into R, then writing results back to the database before the SQL-side BH
-#' step. Resource pragmas (\code{temp_directory}, \code{threads},
-#' \code{memory_limit}) are set via internal heuristics unless overridden.
+#' (\code{fast_fisher}, \code{r_fisher}, \code{log_reg}, \code{wilcox}), all computation
+#' stays inside DuckDB and no locus-level data enters R memory. BH p-value adjustment and
+#' final sorting are also performed entirely in DuckDB using window functions.
+#'
+#' \strong{Memory warning:} \code{beta_bin} is the only method that collects data into R,
+#' because it requires \code{stats::optim()} for maximum-likelihood fitting of the
+#' beta-binomial model — an iterative algorithm with no SQL equivalent. To limit peak
+#' memory usage, data are pulled one chromosome at a time and only the columns required
+#' for the likelihood-ratio test are fetched (per-sample read counts and modification
+#' counts). On datasets with many loci or many samples, \code{beta_bin} can still consume
+#' substantial RAM; consider \code{fast_fisher} or \code{wilcox} on memory-constrained
+#' hardware.
+#'
+#' Resource pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}) are set
+#' via internal heuristics unless overridden.
 #'
 #' @return Invisibly returns the updated \code{"mod_db"} object with \code{current_table} set to
 #'   the output table name and \code{last_result} set to a data frame preview (head) of the result
@@ -66,7 +77,8 @@
 #' @importFrom DBI dbConnect dbDisconnect dbExistsTable dbRemoveTable dbExecute dbWriteTable
 #' @importFrom duckdb duckdb
 #' @importFrom dplyr tbl select any_of mutate case_when filter pull summarize inner_join join_by rename_with collect arrange
-#' @importFrom dbplyr sql_render
+#' @importFrom dbplyr sql_render remote_con
+#' @importFrom glue glue
 #' @importFrom tidyr pivot_wider
 #' @importFrom stats fisher.test p.adjust dhyper phyper glm.fit pchisq optim plogis qlogis var
 #'
@@ -335,66 +347,141 @@ calc_mod_diff <- function(mod_db,
 
 
 
-## Calculate p-values using Wilcoxon rank-sum test on per-sample methylation fractions.
-## This compares the distribution of m_frac between case and control samples per region/window.
+## Calculate p-values using Wilcoxon rank-sum test, fully in DuckDB SQL.
+## Uses midranks (average of tied row numbers) for the U statistic, the standard
+## tie-corrected variance formula, and the Abramowitz & Stegun 26.2.16 normal CDF
+## approximation (max error ~7.5e-8) to avoid collecting any data into R memory.
+## Always uses the normal approximation with continuity correction, equivalent to
+## wilcox.test(exact=FALSE, correct=TRUE). For tie-free datasets with very small
+## group sizes R's exact distribution may give slightly different p-values, but
+## wilcox is auto-selected only when both groups have >= 5 samples, where the
+## normal approximation is appropriate.
+## Returns a tbl_lazy exactly like the fisher/log_reg paths.
 .calc_diff_wilcox <- function(in_dat)
 {
-  # Work at the per-sample level: compute methylation fraction for each sample x region
-  frac_dat <-
-    in_dat |>
-    dplyr::mutate(
-      mod_frac = dplyr::if_else(
-        num_calls > 0,
-        mod_counts / num_calls,
-        NA_real_
-      )
-    ) |>
-    dplyr::collect()
+  con        <- dbplyr::remote_con(in_dat)
+  group_vars <- setdiff(colnames(in_dat),
+                        c("sample_name", "exp_group", "num_calls", "mod_counts", "num_sites"))
 
-  # Figure out which columns define the genomic unit (region/window/position)
-  group_vars <- setdiff(
-    colnames(frac_dat),
-    c("sample_name", "exp_group", "num_calls", "mod_counts", "mod_frac",
-      "num_sites")
+  # Quoted identifier helpers
+  qi  <- function(nms) paste(
+    vapply(nms, function(nm) as.character(DBI::dbQuoteIdentifier(con, nm)), character(1)),
+    collapse = ", "
   )
 
-  # Summarize per region/window and run Wilcoxon tests
-  frac_dat |>
-    dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
-    dplyr::summarise(
-      num_samples_case    = sum(exp_group == "case"),
-      num_samples_control = sum(exp_group == "control"),
+  src_sql   <- as.character(dbplyr::sql_render(in_dat))
+  gvars_sql <- qi(group_vars)
 
-      num_calls_case      = sum(num_calls[exp_group == "case"],    na.rm = TRUE),
-      num_calls_control   = sum(num_calls[exp_group == "control"], na.rm = TRUE),
-
-      mod_counts_case     = sum(mod_counts[exp_group == "case"],    na.rm = TRUE),
-      mod_counts_control  = sum(mod_counts[exp_group == "control"], na.rm = TRUE),
-
-      mod_frac_case = mean(mod_frac[exp_group == "case"],    na.rm = TRUE),
-      mod_frac_control = mean(mod_frac[exp_group == "control"], na.rm = TRUE),
-
-      meth_diff = mean(mod_frac[exp_group == "case"],    na.rm = TRUE) -
-        mean(mod_frac[exp_group == "control"], na.rm = TRUE),
-
-      p_val = {
-        case_vals <- mod_frac[exp_group == "case"]
-        ctrl_vals <- mod_frac[exp_group == "control"]
-
-        case_vals <- case_vals[is.finite(case_vals)]
-        ctrl_vals <- ctrl_vals[is.finite(ctrl_vals)]
-
-        if (length(case_vals) > 0 && length(ctrl_vals) > 0) {
-          suppressWarnings(
-            stats::wilcox.test(case_vals, ctrl_vals)$p.value
+  sql <- glue::glue("
+    WITH
+    _frac AS (
+      SELECT *, mod_counts * 1.0 / num_calls AS _mf
+      FROM ({src_sql}) _s
+      WHERE num_calls > 0 AND mod_counts IS NOT NULL
+    ),
+    _rn AS (
+      SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY {gvars_sql} ORDER BY _mf) AS _row_n
+      FROM _frac
+    ),
+    _ranked AS (
+      SELECT *,
+        AVG(CAST(_row_n AS DOUBLE)) OVER (PARTITION BY {gvars_sql}, _mf) AS _rank
+      FROM _rn
+    ),
+    _grp AS (
+      SELECT
+        {gvars_sql}, exp_group,
+        COUNT(*)       AS _n_g,
+        SUM(_rank)     AS _rank_sum,
+        SUM(num_calls) AS _nc_g,
+        SUM(mod_counts) AS _mc_g,
+        AVG(_mf)       AS _mf_avg
+      FROM _ranked
+      GROUP BY {gvars_sql}, exp_group
+    ),
+    _tg AS (
+      SELECT {gvars_sql}, _mf, COUNT(*) AS _t
+      FROM _ranked
+      GROUP BY {gvars_sql}, _mf
+    ),
+    _ties AS (
+      SELECT {gvars_sql},
+        SUM(POWER(CAST(_t AS DOUBLE), 3) - CAST(_t AS DOUBLE)) AS _tie_sum
+      FROM _tg
+      GROUP BY {gvars_sql}
+    ),
+    _locus AS (
+      SELECT
+        {gvars_sql},
+        MAX(CASE WHEN exp_group = 'case'    THEN _n_g    END) AS num_samples_case,
+        MAX(CASE WHEN exp_group = 'control' THEN _n_g    END) AS num_samples_control,
+        MAX(CASE WHEN exp_group = 'case'    THEN _nc_g   END) AS num_calls_case,
+        MAX(CASE WHEN exp_group = 'control' THEN _nc_g   END) AS num_calls_control,
+        MAX(CASE WHEN exp_group = 'case'    THEN _mc_g   END) AS mod_counts_case,
+        MAX(CASE WHEN exp_group = 'control' THEN _mc_g   END) AS mod_counts_control,
+        MAX(CASE WHEN exp_group = 'case'    THEN _mf_avg END) AS mod_frac_case,
+        MAX(CASE WHEN exp_group = 'control' THEN _mf_avg END) AS mod_frac_control,
+        MAX(CASE WHEN exp_group = 'case'    THEN _rank_sum END) AS _W,
+        MAX(CASE WHEN exp_group = 'case'    THEN _n_g    END) AS _n1,
+        MAX(CASE WHEN exp_group = 'control' THEN _n_g    END) AS _n2
+      FROM _grp
+      GROUP BY {gvars_sql}
+    ),
+    _u AS (
+      SELECT l.*,
+        COALESCE(t._tie_sum, 0.0)             AS _tie_sum,
+        _n1 * _n2 * 1.0 / 2.0                AS _mu_U,
+        _W - _n1 * (_n1 + 1.0) / 2.0         AS _U,
+        SQRT(
+          _n1 * _n2 * 1.0 / 12.0 * (
+            (_n1 + _n2 + 1.0) -
+            COALESCE(t._tie_sum, 0.0) /
+              NULLIF((_n1 + _n2) * (_n1 + _n2 - 1.0), 0.0)
           )
-        } else {
-          NA_real_
-        }
-      },
-
-      .groups = "drop"
+        ) AS _sig
+      FROM _locus l
+      LEFT JOIN _ties t USING ({gvars_sql})
+    ),
+    _z AS (
+      SELECT *,
+        CASE
+          WHEN _sig IS NULL OR _sig = 0.0 THEN NULL
+          WHEN _U > _mu_U THEN (_U - _mu_U - 0.5) / _sig
+          WHEN _U < _mu_U THEN (_U - _mu_U + 0.5) / _sig
+          ELSE 0.0
+        END AS _z
+      FROM _u
+    ),
+    _cdf AS (
+      SELECT *,
+        1.0 / (1.0 + 0.2316419 * ABS(_z))                     AS _t1,
+        (1.0 / SQRT(2.0 * PI())) * EXP(-POWER(ABS(_z), 2) / 2.0) AS _phi
+      FROM _z
     )
+    SELECT
+      {gvars_sql},
+      num_samples_case,
+      num_samples_control,
+      num_calls_case,
+      num_calls_control,
+      mod_counts_case,
+      mod_counts_control,
+      mod_frac_case,
+      mod_frac_control,
+      mod_frac_case - mod_frac_control AS meth_diff,
+      CASE WHEN _z IS NULL THEN NULL
+      ELSE LEAST(2.0 * _phi * (
+           0.319381530  * _t1
+         - 0.356563782  * POWER(_t1, 2)
+         + 1.781477937  * POWER(_t1, 3)
+         - 1.821255978  * POWER(_t1, 4)
+         + 1.330274429  * POWER(_t1, 5)
+      ), 1.0) END AS p_val
+    FROM _cdf
+  ")
+
+  dplyr::tbl(con, dplyr::sql(sql))
 }
 
 
