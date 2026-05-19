@@ -6,17 +6,19 @@
 \usage{
 plot_mod_pca(
   mod_db,
-  call_type = "positions",
+  input_table = "positions",
   value = mh_frac,
   save_path = NULL,
-  max_rows = NULL
+  max_rows = NULL,
+  call_type = NULL
 )
 }
 \arguments{
 \item{mod_db}{A list containing the database file path. This should be a valid "mod_db" class object.}
 
-\item{call_type}{A string representing the name of the table in the database from which to pull the data.
-Default is "positions".}
+\item{input_table}{A string representing the name of the table in the database from which to pull
+the data. Default is \code{"positions"}. Required columns: \code{sample_name}, \code{chrom},
+\code{start}, \code{end}.}
 
 \item{value}{Column to use as the measurement for PCA (e.g., `mh_frac`, `m_frac`). Accepts a bare column
 name or a single string. Default: `mh_frac`.}
@@ -24,6 +26,8 @@ name or a single string. Default: `mh_frac`.}
 \item{save_path}{Path to save the plot (e.g., .pdf or .png). If NULL, the plot is not saved.}
 
 \item{max_rows}{Optional maximum number of rows to sample from the table (for speed on large datasets).}
+
+\item{call_type}{Deprecated. Use \code{input_table} instead.}
 }
 \value{
 Invisibly returns the \code{"mod_db"} object with \code{last_result} set to a named
@@ -34,11 +38,11 @@ Invisibly returns the \code{"mod_db"} object with \code{last_result} set to a na
 \description{
 This function performs Principal Component Analysis (PCA) on methylation (or other) data
 retrieved from a DuckDB database. It aggregates the chosen value column based on the
-specified call type and prepares it for PCA analysis.
+specified input table and prepares it for PCA analysis.
 }
 \details{
-The function connects to the specified DuckDB database, retrieves data from `call_type`, reshapes
-to a features × samples matrix (features are regions/windows/positions; columns are samples), scales
+The function connects to the specified DuckDB database, retrieves data from \code{input_table}, reshapes
+to a features x samples matrix (features are regions/windows/positions; columns are samples), scales
 features, then runs PCA on samples (transpose before `prcomp`).
 }
 \examples{
@@ -46,9 +50,9 @@ features, then runs PCA on samples (transpose before `prcomp`).
 # Default (mh_frac)
  plot_mod_pca(mod_db)
  # Use m_frac instead
- plot_mod_pca(mod_db, call_type = "regions", value = m_frac)
+ plot_mod_pca(mod_db, input_table = "regions", value = m_frac)
  # Or as a string
- plot_mod_pca(mod_db, call_type = "windows", value = "m_frac")
+ plot_mod_pca(mod_db, input_table = "windows", value = "m_frac")
 }
 
 }

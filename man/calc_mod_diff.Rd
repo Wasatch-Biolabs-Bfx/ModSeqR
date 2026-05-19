@@ -6,7 +6,7 @@
 \usage{
 calc_mod_diff(
   mod_db,
-  call_type = "positions",
+  input_table = "positions",
   output_table = NULL,
   cases,
   controls,
@@ -16,22 +16,24 @@ calc_mod_diff(
   threads = NULL,
   memory_limit = NULL,
   min_sites = NULL,
-  overwrite = TRUE
+  overwrite = TRUE,
+  call_type = NULL
 )
 }
 \arguments{
 \item{mod_db}{A list containing the database file path. This should be a valid "mod_db" class object.}
 
-\item{call_type}{A string representing the name of the table in the database from which to pull the data. 
-Default is "positions".}
+\item{input_table}{A string representing the name of the table in the database from which to pull
+the data. Default is \code{"positions"}. Required columns: \code{sample_name}, \code{chrom},
+\code{start}, \code{end}.}
 
-\item{output_table}{Destination table name for results. If NULL, defaults to paste0("mod_diff_", call_type).}
+\item{output_table}{Destination table name for results. If NULL, defaults to \code{paste0("mod_diff_", input_table)}.}
 
 \item{cases}{A character vector containing the sample names for the case group.}
 
 \item{controls}{A character vector containing the sample names for the control group.}
 
-\item{mod_type}{A string indicating the type of modification to analyze. 
+\item{mod_type}{A string indicating the type of modification to analyze.
 Default is "mh" for methylation/hydroxymethylation. Other codes include
   "a" for 6mA, "17596" for inosine, and "17802" for pseudouridine.
   Bare numeric codes are automatically prefixed with "m_".}
@@ -60,6 +62,8 @@ table contains a \code{num_sites} column (i.e., windows).
 Default is \code{NULL} (no filtering).}
 
 \item{overwrite}{If TRUE and output_table exists, it is dropped before writing.}
+
+\item{call_type}{Deprecated. Use \code{input_table} instead.}
 }
 \value{
 Invisibly returns the updated \code{"mod_db"} object with \code{current_table} set to
@@ -68,12 +72,12 @@ Invisibly returns the updated \code{"mod_db"} object with \code{current_table} s
   \code{get_mod_table(mod_db, mod_db\$current_table)}.
 }
 \description{
-This function calculates differential methylation between specified case and control groups using various statistical methods. 
+This function calculates differential methylation between specified case and control groups using various statistical methods.
 The results are stored in a DuckDB database for further analysis.
 }
 \details{
-The function connects to the specified DuckDB database and retrieves methylation data from the specified call type table. 
-It summarizes the data for cases and controls, calculates p-values based on the specified method, and stores the results in the 
+The function connects to the specified DuckDB database and retrieves methylation data from the specified input table.
+It summarizes the data for cases and controls, calculates p-values based on the specified method, and stores the results in the
 "meth_diff" table. Resource pragmas (\code{temp_directory}, \code{threads},
 \code{memory_limit}) are set via internal heuristics unless overridden.
 }
@@ -81,12 +85,12 @@ It summarizes the data for cases and controls, calculates p-values based on the 
 \dontrun{
 # Specify the path to the database
  mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
- 
- # Get methylation statistics for the 'positions' call type without plotting
- calc_mod_diff(mod_db = mod_db, 
-               call_type = "positions",
+
+ # Get methylation statistics for the 'positions' input table without plotting
+ calc_mod_diff(mod_db = mod_db,
+               input_table = "positions",
                cases = c("Blood1_chr21", "Blood2_chr21", "Blood3_chr21"),
                controls = c("Sperm1_chr21", "Sperm2_chr21", "Sperm3_chr21")))
 }
-               
+
 }

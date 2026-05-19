@@ -9,8 +9,9 @@
 #'        differential methylation windows to be collapsed. The table must
 #'        contain at least the columns \code{chrom}, \code{start}, \code{end},
 #'        \code{p_adjust}, and \code{meth_diff}. Default is \code{"mod_diff_windows"}.
-#' @param table_name Character. Name of the output table to store collapsed
-#'        windows (default: "collapsed_windows").
+#' @param output_table Character. Name of the output table to store collapsed
+#'        windows (default: \code{"collapsed_windows"}).
+#' @param table_name Deprecated. Use \code{output_table} instead.
 #' @param max_distance Numeric. The maximum allowable distance between consecutive
 #'        significant windows for merging (default: 1000).
 #' @param sig_cutoff Numeric. The significance threshold for adjusted p-values
@@ -19,8 +20,8 @@
 #'        for inclusion in the analysis (default: 0.5).
 #'
 #' @return Invisibly returns the updated \code{"mod_db"} object with
-#'   \code{current_table} set to \code{table_name}. The collapsed results are
-#'   written to \code{table_name} inside the database. \code{last_result} is set to a tibble
+#'   \code{current_table} set to \code{output_table}. The collapsed results are
+#'   written to \code{output_table} inside the database. \code{last_result} is set to a tibble
 #'   with columns \code{sample_name} and \code{n} if the table contains a \code{sample_name}
 #'   column, otherwise a single integer row count.
 #'
@@ -42,15 +43,24 @@
 #' 
 #' @export
 
-collapse_mod_windows <- function(mod_db, 
+collapse_mod_windows <- function(mod_db,
                                  input_table = "mod_diff_windows",
-                                 table_name  = "collapsed_windows",
+                                 output_table = "collapsed_windows",
                                  max_distance = 1000,
                                  sig_cutoff = 0.05,
-                                 min_diff = 0.5) 
+                                 min_diff = 0.5,
+                                 table_name = NULL)
 {
+  if (!is.null(table_name)) {
+    warning("'table_name' is deprecated; use 'output_table' instead.", call. = FALSE)
+    output_table <- table_name
+  }
+
   start_time <- Sys.time()
   mod_db <- .modhelper_connectDB(mod_db)
+
+  # Check required columns in input table
+  .modhelper_check_cols(mod_db$con, input_table, c("chrom", "start", "end", "p_adjust", "meth_diff"))
   
   # Quote identifiers safely for DuckDB
   qi <- function(x) as.character(DBI::dbQuoteIdentifier(mod_db$con, x))
@@ -94,7 +104,7 @@ collapse_mod_windows <- function(mod_db,
   }
   
   query <- glue::glue(
-    "CREATE OR REPLACE TABLE {qi(table_name)} AS
+    "CREATE OR REPLACE TABLE {qi(output_table)} AS
      WITH FilteredWindows AS (
        SELECT *
        FROM {qi(input_table)}
@@ -138,20 +148,20 @@ collapse_mod_windows <- function(mod_db,
   total_seconds <- as.numeric(end_time - start_time, units = "secs")
   
   if (total_seconds > 60) {
-    message("Windows successfully collapsed - ", table_name, " created!",
+    message("Windows successfully collapsed - ", output_table, " created!",
             "\nTime elapsed: ", round(total_seconds/60, 2), " minutes\n")
   } else {
-    message("Windows successfully collapsed - ", table_name, " created!",
+    message("Windows successfully collapsed - ", output_table, " created!",
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
-  
-  cols <- DBI::dbListFields(mod_db$con, table_name)
+
+  cols <- DBI::dbListFields(mod_db$con, output_table)
   mod_db$last_result <- if ("sample_name" %in% cols) {
-    dplyr::tbl(mod_db$con, table_name) |> dplyr::count(sample_name) |> dplyr::collect()
+    dplyr::tbl(mod_db$con, output_table) |> dplyr::count(sample_name) |> dplyr::collect()
   } else {
-    DBI::dbGetQuery(mod_db$con, sprintf("SELECT COUNT(*) AS n FROM %s", table_name))$n
+    DBI::dbGetQuery(mod_db$con, sprintf("SELECT COUNT(*) AS n FROM %s", output_table))$n
   }
-  mod_db$current_table <- table_name
+  mod_db$current_table <- output_table
   mod_db <- .modhelper_cleanup(mod_db)
   invisible(mod_db)
 }

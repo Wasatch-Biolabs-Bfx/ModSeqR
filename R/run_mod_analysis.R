@@ -1,21 +1,24 @@
 #' Run Differential Analysis on Methylation Data
 #'
-#' This function performs a differential analysis on methylation data based on the specified call type
-#' and applies the appropriate summarization method. It supports analysis of positions, regions, or windows.
+#' This function performs a differential analysis on methylation data based on the specified input
+#' table and applies the appropriate summarization method. It supports analysis of positions, regions, or windows.
 #' The function handles the summarization of methylation data and performs differential modification analysis
 #' based on case-control comparisons.
 #'
 #' @param mod_db A `mod_db` object representing the DuckDB database containing methylation data.
 #'   The database should include necessary tables for the analysis, such as positions, regions, or windows.
-#' @param out_path The directory in which the "Mod_Diff_Analysis_Results" directory containing result data will be written out too. 
+#' @param out_path The directory in which the "Mod_Diff_Analysis_Results" directory containing result data will be written out too.
 #' If the user does not provide a directory, the working directory will be used.
-#' @param call_type A character string specifying the type of data to analyze. Must be one of:
-#'   \code{"positions"}, \code{"regions"}, or \code{"windows"}. This determines the summarization approach to use.
-#' @param region_file A character string specifying the path to the region annotation file (required if `call_type` is `"regions"`).
+#' @param input_table A character string specifying the name of the table to analyze, or one of the
+#'   default types: \code{"positions"}, \code{"regions"}, or \code{"windows"}. If the table already
+#'   exists in the database, summarization is skipped and its type is detected automatically.
+#'   If it does not exist and the value is a known default type, the appropriate summarization
+#'   function is run first.
+#' @param region_file A character string specifying the path to the region annotation file (required if `input_table` is `"regions"`).
 #'   This file should be in a supported format (e.g., BED, CSV, TSV).
-#' @param window_size An integer specifying the window size for summarizing methylation data if `call_type` is `"windows"`.
+#' @param window_size An integer specifying the window size for summarizing methylation data if `input_table` is `"windows"`.
 #'   The default value is 1000.
-#' @param step_size An integer specifying the step size for sliding windows if `call_type` is `"windows"`.
+#' @param step_size An integer specifying the step size for sliding windows if `input_table` is `"windows"`.
 #'   The default value is 10.
 #' @param cases A character vector of sample names to be used as cases in the differential analysis.
 #'   This argument is required and cannot be NULL.
@@ -26,13 +29,16 @@
 #'   Other options are `"c"` for unmodified cytosine, `"m"` for methylation, and `"h"` for hydroxymethylation.
 #' @param calc_type A character string specifying the type of statistical test to use for the differential analysis.
 #'   The default is `"fast_fisher"`, but other calculation methods can be implemented.
-#' @param p_val_max The p value threshold in which significant differentially modified positions/regions/windows 
+#' @param p_val_max The p value threshold in which significant differentially modified positions/regions/windows
 #' will be written out in the final directory.
+#' @param call_type Deprecated. Use \code{input_table} instead.
 #'
 #' @details
-#' This function first summarizes the methylation data by the specified call type (positions, regions, or windows).
+#' This function first checks whether the specified \code{input_table} already exists in the database.
+#' If it does, summarization is skipped and the table type is auto-detected from its columns.
+#' If it does not exist and \code{input_table} is one of \code{"positions"}, \code{"regions"}, or
+#' \code{"windows"}, the appropriate \code{summarize_mod_*()} function is called first.
 #' It then proceeds with a differential modification analysis between the provided case and control samples.
-#' The analysis is tailored based on the selected modification type (`mod_type`) and calculation method (`calc_type`).
 #'
 #' @return Invisibly returns the \code{"mod_db"} object (connection closed on return).
 #'   \code{last_result} is set to a named character vector of exported file paths:
@@ -49,7 +55,7 @@
 
 run_mod_analysis <- function(mod_db,
                          out_path,
-                         call_type,
+                         input_table,
                          region_file = NULL,
                          window_size = 1000,
                          step_size = 10,
@@ -57,62 +63,85 @@ run_mod_analysis <- function(mod_db,
                          controls,
                          mod_type = "mh",
                          calc_type = "fast_fisher",
-                         p_val_max = 0.05) {
-  
-  if (missing(call_type) || is.null(call_type)) {
-    stop("Error: The 'call_type' argument is required and cannot be NULL. Please specify 'positions', 'regions', or 'windows'.")
+                         p_val_max = 0.05,
+                         call_type = NULL) {
+
+  if (!is.null(call_type)) {
+    warning("'call_type' is deprecated; use 'input_table' instead.", call. = FALSE)
+    input_table <- call_type
   }
-  
+
+  if (missing(input_table) || is.null(input_table)) {
+    stop("Error: The 'input_table' argument is required and cannot be NULL. Please specify 'positions', 'regions', 'windows', or an existing table name.")
+  }
+
   if (missing(cases) || is.null(cases)) {
     stop("Error: The 'cases' argument is required and cannot be NULL. Please specify which samples are to be cases for differential analysis.")
   }
-  
+
   if (missing(controls) || is.null(controls)) {
     stop("Error: The 'controls' argument is required and cannot be NULL. Please specify which samples are to be controls for differential analysis.")
   }
-  
+
   cat("\nRunning Analyses...\n")
   # Record the start time
   start_time <- Sys.time()
-  
-  # First, summarize by call type requested
-  if (call_type == "positions") { 
-    summarize_mod_positions(mod_db)
-    diff_table_name = "mod_diff_positions"
-  } else if (call_type == "regions") {
-    if (is.null(region_file)) { # check to make sure user included an annotation file
-      stop(paste("Error: region annotation file missing.\n
+
+  # Check whether the table already exists in the database
+  tmp_db <- .modhelper_connectDB(mod_db)
+  table_exists <- DBI::dbExistsTable(tmp_db$con, input_table)
+
+  if (table_exists) {
+    # Table already exists — skip summarization, detect type
+    table_type <- .modhelper_detect_table_type(tmp_db$con, input_table)
+    tmp_db <- .modhelper_closeDB(tmp_db)
+    cat(paste0("Table '", input_table, "' found in database (type: ", table_type, "). Skipping summarization.\n"))
+  } else {
+    tmp_db <- .modhelper_closeDB(tmp_db)
+    # Table does not exist — run appropriate summarization
+    if (input_table == "positions") {
+      summarize_mod_positions(mod_db)
+      table_type <- "positions"
+    } else if (input_table == "regions") {
+      if (is.null(region_file)) {
+        stop(paste("Error: region annotation file missing.\n
                  Please include path to annotation file in the region_file argument of this function.\n"))
+      }
+      summarize_mod_regions(mod_db, region_file = region_file)
+      table_type <- "regions"
+    } else if (input_table == "windows") {
+      summarize_mod_windows(mod_db, window_size = window_size, step_size = step_size)
+      table_type <- "windows"
+    } else {
+      stop(paste0("Error: Table '", input_table, "' does not exist in the database and is not a known default type.\n",
+                  "Please specify 'positions', 'regions', or 'windows', or ensure the table exists first."))
     }
-    summarize_mod_regions(mod_db, region_file = region_file)
-    diff_table_name = "mod_diff_regions"
-  } else if (call_type == "windows") {
-    summarize_mod_windows(mod_db, window_size = window_size, step_size = step_size)
-    diff_table_name = "mod_diff_windows"
   }
-  
+
+  diff_table_name <- paste0("mod_diff_", input_table)
+
   # Second, run differential modification analysis...
   cat("\nBeginning Differential Analysis...\n")
   calc_mod_diff(mod_db,
-                call_type,
+                input_table,
                 cases,
                 controls,
                 mod_type,
                 calc_type)
-  
-  # Third, create directory for user with meth_diff table, all methylation data, and the significant regions/windows/posiitons meth data...
+
+  # Third, create directory for user with meth_diff table, all methylation data, and the significant regions/windows/positions meth data...
   if (is.null(out_path)) {
-    out_path = getwd() 
+    out_path = getwd()
   }
-  
+
   cat(paste0("\nWriting out differential analysis results to ", out_path, "\n"))
-  
+
   new_dir <- file.path(out_path, "Mod_Diff_Analysis_Results")
-  
+
   if (!dir.exists(new_dir)) {
     dir.create(new_dir, recursive = TRUE)
   }
-  
+
   # Write out the mod_diff table from analysis
   mod_diff_path <- file.path(new_dir, "mod_diff.csv")
   # Write the data frame to a CSV file DIRECTLY from the database
@@ -123,42 +152,27 @@ run_mod_analysis <- function(mod_db,
     mod_db$con,
     glue("COPY {diff_table_name} TO '{mod_diff_path}' (HEADER, DELIMITER ',')")
   )
-  
-  # Write out all methylation data form all samples
+
+  # Write out all methylation data from all samples
   cat("\nWriting out all CpG data...\n")
-  
+
   all_CGs_path <- file.path(new_dir, "All_CpGs.csv")
-  
+
   dbExecute(
     mod_db$con,
-    glue("COPY {call_type} TO '{all_CGs_path}' (HEADER, DELIMITER ',')")
+    glue("COPY {input_table} TO '{all_CGs_path}' (HEADER, DELIMITER ',')")
   )
-  
-  # data = get_table(mod_db, call_type)
-  # 
-  # cat("\nWriting out all CpG data...\n")
-  # df_wide <- data |>
-  #   select(sample_name, chrom, start, end, matches("_frac")) |>
-  #   pivot_longer(cols = matches("_frac"),  # pivot both mh_frac and h_frac
-  #                names_to = "frac_type",     # create a new column 'frac_type'
-  #                values_to = "value") |>    # pivot values into 'value' column
-  #   unite("sample_frac", sample_name, frac_type, sep = ".") |>  # combine sample and frac_type
-  #   pivot_wider(names_from = sample_frac, values_from = value) |> # spread the new 'sample_frac' into columns
-  #   select(chrom, start, end, everything()) |>  # Ensure chrom, start, end come first
-  #   select(chrom, start, end, sort(names(.)[4:length(.)]))  # Sort the sample columns in alphabetical order
-  # 
-  # write.csv(df_wide, all_CGs_path, row.names = FALSE)
-  
+
   # Write out only the significant regions of interests methylation data...
   cat("\nWriting out significant CpG data based on differential analysis...\n")
   cat(paste0("p-value threshold: ", p_val_max, "\n"))
-  
+
   Sig_CGs_path <- file.path(new_dir, "Sig_CpGs.csv")
-  
+
   # automatically collapse if windows is selected
-  if (call_type == "windows") {
+  if (table_type == "windows") {
     collapse_mod_windows(mod_db)
-    
+
     dbExecute(
       mod_db$con,
       glue("COPY collapsed_windows TO '{Sig_CGs_path}' (HEADER, DELIMITER ',')")
@@ -167,7 +181,7 @@ run_mod_analysis <- function(mod_db,
     sql <- glue("
     COPY (
       SELECT call.*
-      FROM {`call_type`} AS call
+      FROM {`input_table`} AS call
       JOIN {`diff_table_name`} AS diff
       ON call.chrom = diff.chrom
          AND call.start = diff.start
@@ -175,20 +189,10 @@ run_mod_analysis <- function(mod_db,
       WHERE diff.p_val <= {p_val_max}
     ) TO '{Sig_CGs_path}' (HEADER, DELIMITER ',')
   ")
-    
+
     dbExecute(mod_db$con, sql)
   }
 
-  # sig = mod_diff |>
-  #   filter(p_val <= p_val_max) |>
-  #   select("chrom", "start", "end")
-  # 
-  # # Now, filter the data to only keep rows that match chrom, start, end in sig
-  # df_wide_significant <- df_wide |>
-  #   semi_join(sig, by = c("chrom", "start", "end"))
-  # 
-  # write.csv(df_wide_significant, Sig_CGs_path, row.names = FALSE)
-  
   cat("\nRun Analysis Complete!\n")
 
   mod_db$last_result <- c(
@@ -202,10 +206,10 @@ run_mod_analysis <- function(mod_db,
 
   mod_db <- .modhelper_closeDB(mod_db)
   total_time_difftime <- end_time - start_time
-  
+
   # Convert the total_time_difftime object to numeric seconds for a reliable comparison
   total_seconds <- as.numeric(total_time_difftime, units = "secs")
-  
+
   if (total_seconds > 60) {
     # If greater than 60 seconds, convert to numeric minutes for display
     total_minutes <- as.numeric(total_time_difftime, units = "mins")
@@ -214,6 +218,6 @@ run_mod_analysis <- function(mod_db,
     # Otherwise, display in numeric seconds
     message("Time elapsed: ", round(total_seconds, 2), " seconds\n")
   }
-  
+
   invisible(mod_db)
 }

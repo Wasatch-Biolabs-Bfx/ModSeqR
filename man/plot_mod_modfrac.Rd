@@ -6,23 +6,26 @@
 \usage{
 plot_mod_modfrac(
   mod_db,
-  call_type = c("positions", "regions"),
+  input_table = "positions",
   plot = TRUE,
   save_path = NULL,
-  max_rows = NULL
+  max_rows = NULL,
+  call_type = NULL
 )
 }
 \arguments{
 \item{mod_db}{A string. The path to the database containing mod files from nanopore data.}
 
-\item{call_type}{A character vector specifying the type of data to retrieve from the database. 
-Default is "positions". Can also be "regions".}
+\item{input_table}{A string specifying the table name to retrieve data from.
+Default is \code{"positions"}.}
 
 \item{plot}{A logical value. If TRUE, a histogram of methylation values is plotted. Default is FALSE.}
 
 \item{save_path}{Pathway to save the plot to. Usually .pdf or .png.}
 
 \item{max_rows}{The maximum amount of rows wanted for calculation. This argument can help analysis run faster when there is a lot of data.}
+
+\item{call_type}{Deprecated. Use \code{input_table} instead.}
 }
 \value{
 Invisibly returns the \code{"mod_db"} object (connection closed on return). Prints
@@ -30,26 +33,26 @@ Invisibly returns the \code{"mod_db"} object (connection closed on return). Prin
   \code{last_result} is set to the \code{ggplot} object when \code{plot = TRUE}.
 }
 \description{
-This function retrieves and calculates methylation statistics (mean methylation fractions) 
-from a specified table in the mod database. It can either return summary statistics or plot 
+This function retrieves and calculates methylation statistics (mean methylation fractions)
+from a specified table in the mod database. It can either return summary statistics or plot
 a histogram of the methylation values, depending on the user's preference.
 }
 \details{
-The function connects to the specified database, checks for the existence of the relevant table, 
-and retrieves methylation fraction data. If the table contains methylation data, it prioritizes 
-the `mh_frac` column over others. Depending on the `call_type`, it can compute statistics 
-for either per base or per region. If `plot` is set to TRUE, it generates a histogram of the 
+The function connects to the specified database, checks for the existence of the relevant table,
+and retrieves methylation fraction data. If the table contains methylation data, it prioritizes
+the `mh_frac` column over others. Depending on the input table type, it can compute statistics
+for either per base, per window, or per region. If `plot` is set to TRUE, it generates a histogram of the
 methylation values.
 }
 \note{
-The function assumes that the database has tables named according to the `call_type` parameter 
-(e.g., "positions", "regions"). It also expects specific columns for methylation data to exist.
+The function auto-detects the table type from its columns to determine the appropriate
+axis labels and title.
 }
 \examples{
  # Specify the path to the database
  mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
- 
- # Get methylation statistics for the 'positions' call type without plotting
- plot_mod_modfrac(mod_db = mod_db, call_type = "positions")
+
+ # Get methylation statistics for the 'positions' input table without plotting
+ plot_mod_modfrac(mod_db = mod_db, input_table = "positions")
 
 }

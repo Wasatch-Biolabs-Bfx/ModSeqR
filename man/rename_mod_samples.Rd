@@ -4,13 +4,21 @@
 \alias{rename_mod_samples}
 \title{Rename sample names in a table}
 \usage{
-rename_mod_samples(mod_db, table, samples_map, strict = TRUE, preview = TRUE)
+rename_mod_samples(
+  mod_db,
+  table_name,
+  samples_map,
+  strict = TRUE,
+  preview = TRUE,
+  table = NULL
+)
 }
 \arguments{
 \item{mod_db}{Path to a \code{.mod.db} file or a \code{"mod_db"} object.}
 
-\item{table}{Character scalar: the table to modify (e.g. \code{"positions"},
-\code{"windows"}, \code{"regions"}, or \code{"calls"}).}
+\item{table_name}{Character scalar: the table to modify (e.g. \code{"positions"},
+\code{"windows"}, \code{"regions"}, or \code{"calls"}). Required columns:
+\code{sample_name}.}
 
 \item{samples_map}{Either a named character vector (\code{names = old, values = new})
 or a data.frame with columns \code{old} and \code{new}.}
@@ -21,6 +29,8 @@ to proceed after dropping invalid rows with a warning.}
 
 \item{preview}{Logical; if \code{TRUE}, prints a small before/after summary
 of distinct sample names.}
+
+\item{table}{Deprecated. Use \code{table_name} instead.}
 }
 \value{
 (Invisibly) the updated \code{"mod_db"} object (connection closed on return).
@@ -35,7 +45,7 @@ from old names to new names. Accepts either a named character vector
 \examples{
 \dontrun{
 # Named character vector
-rename_mod_samples("my_db.mod.db", table = "positions",
+rename_mod_samples("my_db.mod.db", table_name = "positions",
                    samples_map = c("Astrocytes" = "Astro",
                                    "Cortical_Neurons" = "Cortical"))
 

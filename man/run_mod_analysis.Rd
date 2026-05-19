@@ -7,7 +7,7 @@
 run_mod_analysis(
   mod_db,
   out_path,
-  call_type,
+  input_table,
   region_file = NULL,
   window_size = 1000,
   step_size = 10,
@@ -15,26 +15,30 @@ run_mod_analysis(
   controls,
   mod_type = "mh",
   calc_type = "fast_fisher",
-  p_val_max = 0.05
+  p_val_max = 0.05,
+  call_type = NULL
 )
 }
 \arguments{
 \item{mod_db}{A `mod_db` object representing the DuckDB database containing methylation data.
 The database should include necessary tables for the analysis, such as positions, regions, or windows.}
 
-\item{out_path}{The directory in which the "Mod_Diff_Analysis_Results" directory containing result data will be written out too. 
+\item{out_path}{The directory in which the "Mod_Diff_Analysis_Results" directory containing result data will be written out too.
 If the user does not provide a directory, the working directory will be used.}
 
-\item{call_type}{A character string specifying the type of data to analyze. Must be one of:
-\code{"positions"}, \code{"regions"}, or \code{"windows"}. This determines the summarization approach to use.}
+\item{input_table}{A character string specifying the name of the table to analyze, or one of the
+default types: \code{"positions"}, \code{"regions"}, or \code{"windows"}. If the table already
+exists in the database, summarization is skipped and its type is detected automatically.
+If it does not exist and the value is a known default type, the appropriate summarization
+function is run first.}
 
-\item{region_file}{A character string specifying the path to the region annotation file (required if `call_type` is `"regions"`).
+\item{region_file}{A character string specifying the path to the region annotation file (required if `input_table` is `"regions"`).
 This file should be in a supported format (e.g., BED, CSV, TSV).}
 
-\item{window_size}{An integer specifying the window size for summarizing methylation data if `call_type` is `"windows"`.
+\item{window_size}{An integer specifying the window size for summarizing methylation data if `input_table` is `"windows"`.
 The default value is 1000.}
 
-\item{step_size}{An integer specifying the step size for sliding windows if `call_type` is `"windows"`.
+\item{step_size}{An integer specifying the step size for sliding windows if `input_table` is `"windows"`.
 The default value is 10.}
 
 \item{cases}{A character vector of sample names to be used as cases in the differential analysis.
@@ -50,8 +54,10 @@ Other options are `"c"` for unmodified cytosine, `"m"` for methylation, and `"h"
 \item{calc_type}{A character string specifying the type of statistical test to use for the differential analysis.
 The default is `"fast_fisher"`, but other calculation methods can be implemented.}
 
-\item{p_val_max}{The p value threshold in which significant differentially modified positions/regions/windows 
+\item{p_val_max}{The p value threshold in which significant differentially modified positions/regions/windows
 will be written out in the final directory.}
+
+\item{call_type}{Deprecated. Use \code{input_table} instead.}
 }
 \value{
 Invisibly returns the \code{"mod_db"} object (connection closed on return).
@@ -60,13 +66,15 @@ Invisibly returns the \code{"mod_db"} object (connection closed on return).
   \code{sig_cpgs} (significant sites only).
 }
 \description{
-This function performs a differential analysis on methylation data based on the specified call type
-and applies the appropriate summarization method. It supports analysis of positions, regions, or windows.
+This function performs a differential analysis on methylation data based on the specified input
+table and applies the appropriate summarization method. It supports analysis of positions, regions, or windows.
 The function handles the summarization of methylation data and performs differential modification analysis
 based on case-control comparisons.
 }
 \details{
-This function first summarizes the methylation data by the specified call type (positions, regions, or windows).
+This function first checks whether the specified \code{input_table} already exists in the database.
+If it does, summarization is skipped and the table type is auto-detected from its columns.
+If it does not exist and \code{input_table} is one of \code{"positions"}, \code{"regions"}, or
+\code{"windows"}, the appropriate \code{summarize_mod_*()} function is called first.
 It then proceeds with a differential modification analysis between the provided case and control samples.
-The analysis is tailored based on the selected modification type (`mod_type`) and calculation method (`calc_type`).
 }

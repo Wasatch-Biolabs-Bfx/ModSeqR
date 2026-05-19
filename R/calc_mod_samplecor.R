@@ -5,8 +5,9 @@
 #' and window-based calls and provides visualization using ggplot2.
 #'
 #' @param mod_db A string. The path to the database containing ch3 files from nanopore data.
-#' @param call_type A character vector specifying the type of data to retrieve from the database.
-#'   Options are "positions", "regions", or "windows". Default is "positions".
+#' @param input_table A string specifying the name of the table in the database from which to
+#'   pull the data. Default is \code{"positions"}. Required columns: \code{sample_name},
+#'   \code{chrom}, \code{start}, \code{end}.
 #' @param value Column in the table to use as the measurement (e.g., mh_frac, m_frac).
 #'   Accepts a bare column name or a string. Default: mh_frac.
 #' @param agg_fun Function used to aggregate when multiple rows map to the same cell during pivot
@@ -16,9 +17,10 @@
 #' @param plot_sample_order Optional character vector setting sample order in the heatmap.
 #' @param plot_title Title for the heatmap.
 #' @param max_rows Optional integer to randomly sample rows from the table for faster runs.
+#' @param call_type Deprecated. Use \code{input_table} instead.
 #'
 #' @details
-#' The function connects to the mod database, pulls data for the selected `call_type`, reshapes
+#' The function connects to the mod database, pulls data for the selected \code{input_table}, reshapes
 #' to a samples x samples matrix, and computes Pearson correlations using
 #' `use = "pairwise.complete.obs"`. The `value` column controls which measurement is used.
 #'
@@ -29,11 +31,11 @@
 #' @examples
 #' \dontrun{
 #' # Use mh_frac (default)
-#' calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "positions")
+#' calc_mod_samplecor(mod_db = "my_data.mod.db", input_table = "positions")
 #' # Use m_frac
-#' calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "regions", value = m_frac)
+#' calc_mod_samplecor(mod_db = "my_data.mod.db", input_table = "regions", value = m_frac)
 #' # Or as a string
-#' calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "windows", value = "m_frac")
+#' calc_mod_samplecor(mod_db = "my_data.mod.db", input_table = "windows", value = "m_frac")
 #' }
 #'
 #' @importFrom DBI dbConnect dbDisconnect dbExistsTable dbGetQuery
@@ -45,17 +47,23 @@
 #' @importFrom stats cor
 #' @export
 calc_mod_samplecor <- function(mod_db,
-                               call_type = c("positions"),
+                               input_table = "positions",
                                value = mh_frac,
                                agg_fun = mean,
                                plot = TRUE,
                                save_path = NULL,
                                plot_sample_order = NULL,
                                plot_title = "Sample Correlation Matrix",
-                               max_rows = NULL)
+                               max_rows = NULL,
+                               call_type = NULL)
 {
+  if (!is.null(call_type)) {
+    warning("'call_type' is deprecated; use 'input_table' instead.", call. = FALSE)
+    input_table <- call_type
+  }
+
   start_time <- Sys.time()
-  
+
   # Tidy-eval: allow bare name or string for `value`
   value_quo <- rlang::enquo(value)
   if (rlang::quo_is_symbol(value_quo)) {
@@ -70,49 +78,51 @@ calc_mod_samplecor <- function(mod_db,
       stop("`value` must be a column name (bare) or a single string.")
     }
   }
-  
+
   # Open the database connection
   mod_db <- .modhelper_connectDB(mod_db)
-  
-  if (length(call_type) > 1) {
-    call_type <- "positions"
+
+  if (!dbExistsTable(mod_db$con, input_table)) {
+    stop(paste0(input_table, " table does not exist in the database."))
   }
-  
-  if (!dbExistsTable(mod_db$con, call_type)) {
-    stop(paste0(call_type, " table does not exist in the database."))
-  }
-  
+
+  # Check required columns
+  .modhelper_check_cols(mod_db$con, input_table, c("sample_name", "chrom", "start", "end"))
+
+  # Detect table type
+  table_type <- .modhelper_detect_table_type(mod_db$con, input_table)
+
   # Retrieve data (optionally sampled)
   if (!is.null(max_rows)) {
-    row_count <- dbGetQuery(mod_db$con, paste0("SELECT COUNT(*) as n FROM ", call_type))$n
+    row_count <- dbGetQuery(mod_db$con, paste0("SELECT COUNT(*) as n FROM ", input_table))$n
     if (row_count < max_rows) {
-      stop(paste0("Table '", call_type, "' only has ", row_count,
+      stop(paste0("Table '", input_table, "' only has ", row_count,
                   " rows, which is fewer than max_rows = ", max_rows, ". Pick fewer rows."))
     }
-    modseq_dat <- dbGetQuery(mod_db$con, paste0("SELECT * FROM ", call_type, " ORDER BY RANDOM() LIMIT ", max_rows))
+    modseq_dat <- dbGetQuery(mod_db$con, paste0("SELECT * FROM ", input_table, " ORDER BY RANDOM() LIMIT ", max_rows))
   } else {
-    modseq_dat <- dplyr::tbl(mod_db$con, call_type) |> dplyr::collect()
+    modseq_dat <- dplyr::tbl(mod_db$con, input_table) |> dplyr::collect()
   }
-  
+
   # --- New check for value column existence ---
   if (!(value_col %in% colnames(modseq_dat))) {
     .modhelper_closeDB(mod_db)
     stop(paste0("The specified `value` column '", value_col,
-                "' does not exist in the '", call_type, "' table.\n",
+                "' does not exist in the '", input_table, "' table.\n",
                 "Available columns: ", paste(colnames(modseq_dat), collapse = ", "), "."))
   }
-  
-  
+
+
   # Quick column presence check for the selected value column
   if (!(value_col %in% names(modseq_dat))) {
     on.exit(.modhelper_closeDB(mod_db), add = TRUE)
-    stop("Selected `value` column '", value_col, "' is not present in the '", call_type, "' table.")
+    stop("Selected `value` column '", value_col, "' is not present in the '", input_table, "' table.")
   }
-  
+
   # Build a named values_fn for pivot_wider when needed
   values_fn_named <- setNames(list(agg_fun), value_col)
-  
-  if (call_type == "regions") {
+
+  if (table_type == "regions") {
     # Aggregate value by sample and region_name
     dat_wide <- modseq_dat |>
       tidyr::pivot_wider(
@@ -121,20 +131,20 @@ calc_mod_samplecor <- function(mod_db,
         values_from = !!value_quo,
         values_fn  = values_fn_named
       )
-    
+
     numeric_columns <- dat_wide[, unique(modseq_dat$sample_name), drop = FALSE]
-    
+
     correlation_matrix <- stats::cor(numeric_columns,
                                      use = "pairwise.complete.obs",
                                      method = "pearson")
-    
-  } else if (call_type == "windows") {
-    
+
+  } else if (table_type == "windows") {
+
     common_windows <- modseq_dat |>
       dplyr::select(chrom, start, end) |>
       dplyr::distinct() |>
       dplyr::arrange(chrom, start, end)
-    
+
     aligned_data <- common_windows |>
       dplyr::left_join(modseq_dat, by = c("chrom", "start", "end")) |>
       tidyr::pivot_wider(
@@ -143,18 +153,18 @@ calc_mod_samplecor <- function(mod_db,
         values_from = !!value_quo,
         values_fn   = values_fn_named
       )
-    
+
     # Replace NA with 0 *only* for the measurement columns (keep coords intact)
     coord_cols <- c("chrom", "start", "end")
     measure_cols <- setdiff(names(aligned_data), coord_cols)
     aligned_data[measure_cols] <- lapply(aligned_data[measure_cols], function(x) { x[is.na(x)] <- 0; x })
-    
+
     numeric_columns <- aligned_data |> dplyr::select(-chrom, -start, -end)
-    
+
     correlation_matrix <- stats::cor(numeric_columns,
                                      use = "pairwise.complete.obs",
                                      method = "pearson")
-    
+
   } else {
     # positions
     dat_wide <- modseq_dat |>
@@ -165,34 +175,34 @@ calc_mod_samplecor <- function(mod_db,
         values_from = !!value_quo,
         values_fn   = values_fn_named
       )
-    
+
     # Try to ensure numerics (without breaking factors/characters that slipped in)
     numeric_columns <- dat_wide |>
       dplyr::select(-chr_pos) |>
       dplyr::mutate(dplyr::across(dplyr::where(is.factor), as.character)) |>
       dplyr::mutate(dplyr::across(dplyr::where(is.character), suppressWarnings(as.numeric)))
-    
+
     if (!all(vapply(numeric_columns, is.numeric, logical(1)))) {
       stop("Some sample columns could not be converted to numeric. Check the input data.")
     }
-    
+
     correlation_matrix <- stats::cor(numeric_columns,
                                      use = "pairwise.complete.obs",
                                      method = "pearson")
   }
-  
+
   print(correlation_matrix)
-  
+
   if (plot) {
     melted_cor <- as.data.frame(correlation_matrix) |>
       dplyr::mutate(Var1 = rownames(correlation_matrix)) |>
       tidyr::pivot_longer(cols = -Var1, names_to = "Var2", values_to = "value")
-    
+
     if (!is.null(plot_sample_order)) {
       melted_cor$Var1 <- factor(melted_cor$Var1, levels = plot_sample_order)
       melted_cor$Var2 <- factor(melted_cor$Var2, levels = plot_sample_order)
     }
-    
+
     p <- ggplot2::ggplot(melted_cor, ggplot2::aes(x = Var1, y = Var2, fill = value)) +
       ggplot2::geom_tile() +
       ggplot2::geom_text(ggplot2::aes(label = round(value, 2)), color = "black") +
@@ -204,16 +214,16 @@ calc_mod_samplecor <- function(mod_db,
       ggplot2::labs(title = plot_title, x = "Sample", y = "Sample") +
       ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, vjust = 1, hjust = 1))
     print(p)
-    
+
     end_time <- Sys.time()
     message("Correlation analysis complete - Time elapsed: ", end_time - start_time, "\n")
-    
+
     if (!is.null(save_path)) {
       ggplot2::ggsave(filename = save_path, plot = p, width = 8, height = 6, dpi = 300)
       cat("Correlation plot saved to ", save_path, "\n")
     }
   }
-  
+
   mod_db$last_result <- correlation_matrix
   .modhelper_closeDB(mod_db)
   invisible(mod_db)

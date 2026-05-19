@@ -1,15 +1,16 @@
 #' Calculate Differential Methylation
 #'
-#' This function calculates differential methylation between specified case and control groups using various statistical methods. 
+#' This function calculates differential methylation between specified case and control groups using various statistical methods.
 #' The results are stored in a DuckDB database for further analysis.
 #'
 #' @param mod_db A list containing the database file path. This should be a valid "mod_db" class object.
-#' @param call_type A string representing the name of the table in the database from which to pull the data. 
-#' Default is "positions".
-#' @param output_table Destination table name for results. If NULL, defaults to paste0("mod_diff_", call_type).
+#' @param input_table A string representing the name of the table in the database from which to pull
+#'   the data. Default is \code{"positions"}. Required columns: \code{sample_name}, \code{chrom},
+#'   \code{start}, \code{end}.
+#' @param output_table Destination table name for results. If NULL, defaults to \code{paste0("mod_diff_", input_table)}.
 #' @param cases A character vector containing the sample names for the case group.
 #' @param controls A character vector containing the sample names for the control group.
-#' @param mod_type A string indicating the type of modification to analyze. 
+#' @param mod_type A string indicating the type of modification to analyze.
 #' Default is "mh" for methylation/hydroxymethylation. Other codes include
 #'   "a" for 6mA, "17596" for inosine, and "17802" for pseudouridine.
 #'   Bare numeric codes are automatically prefixed with "m_".
@@ -32,10 +33,11 @@
 #'   table contains a \code{num_sites} column (i.e., windows).
 #'   Default is \code{NULL} (no filtering).
 #' @param overwrite If TRUE and output_table exists, it is dropped before writing.
+#' @param call_type Deprecated. Use \code{input_table} instead.
 #'
 #' @details
-#' The function connects to the specified DuckDB database and retrieves methylation data from the specified call type table. 
-#' It summarizes the data for cases and controls, calculates p-values based on the specified method, and stores the results in the 
+#' The function connects to the specified DuckDB database and retrieves methylation data from the specified input table.
+#' It summarizes the data for cases and controls, calculates p-values based on the specified method, and stores the results in the
 #' "meth_diff" table. Resource pragmas (\code{temp_directory}, \code{threads},
 #' \code{memory_limit}) are set via internal heuristics unless overridden.
 #'
@@ -43,19 +45,19 @@
 #'   the output table name and \code{last_result} set to a data frame preview (head) of the result
 #'   table. Retrieve the preview with \code{get_mod_result(mod_db)}; retrieve the full table with
 #'   \code{get_mod_table(mod_db, mod_db\$current_table)}.
-#' 
+#'
 #' @examples
 #' \dontrun{
 #' # Specify the path to the database
 #'  mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
-#'  
-#'  # Get methylation statistics for the 'positions' call type without plotting
-#'  calc_mod_diff(mod_db = mod_db, 
-#'                call_type = "positions",
+#'
+#'  # Get methylation statistics for the 'positions' input table without plotting
+#'  calc_mod_diff(mod_db = mod_db,
+#'                input_table = "positions",
 #'                cases = c("Blood1_chr21", "Blood2_chr21", "Blood3_chr21"),
 #'                controls = c("Sperm1_chr21", "Sperm2_chr21", "Sperm3_chr21")))
 #' }
-#'                
+#'
 #' @importFrom DBI dbConnect dbDisconnect dbExistsTable dbRemoveTable dbExecute dbWriteTable
 #' @importFrom duckdb duckdb
 #' @importFrom dplyr tbl select any_of mutate case_when filter pull summarize inner_join join_by rename_with collect arrange
@@ -65,7 +67,7 @@
 #' @export
 
 calc_mod_diff <- function(mod_db,
-                          call_type = "positions",
+                          input_table = "positions",
                           output_table = NULL,
                           cases,
                           controls,
@@ -74,13 +76,20 @@ calc_mod_diff <- function(mod_db,
                           temp_dir = tempdir(),
                           threads = NULL,
                           memory_limit = NULL,
-                          min_sites = NULL, 
-                          overwrite = TRUE)
+                          min_sites = NULL,
+                          overwrite = TRUE,
+                          call_type = NULL)
 {
   start_time <- Sys.time()
 
   # Open the database connection
   mod_db <- .modhelper_connectDB(mod_db)
+
+  # Handle deprecated call_type parameter
+  if (!is.null(call_type)) {
+    warning("'call_type' is deprecated; use 'input_table' instead.", call. = FALSE)
+    input_table <- call_type
+  }
 
   # Resource caps
   caps <- .auto_duckdb_resource_caps(0.80)
@@ -92,42 +101,45 @@ calc_mod_diff <- function(mod_db,
   DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
   DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", thr))
 
-  # check for windows function
-  if (!dbExistsTable(mod_db$con, call_type)) { # add db_con into object and put in every function...
-    stop(call_type, " table does not exist. Build it with summarize_mod_positions(), ",
+  # check for input table
+  if (!dbExistsTable(mod_db$con, input_table)) {
+    stop(input_table, " table does not exist. Build it with summarize_mod_positions(), ",
          "summarize_mod_regions(), or summarize_mod_windows().")
   }
-  
+
+  # Minimum column check
+  .modhelper_check_cols(mod_db$con, input_table, c("sample_name", "chrom", "start", "end"))
+
   # Discover available *_counts columns and validate mod_type
-  cols <- colnames(dplyr::tbl(mod_db$con, call_type))
+  cols <- colnames(dplyr::tbl(mod_db$con, input_table))
   counts_cols <- grep("_counts$", cols, value = TRUE)
   available_labels <- sub("_counts$", "", counts_cols)
-  
+
   mod_type <- mod_type[1]
-  
+
   # Allow bare numeric codes: e.g. 17596 -> "m_17596"
   if (grepl("^\\d+$", mod_type)) {
     mod_type <- paste0("m_", mod_type)
   }
-  
+
   mod_counts_col <- paste0(mod_type, "_counts")
   if (!mod_counts_col %in% cols) {
-    stop("Requested mod_type '", mod_type, "' not found in ", call_type, ". ",
+    stop("Requested mod_type '", mod_type, "' not found in ", input_table, ". ",
          "Available mod types are: ",
          paste(sort(available_labels), collapse = ", "), ".\n",
-         "Tip: rebuild ", call_type, " with summarize_* and include mod_code = '", mod_type, "'.")
+         "Tip: rebuild ", input_table, " with summarize_* and include mod_code = '", mod_type, "'.")
   }
   if (!"num_calls" %in% cols) {
-    stop(call_type, " is missing required column 'num_calls'. ",
+    stop(input_table, " is missing required column 'num_calls'. ",
          "Recreate it with the latest summarize_* function.")
   }
-  
+
   if (is.null(output_table) || !nzchar(output_table)) {
-    mod_diff_table <- paste0("mod_diff_", call_type)
+    mod_diff_table <- paste0("mod_diff_", input_table)
   } else {
     mod_diff_table <- output_table
   }
-  
+
   if (DBI::dbExistsTable(mod_db$con, mod_diff_table)) {
     if (overwrite) {
       DBI::dbRemoveTable(mod_db$con, mod_diff_table)
@@ -135,9 +147,9 @@ calc_mod_diff <- function(mod_db,
       stop("Output table '", mod_diff_table, "' already exists. Set overwrite = TRUE or choose a different output_table.")
     }
   }
-  
+
   in_dat <-
-    dplyr::tbl(mod_db$con, call_type) |>
+    dplyr::tbl(mod_db$con, input_table) |>
     dplyr::select(
       sample_name,
       dplyr::any_of(c("region_name", "chrom", "start", "end", "num_sites")),
@@ -152,40 +164,40 @@ calc_mod_diff <- function(mod_db,
       )
     ) |>
     dplyr::filter(!is.na(exp_group))
-  
+
   # Filter windows with insufficient site coverage
   if (!is.null(min_sites) && min_sites > 0) {
     if (!"num_sites" %in% cols) {
-      warning("min_sites was set but '", call_type,
+      warning("min_sites was set but '", input_table,
               "' has no 'num_sites' column. Filter skipped. ",
               "num_sites is only available for window/region tables.")
     } else {
       n_before <- in_dat |> dplyr::count() |> dplyr::pull(n)
-      
+
       in_dat <- in_dat |>
         dplyr::filter(num_sites >= min_sites)
-      
+
       n_after <- in_dat |> dplyr::count() |> dplyr::pull(n)
-      
+
       message(
         "Site filter (min_sites = ", min_sites, "): ",
         format(n_after, big.mark = ","), " of ",
         format(n_before, big.mark = ","), " sample-windows passed ",
         "(dropped ", format(n_before - n_after, big.mark = ","), ")."
       )
-      
+
       if (n_after == 0) {
         stop("All windows were removed by the min_sites filter. ",
              "Try a lower value (current: ", min_sites, ").")
       }
-      
+
       remaining_samples <- in_dat |>
         dplyr::distinct(sample_name, exp_group) |>
         dplyr::collect()
-      
+
       missing_cases <- cases[!cases %in% remaining_samples$sample_name]
       missing_ctrls <- controls[!controls %in% remaining_samples$sample_name]
-      
+
       if (length(missing_cases) > 0) {
         warning("min_sites filter removed ALL windows for case sample(s): ",
                 paste(missing_cases, collapse = ", "),
@@ -198,7 +210,7 @@ calc_mod_diff <- function(mod_db,
       }
     }
   }
-  
+
   # Check sample names present
   all_samples <- unique(dplyr::pull(in_dat, sample_name))
   if (any(!cases %in% all_samples)) {
@@ -209,12 +221,12 @@ calc_mod_diff <- function(mod_db,
     missing <- paste(controls[!controls %in% all_samples], collapse = ", ")
     stop("Check control names - some control samples are not in the data: ", missing)
   }
-  
+
   # Auto-select calc_type if not provided --------------------------------------
   if (is.null(calc_type)) {
     n_case    <- length(cases)
     n_control <- length(controls)
-    
+
     if (min(n_case, n_control) >= 5) {
       calc_type <- "wilcox"
     # } else if (min(n_case, n_control) >= 2) {
@@ -222,15 +234,15 @@ calc_mod_diff <- function(mod_db,
     } else {
       calc_type <- "fast_fisher"
     }
-    
+
     message(
       "Using '", calc_type, "' statistical method",
       " (cases = ", n_case, ", controls = ", n_control, ")..."
     )
   }
-  
+
   message("Running differential analysis...\n")
-  
+
   # Compute p-values / diffs
   result <- switch(calc_type,
                    wilcox      = .calc_diff_wilcox(in_dat),
@@ -242,7 +254,7 @@ calc_mod_diff <- function(mod_db,
                         ". Use 'beta_bin', 'fast_fisher', 'r_fisher', 'wilcox', or 'log_reg'.")
   ) |>
     dplyr::rename_with(~ gsub("^mod", mod_type, .x))
-  
+
   # Build your final table...
   result |>
     dplyr::collect() |>
@@ -251,16 +263,16 @@ calc_mod_diff <- function(mod_db,
       p_val    = pmax(p_val, .Machine$double.xmin),
       p_adjust = pmax(p_adjust, .Machine$double.xmin)) |>
     dplyr::arrange(p_adjust) |>
-    DBI::dbWriteTable(conn = mod_db$con, 
-                      name = mod_diff_table, 
+    DBI::dbWriteTable(conn = mod_db$con,
+                      name = mod_diff_table,
                       append = TRUE)
 
   end_time <- Sys.time()
   total_time_difftime <- end_time - start_time
-  
+
   # Convert the total_time_difftime object to numeric seconds for a reliable comparison
   total_seconds <- as.numeric(total_time_difftime, units = "secs")
-  
+
   if (total_seconds > 60) {
     # If greater than 60 seconds, convert to numeric minutes for display
     total_minutes <- as.numeric(total_time_difftime, units = "mins")
@@ -268,14 +280,16 @@ calc_mod_diff <- function(mod_db,
             "\nTime elapsed: ", round(total_minutes, 2), " minutes\n")
   } else {
     # Otherwise, display in numeric seconds
-    message("Mod diff analysis complete! ", mod_diff_table, " table successfully created!", 
+    message("Mod diff analysis complete! ", mod_diff_table, " table successfully created!",
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
-  
-  if (call_type == "windows") {
+
+  # Detect table type to give informative message
+  table_type <- .modhelper_detect_table_type(mod_db$con, input_table)
+  if (table_type == "windows") {
     message("Call collapse_mod_windows() to collapse significant windows.\n")
-  } 
-  
+  }
+
   # Print a preview of what table looks like
   result_head <- dplyr::tbl(mod_db$con, mod_diff_table) |> head() |> dplyr::collect()
   print(result_head)
@@ -303,40 +317,40 @@ calc_mod_diff <- function(mod_db,
       )
     ) |>
     dplyr::collect()
-  
+
   # Figure out which columns define the genomic unit (region/window/position)
   group_vars <- setdiff(
     colnames(frac_dat),
-    c("sample_name", "exp_group", "num_calls", "mod_counts", "mod_frac", 
+    c("sample_name", "exp_group", "num_calls", "mod_counts", "mod_frac",
       "num_sites")
   )
-  
+
   # Summarize per region/window and run Wilcoxon tests
   frac_dat |>
     dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
     dplyr::summarise(
       num_samples_case    = sum(exp_group == "case"),
       num_samples_control = sum(exp_group == "control"),
-      
+
       num_calls_case      = sum(num_calls[exp_group == "case"],    na.rm = TRUE),
       num_calls_control   = sum(num_calls[exp_group == "control"], na.rm = TRUE),
-      
+
       mod_counts_case     = sum(mod_counts[exp_group == "case"],    na.rm = TRUE),
       mod_counts_control  = sum(mod_counts[exp_group == "control"], na.rm = TRUE),
-      
+
       mod_frac_case = mean(mod_frac[exp_group == "case"],    na.rm = TRUE),
       mod_frac_control = mean(mod_frac[exp_group == "control"], na.rm = TRUE),
-      
+
       meth_diff = mean(mod_frac[exp_group == "case"],    na.rm = TRUE) -
         mean(mod_frac[exp_group == "control"], na.rm = TRUE),
-      
+
       p_val = {
         case_vals <- mod_frac[exp_group == "case"]
         ctrl_vals <- mod_frac[exp_group == "control"]
-        
+
         case_vals <- case_vals[is.finite(case_vals)]
         ctrl_vals <- ctrl_vals[is.finite(ctrl_vals)]
-        
+
         if (length(case_vals) > 0 && length(ctrl_vals) > 0) {
           suppressWarnings(
             stats::wilcox.test(case_vals, ctrl_vals)$p.value
@@ -345,7 +359,7 @@ calc_mod_diff <- function(mod_db,
           NA_real_
         }
       },
-      
+
       .groups = "drop"
     )
 }
@@ -369,7 +383,7 @@ calc_mod_diff <- function(mod_db,
       names_from = exp_group,
       values_from = c(num_calls, mod_counts, c_counts),
       values_fill = 0)
-  
+
   # Extract matrix and calculate p-vals
   pvals <-
     dat |>
@@ -398,7 +412,7 @@ calc_mod_diff <- function(mod_db,
           b = mod_counts_case,
           c = c_counts_control,
           d = c_counts_case)))
-  
+
   dat |>
     inner_join(
       pvals,
@@ -406,17 +420,17 @@ calc_mod_diff <- function(mod_db,
                    mod_counts_case, mod_counts_control,
                    c_counts_case,   c_counts_control),
       copy = TRUE)
-  
-  
+
+
 }
 
 .fast_fisher <- function(q, m, n, k) {
   # Calculate values once
   dhyper_val <- 0.5 * dhyper(q, m, n, k)
-  
+
   pval_right <- phyper(q, m, n, k, lower.tail = FALSE) + dhyper_val
   pval_left  <- phyper(q - 1, m, n, k, lower.tail = TRUE) + dhyper_val
-  
+
   # Return min tail * 2
   pmin(pval_right, pval_left) * 2
 }
@@ -425,23 +439,23 @@ calc_mod_diff <- function(mod_db,
 # .fast_fisher <- function(q, m, n, k)
 # {
 #   # derived from https://github.com/al2na/methylKit/issues/96
-#   
+#
 #   mat <- cbind(q, m, n, k)
-#   
+#
 #   apply(mat, 1,
 #         \(qmnk)
 #         {
 #           dhyper_val <- 0.5 * dhyper(x = qmnk[1], m = qmnk[2],
 #                                      n = qmnk[3], k = qmnk[4])
-#           
+#
 #           pval_right <- phyper(q = qmnk[1], m = qmnk[2],
 #                                n = qmnk[3], k = qmnk[4],
 #                                lower.tail = FALSE) + dhyper_val
-#           
+#
 #           pval_left  <- phyper(q = qmnk[1] - 1, m = qmnk[2],
 #                                n = qmnk[3], k = qmnk[4],
 #                                lower.tail = TRUE) + dhyper_val
-#           
+#
 #           return(ifelse(test = pval_right > pval_left,
 #                         yes  = pval_left * 2,
 #                         no   = pval_right * 2))
@@ -452,7 +466,7 @@ calc_mod_diff <- function(mod_db,
 .r_fisher <- function(a, b, c, d)
 {
   mat <- cbind(a, b, c, d)
-  
+
   apply(mat, 1,
         \(x)
         {
@@ -476,7 +490,7 @@ calc_mod_diff <- function(mod_db,
       mean_frac_ctrl = mean(mod_frac[exp_group == "control"]),
       mean_diff = mean_frac_case - mean_frac_ctrl,
       p_val = .logreg(mod_frac, cov, exp_group))
-  
+
   # Pivot wider, add pvals, and return
   in_dat |>
     pivot_wider(
@@ -498,6 +512,6 @@ calc_mod_diff <- function(mod_db,
   fit <- glm.fit(exp_group, mod_frac,
                  weights = cov / sum(cov), family = binomial())
   deviance <- fit$null.deviance - fit$deviance
-  
+
   pchisq(deviance, 1, lower.tail = FALSE)
 }

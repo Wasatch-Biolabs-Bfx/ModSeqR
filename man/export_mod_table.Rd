@@ -4,16 +4,18 @@
 \alias{export_mod_table}
 \title{Export a Table from the mod Database to CSV}
 \usage{
-export_mod_table(mod_db, table = "positions", out_path)
+export_mod_table(mod_db, table_name = "positions", out_path, table = NULL)
 }
 \arguments{
 \item{mod_db}{A string. The path to the \code{.mod.db} DuckDB database.}
 
-\item{table}{A string specifying the table to export from the database.
+\item{table_name}{A string specifying the table to export from the database.
 Default is \code{"positions"}.}
 
 \item{out_path}{A string. Either a directory path (the file is named
-\code{<table>.csv} automatically) or a full \code{.csv} file path.}
+\code{<table_name>.csv} automatically) or a full \code{.csv} file path.}
+
+\item{table}{Deprecated. Use \code{table_name} instead.}
 }
 \value{
 Invisibly returns the \code{"mod_db"} object (connection closed on return).
@@ -24,7 +26,7 @@ Exports a single table from a mod database to a CSV file using DuckDB's
 native \code{COPY} command (efficient; does not pull data into R).
 }
 \details{
-The function connects to the database, checks that \code{table} exists,
+The function connects to the database, checks that \code{table_name} exists,
 and runs a \code{COPY ... TO} statement entirely inside DuckDB.
 If \code{out_path} does not end in \code{.csv}, the table name is appended
 as the filename.

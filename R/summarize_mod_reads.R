@@ -1,18 +1,28 @@
 #' Summarize Reads in a Database
 #'
-#' This function summarizes reads from a database, filtering and processing 
-#' the data based on a provided key table (if given). It computes statistics 
-#' on the reads such as the number of calls, CpG positions, and fractions of 
-#' methylation (`m`), hemi-methylation (`h`), and total calls. The function 
+#' This function summarizes reads from a database, filtering and processing
+#' the data based on a provided key table (if given). It computes statistics
+#' on the reads such as the number of calls, CpG positions, and fractions of
+#' methylation (`m`), hemi-methylation (`h`), and total calls. The function
 #' interacts with the database to generate a `reads` table.
 #'
 #' @param mod_db A character string specifying the path to the DuckDB database.
-#' @param table_name A string specifying what the user would like the name to be called in the database. Default is "reads".
+#' @param input_table A string specifying the name of the input calls-format table
+#'   to summarize. Accepts any table with the required columns. Default is
+#'   \code{"calls"}. Required columns: \code{read_id}, \code{sample_name},
+#'   \code{chrom}, \code{start}, \code{end}.
+#' @param output_table A string specifying what the output table should be called
+#'   in the database. Default is \code{"reads"}.
+#' @param regions_table Optional path to a CSV, TSV, or BED file specifying
+#'   genomic regions to filter reads by. Must include columns: \code{chrom},
+#'   \code{start}, \code{end}.
 #' @param min_length An integer specifying the the minimum read_length.
 #' @param min_CGs An integer specifying the minimum number of CG sites required for a read to be included in the summary.
+#' @param input_calls_table Deprecated. Use \code{input_table} instead.
+#' @param output_reads_table Deprecated. Use \code{output_table} instead.
 #'
 #' @return Invisibly returns the \code{"mod_db"} object with \code{current_table} set to
-#'   \code{output_reads_table}. \code{last_result} is set to a tibble with columns
+#'   \code{output_table}. \code{last_result} is set to a tibble with columns
 #'   \code{sample_name} and \code{n} (row count per sample).
 #'
 #' @details
@@ -22,7 +32,7 @@
 #' #Specify the path to the database
 #'  mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
 #'  region_bed = system.file("Islands_hg38_test.csv", package = "ModSeqR")
-#'  
+#'
 #'  # Summarize Reads
 #'  summarize_mod_reads(mod_db, region_bed)
 #'
@@ -36,18 +46,32 @@
 
 # Bucket Approach
 summarize_mod_reads <- function(mod_db,
-                                input_calls_table = "calls",
-                                output_reads_table = "reads",
+                                input_table = "calls",
+                                output_table = "reads",
                                 regions_table = NULL,
                                 min_length = 100,
-                                min_CGs = 5) 
+                                min_CGs = 5,
+                                input_calls_table = NULL,
+                                output_reads_table = NULL)
 {
+  if (!is.null(input_calls_table)) {
+    warning("'input_calls_table' is deprecated; use 'input_table' instead.", call. = FALSE)
+    input_table <- input_calls_table
+  }
+  if (!is.null(output_reads_table)) {
+    warning("'output_reads_table' is deprecated; use 'output_table' instead.", call. = FALSE)
+    output_table <- output_reads_table
+  }
+
   start_time <- Sys.time()
-  
+
   # Open the database connection
   mod_db <- .modhelper_connectDB(mod_db)
   dbExecute(mod_db$con, "PRAGMA max_temp_directory_size='100GiB';")
-  
+
+  # Check required columns in input table
+  .modhelper_check_cols(mod_db$con, input_table, c("read_id", "sample_name", "chrom", "start", "end"))
+
   # Optionally read and upload regions table if provided
   if (!is.null(regions_table)) {
     file_ext <- tools::file_ext(regions_table)
@@ -58,24 +82,24 @@ summarize_mod_reads <- function(mod_db,
     } else {
       stop("Invalid regions table file type. Use CSV, TSV, or BED.")
     }
-    
+
     required_cols <- c("chrom", "start", "end")
     if (!all(required_cols %in% colnames(annotation))) {
       stop("Regions table must include columns: chrom, start, end")
     }
-    
+
     dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_regions_table;")
     annotation <- annotation |> dplyr::mutate(bucket = floor(start / 10000))
     DBI::dbWriteTable(mod_db$con, "temp_regions_table", annotation, temporary = TRUE)
   }
-  
+
   cat("Summarizing Reads...\n")
-  
-  if (dbExistsTable(mod_db$con, output_reads_table))
-    dbRemoveTable(mod_db$con, output_reads_table)
-  
+
+  if (dbExistsTable(mod_db$con, output_table))
+    dbRemoveTable(mod_db$con, output_table)
+
   query <- glue::glue("
-    CREATE TABLE {output_reads_table} AS
+    CREATE TABLE {output_table} AS
     SELECT
         ANY_VALUE(c.sample_name) AS sample_name,
         c.read_id,
@@ -91,7 +115,7 @@ summarize_mod_reads <- function(mod_db,
         SUM(CASE WHEN c.call_code = 'm' THEN 1 ELSE 0 END) * 1.0 / COUNT(*) AS m_frac,
         SUM(CASE WHEN c.call_code = 'h' THEN 1 ELSE 0 END) * 1.0 / COUNT(*) AS h_frac,
         SUM(CASE WHEN c.call_code IN ('m', 'h') THEN 1 ELSE 0 END) * 1.0 / COUNT(*) AS mh_frac
-    FROM {input_calls_table} c
+    FROM {input_table} c
     {if (!is.null(regions_table))
         \"JOIN temp_regions_table k
         ON c.chrom = k.chrom
@@ -101,26 +125,26 @@ summarize_mod_reads <- function(mod_db,
     GROUP BY c.read_id
     HAVING total_calls >= {min_CGs}
        AND read_length >= {min_length}")
-  
+
   dbExecute(mod_db$con, query)
-  
+
   cat("\n")
   end_time <- Sys.time()
   total_seconds <- as.numeric(end_time - start_time, units = "secs")
-  
+
   if (total_seconds > 60) {
-    message("Reads table successfully created as ", output_reads_table, " in database!",
+    message("Reads table successfully created as ", output_table, " in database!",
             "\nTime elapsed: ", round(total_seconds / 60, 2), " minutes\n")
   } else {
-    message("Reads table successfully created as ", output_reads_table, " in database!", 
+    message("Reads table successfully created as ", output_table, " in database!",
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
-  
-  mod_db$last_result <- dplyr::tbl(mod_db$con, output_reads_table) |>
+
+  mod_db$last_result <- dplyr::tbl(mod_db$con, output_table) |>
     dplyr::count(sample_name) |>
     dplyr::collect()
-  print(head(dplyr::tbl(mod_db$con, output_reads_table)))
-  mod_db$current_table = output_reads_table
+  print(head(dplyr::tbl(mod_db$con, output_table)))
+  mod_db$current_table = output_table
   mod_db <- .modhelper_cleanup(mod_db)
   invisible(mod_db)
 }

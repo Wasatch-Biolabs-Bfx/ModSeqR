@@ -6,16 +6,18 @@
 \usage{
 plot_mod_cov(
   mod_db,
-  call_type = "positions",
+  input_table = "positions",
   plot = TRUE,
   save_path = NULL,
-  max_rows = NULL
+  max_rows = NULL,
+  call_type = NULL
 )
 }
 \arguments{
 \item{mod_db}{A data base either linking to the file name or of class mod_db.}
 
-\item{call_type}{Either positions or regions data to analyze coverage on.}
+\item{input_table}{A string specifying the table name to analyze coverage on.
+Default is \code{"positions"}.}
 
 \item{plot}{Logical, if \code{TRUE}, the function will generate a histogram of
 the coverage data. Default is \code{FALSE}.}
@@ -23,6 +25,8 @@ the coverage data. Default is \code{FALSE}.}
 \item{save_path}{Pathway to save the plot to. Usually .pdf or .png.}
 
 \item{max_rows}{The maximum amount of rows wanted for calculation. This argument can help analysis run faster when there is a lot of data.}
+
+\item{call_type}{Deprecated. Use \code{input_table} instead.}
 }
 \value{
 Invisibly returns the \code{"mod_db"} object (connection closed on return). Prints
@@ -37,8 +41,8 @@ methylation data.
 \examples{
  # Specify the path to the database
  mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
- 
- # Get coverage statistics for the 'positions' call type without plotting
- plot_mod_cov(mod_db = mod_db, call_type = "positions")
+
+ # Get coverage statistics for the 'positions' input table without plotting
+ plot_mod_cov(mod_db = mod_db, input_table = "positions")
 
 }

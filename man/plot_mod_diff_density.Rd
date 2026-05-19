@@ -6,17 +6,18 @@
 \usage{
 plot_mod_diff_density(
   mod_db,
-  table,
+  table_name,
   thresh = c(0.2, 0.3),
   palette = "turbo",
-  n_kde = 250
+  n_kde = 250,
+  table = NULL
 )
 }
 \arguments{
 \item{mod_db}{A path to the modification DuckDB database, or an open database connection object.}
 
-\item{table}{A string specifying the table name within the database, containing
-\code{mh_frac_case} and \code{mh_frac_control} columns.}
+\item{table_name}{A string specifying the table name within the database. Required columns:
+\code{mh_frac_case} and \code{mh_frac_control}.}
 
 \item{thresh}{A numeric vector of length 1 or 2 giving offset distances from the
 identity line at which to draw dashed red threshold lines (default \code{c(0.2, 0.3)}).
@@ -29,6 +30,8 @@ If \code{NULL}, no threshold lines are drawn.}
 
 \item{n_kde}{Integer. Grid resolution passed to \code{MASS::kde2d} (default \code{250}).
 Higher values produce a smoother surface at the cost of speed.}
+
+\item{table}{Deprecated. Use \code{table_name} instead.}
 }
 \value{
 Invisibly returns the \code{"mod_db"} object (connection closed on return). The plot
@@ -42,7 +45,7 @@ Density is estimated with \code{MASS::kde2d} and rendered as a raster layer.
 Optional threshold lines can be drawn above and below the identity line.
 }
 \details{
-The function pulls \code{mh_frac_case} and \code{mh_frac_control} from \code{table},
+The function pulls \code{mh_frac_case} and \code{mh_frac_control} from \code{table_name},
 estimates a 2-D kernel density with \code{MASS::kde2d} on the unit square \code{[0,1]²},
 and renders the surface using \code{geom_raster}. A solid black identity line
 (\code{y = x}) is overlaid for reference. If \code{thresh} is non-\code{NULL},
@@ -51,7 +54,7 @@ dashed red lines are added at \code{y = x ± t} for each value \code{t} in
 }
 \examples{
 \dontrun{
-plot_mod_diff_density("my_data/my.mod.db", table = "chr5", thresh = c(0.25, 0.35))
+plot_mod_diff_density("my_data/my.mod.db", table_name = "chr5", thresh = c(0.25, 0.35))
 }
 
 }

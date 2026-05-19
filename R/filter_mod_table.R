@@ -74,6 +74,7 @@ filter_mod_table <- function(mod_db, input_table, output_table, ...) {
     DBI::dbGetQuery(mod_db$con, sprintf("SELECT COUNT(*) AS n FROM %s", output_table))$n
   }
 
+  mod_db$current_table <- output_table
   mod_db <- .modhelper_cleanup(mod_db)
   invisible(mod_db)
 }

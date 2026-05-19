@@ -6,8 +6,8 @@
 #' Optional threshold lines can be drawn above and below the identity line.
 #'
 #' @param mod_db A path to the modification DuckDB database, or an open database connection object.
-#' @param table A string specifying the table name within the database, containing
-#'   \code{mh_frac_case} and \code{mh_frac_control} columns.
+#' @param table_name A string specifying the table name within the database. Required columns:
+#'   \code{mh_frac_case} and \code{mh_frac_control}.
 #' @param thresh A numeric vector of length 1 or 2 giving offset distances from the
 #'   identity line at which to draw dashed red threshold lines (default \code{c(0.2, 0.3)}).
 #'   For each value \code{t}, lines are drawn at \code{y = x + t} and \code{y = x - t}.
@@ -17,13 +17,14 @@
 #'   \code{"cividis"}, etc.
 #' @param n_kde Integer. Grid resolution passed to \code{MASS::kde2d} (default \code{250}).
 #'   Higher values produce a smoother surface at the cost of speed.
+#' @param table Deprecated. Use \code{table_name} instead.
 #'
 #' @return Invisibly returns the \code{"mod_db"} object (connection closed on return). The plot
 #'   is printed to the current graphics device. \code{last_result} is set to the \code{ggplot}
 #'   object.
 #'
 #' @details
-#' The function pulls \code{mh_frac_case} and \code{mh_frac_control} from \code{table},
+#' The function pulls \code{mh_frac_case} and \code{mh_frac_control} from \code{table_name},
 #' estimates a 2-D kernel density with \code{MASS::kde2d} on the unit square \code{[0,1]²},
 #' and renders the surface using \code{geom_raster}. A solid black identity line
 #' (\code{y = x}) is overlaid for reference. If \code{thresh} is non-\code{NULL},
@@ -32,7 +33,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' plot_mod_diff_density("my_data/my.mod.db", table = "chr5", thresh = c(0.25, 0.35))
+#' plot_mod_diff_density("my_data/my.mod.db", table_name = "chr5", thresh = c(0.25, 0.35))
 #' }
 #'
 #' @importFrom DBI dbExistsTable
@@ -43,33 +44,41 @@
 #' @export
 
 plot_mod_diff_density <- function(mod_db,
-                                  table,
+                                  table_name,
                                   thresh   = c(0.2, 0.3),
                                   palette  = "turbo",
-                                  n_kde    = 250)
+                                  n_kde    = 250,
+                                  table    = NULL)
 {
-  
+  if (!is.null(table)) {
+    warning("'table' is deprecated; use 'table_name' instead.", call. = FALSE)
+    table_name <- table
+  }
+
   mod_db <- .modhelper_connectDB(mod_db)
   on.exit(mod_db <- .modhelper_closeDB(mod_db), add = TRUE)
-  
-  if (!DBI::dbExistsTable(mod_db$con, table))
-    stop(table, " table does not exist.")
-  
-  df <- dplyr::tbl(mod_db$con, table) |>
+
+  if (!DBI::dbExistsTable(mod_db$con, table_name))
+    stop(table_name, " table does not exist.")
+
+  # Check required columns
+  .modhelper_check_cols(mod_db$con, table_name, c("mh_frac_case", "mh_frac_control"))
+
+  df <- dplyr::tbl(mod_db$con, table_name) |>
     dplyr::select(mh_frac_case, mh_frac_control) |>
     dplyr::filter(!is.na(mh_frac_case), !is.na(mh_frac_control)) |>
     dplyr::collect()
-  
+
   if (nrow(df) < 20) stop("Too few points to draw a density surface.")
-  
+
   # ── KDE surface  ---------------------------------------------------------
   kd <- MASS::kde2d(df$mh_frac_case, df$mh_frac_control,
                     n    = n_kde,
                     lims = c(0, 1, 0, 1))
-  
+
   surf <- expand.grid(x = kd$x, y = kd$y)
   surf$z <- as.vector(kd$z)
-  
+
   # ── base plot  -----------------------------------------------------------
   p <- ggplot2::ggplot(surf, ggplot2::aes(x, y, fill = z)) +
     ggplot2::geom_raster(interpolate = TRUE) +

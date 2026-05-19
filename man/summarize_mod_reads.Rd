@@ -6,32 +6,48 @@
 \usage{
 summarize_mod_reads(
   mod_db,
-  input_calls_table = "calls",
-  output_reads_table = "reads",
+  input_table = "calls",
+  output_table = "reads",
   regions_table = NULL,
   min_length = 100,
-  min_CGs = 5
+  min_CGs = 5,
+  input_calls_table = NULL,
+  output_reads_table = NULL
 )
 }
 \arguments{
 \item{mod_db}{A character string specifying the path to the DuckDB database.}
 
+\item{input_table}{A string specifying the name of the input calls-format table
+to summarize. Accepts any table with the required columns. Default is
+\code{"calls"}. Required columns: \code{read_id}, \code{sample_name},
+\code{chrom}, \code{start}, \code{end}.}
+
+\item{output_table}{A string specifying what the output table should be called
+in the database. Default is \code{"reads"}.}
+
+\item{regions_table}{Optional path to a CSV, TSV, or BED file specifying
+genomic regions to filter reads by. Must include columns: \code{chrom},
+\code{start}, \code{end}.}
+
 \item{min_length}{An integer specifying the the minimum read_length.}
 
 \item{min_CGs}{An integer specifying the minimum number of CG sites required for a read to be included in the summary.}
 
-\item{table_name}{A string specifying what the user would like the name to be called in the database. Default is "reads".}
+\item{input_calls_table}{Deprecated. Use \code{input_table} instead.}
+
+\item{output_reads_table}{Deprecated. Use \code{output_table} instead.}
 }
 \value{
 Invisibly returns the \code{"mod_db"} object with \code{current_table} set to
-  \code{output_reads_table}. \code{last_result} is set to a tibble with columns
+  \code{output_table}. \code{last_result} is set to a tibble with columns
   \code{sample_name} and \code{n} (row count per sample).
 }
 \description{
-This function summarizes reads from a database, filtering and processing 
-the data based on a provided key table (if given). It computes statistics 
-on the reads such as the number of calls, CpG positions, and fractions of 
-methylation (`m`), hemi-methylation (`h`), and total calls. The function 
+This function summarizes reads from a database, filtering and processing
+the data based on a provided key table (if given). It computes statistics
+on the reads such as the number of calls, CpG positions, and fractions of
+methylation (`m`), hemi-methylation (`h`), and total calls. The function
 interacts with the database to generate a `reads` table.
 }
 \details{
@@ -41,7 +57,7 @@ The function connects to the provided DuckDB database, optionally filters reads 
 #Specify the path to the database
  mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
  region_bed = system.file("Islands_hg38_test.csv", package = "ModSeqR")
- 
+
  # Summarize Reads
  summarize_mod_reads(mod_db, region_bed)
 

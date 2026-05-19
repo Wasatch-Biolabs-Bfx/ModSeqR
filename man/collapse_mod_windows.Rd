@@ -7,10 +7,11 @@
 collapse_mod_windows(
   mod_db,
   input_table = "mod_diff_windows",
-  table_name = "collapsed_windows",
+  output_table = "collapsed_windows",
   max_distance = 1000,
   sig_cutoff = 0.05,
-  min_diff = 0.5
+  min_diff = 0.5,
+  table_name = NULL
 )
 }
 \arguments{
@@ -21,8 +22,8 @@ differential methylation windows to be collapsed. The table must
 contain at least the columns \code{chrom}, \code{start}, \code{end},
 \code{p_adjust}, and \code{meth_diff}. Default is \code{"mod_diff_windows"}.}
 
-\item{table_name}{Character. Name of the output table to store collapsed
-windows (default: "collapsed_windows").}
+\item{output_table}{Character. Name of the output table to store collapsed
+windows (default: \code{"collapsed_windows"}).}
 
 \item{max_distance}{Numeric. The maximum allowable distance between consecutive
 significant windows for merging (default: 1000).}
@@ -32,11 +33,13 @@ significant windows for merging (default: 1000).}
 
 \item{min_diff}{Numeric. The minimum absolute methylation difference required
 for inclusion in the analysis (default: 0.5).}
+
+\item{table_name}{Deprecated. Use \code{output_table} instead.}
 }
 \value{
 Invisibly returns the updated \code{"mod_db"} object with
-  \code{current_table} set to \code{table_name}. The collapsed results are
-  written to \code{table_name} inside the database. \code{last_result} is set to a tibble
+  \code{current_table} set to \code{output_table}. The collapsed results are
+  written to \code{output_table} inside the database. \code{last_result} is set to a tibble
   with columns \code{sample_name} and \code{n} if the table contains a \code{sample_name}
   column, otherwise a single integer row count.
 }

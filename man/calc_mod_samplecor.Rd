@@ -6,21 +6,23 @@
 \usage{
 calc_mod_samplecor(
   mod_db,
-  call_type = c("positions"),
+  input_table = "positions",
   value = mh_frac,
   agg_fun = mean,
   plot = TRUE,
   save_path = NULL,
   plot_sample_order = NULL,
   plot_title = "Sample Correlation Matrix",
-  max_rows = NULL
+  max_rows = NULL,
+  call_type = NULL
 )
 }
 \arguments{
 \item{mod_db}{A string. The path to the database containing ch3 files from nanopore data.}
 
-\item{call_type}{A character vector specifying the type of data to retrieve from the database.
-Options are "positions", "regions", or "windows". Default is "positions".}
+\item{input_table}{A string specifying the name of the table in the database from which to
+pull the data. Default is \code{"positions"}. Required columns: \code{sample_name},
+\code{chrom}, \code{start}, \code{end}.}
 
 \item{value}{Column in the table to use as the measurement (e.g., mh_frac, m_frac).
 Accepts a bare column name or a string. Default: mh_frac.}
@@ -37,6 +39,8 @@ Accepts a bare column name or a string. Default: mh_frac.}
 \item{plot_title}{Title for the heatmap.}
 
 \item{max_rows}{Optional integer to randomly sample rows from the table for faster runs.}
+
+\item{call_type}{Deprecated. Use \code{input_table} instead.}
 }
 \value{
 Invisibly returns the \code{"mod_db"} object with \code{last_result} set to the
@@ -49,18 +53,18 @@ modification fraction data from genomic positions. It supports position-based, r
 and window-based calls and provides visualization using ggplot2.
 }
 \details{
-The function connects to the mod database, pulls data for the selected `call_type`, reshapes
+The function connects to the mod database, pulls data for the selected \code{input_table}, reshapes
 to a samples x samples matrix, and computes Pearson correlations using
 `use = "pairwise.complete.obs"`. The `value` column controls which measurement is used.
 }
 \examples{
 \dontrun{
 # Use mh_frac (default)
-calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "positions")
+calc_mod_samplecor(mod_db = "my_data.mod.db", input_table = "positions")
 # Use m_frac
-calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "regions", value = m_frac)
+calc_mod_samplecor(mod_db = "my_data.mod.db", input_table = "regions", value = m_frac)
 # Or as a string
-calc_mod_samplecor(mod_db = "my_data.mod.db", call_type = "windows", value = "m_frac")
+calc_mod_samplecor(mod_db = "my_data.mod.db", input_table = "windows", value = "m_frac")
 }
 
 }
