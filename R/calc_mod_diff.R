@@ -36,9 +36,14 @@
 #' @param call_type Deprecated. Use \code{input_table} instead.
 #'
 #' @details
-#' The function connects to the specified DuckDB database and retrieves methylation data from the specified input table.
-#' It summarizes the data for cases and controls, calculates p-values based on the specified method, and stores the results in the
-#' "meth_diff" table. Resource pragmas (\code{temp_directory}, \code{threads},
+#' The function connects to the specified DuckDB database, retrieves methylation data from
+#' \code{input_table}, and summarizes it for cases and controls. For SQL-backed calc types
+#' (\code{fast_fisher}, \code{r_fisher}, \code{log_reg}), the statistical results are written
+#' directly from DuckDB to the output table without passing through R memory. BH p-value
+#' adjustment and final sorting are performed entirely in DuckDB using window functions.
+#' For R-backed calc types (\code{wilcox}, \code{beta_bin}), per-locus tests require
+#' collecting data into R, then writing results back to the database before the SQL-side BH
+#' step. Resource pragmas (\code{temp_directory}, \code{threads},
 #' \code{memory_limit}) are set via internal heuristics unless overridden.
 #'
 #' @return Invisibly returns the updated \code{"mod_db"} object with \code{current_table} set to
@@ -61,6 +66,7 @@
 #' @importFrom DBI dbConnect dbDisconnect dbExistsTable dbRemoveTable dbExecute dbWriteTable
 #' @importFrom duckdb duckdb
 #' @importFrom dplyr tbl select any_of mutate case_when filter pull summarize inner_join join_by rename_with collect arrange
+#' @importFrom dbplyr sql_render
 #' @importFrom tidyr pivot_wider
 #' @importFrom stats fisher.test p.adjust dhyper phyper glm.fit pchisq optim plogis qlogis var
 #'
@@ -255,17 +261,44 @@ calc_mod_diff <- function(mod_db,
   ) |>
     dplyr::rename_with(~ gsub("^mod", mod_type, .x))
 
-  # Build your final table...
-  result |>
-    dplyr::collect() |>
-    dplyr::mutate(
-      p_adjust = stats::p.adjust(p_val, method = "BH"),
-      p_val    = pmax(p_val, .Machine$double.xmin),
-      p_adjust = pmax(p_adjust, .Machine$double.xmin)) |>
-    dplyr::arrange(p_adjust) |>
-    DBI::dbWriteTable(conn = mod_db$con,
-                      name = mod_diff_table,
-                      append = TRUE)
+  # Write raw results to the output table.
+  # For SQL-backed calc types (fast_fisher, r_fisher, log_reg), result is a lazy
+  # DuckDB reference: render and execute directly — no R memory involved.
+  # For R-backed calc types (wilcox, beta_bin), result is already a local tibble.
+  if (inherits(result, "tbl_lazy")) {
+    raw_sql <- as.character(dbplyr::sql_render(result))
+    DBI::dbExecute(mod_db$con, sprintf("CREATE TABLE %s AS %s", mod_diff_table, raw_sql))
+  } else {
+    DBI::dbWriteTable(mod_db$con, mod_diff_table, as.data.frame(result))
+  }
+
+  # Compute BH-adjusted p-values entirely in DuckDB using window functions.
+  # Avoids collecting the full result into R for p.adjust() + arrange().
+  dbl_min <- .Machine$double.xmin
+  DBI::dbExecute(mod_db$con, sprintf(
+    "CREATE OR REPLACE TABLE %s AS
+     WITH ranked AS (
+       SELECT *, ROW_NUMBER() OVER (ORDER BY p_val) AS _r,
+                 COUNT(*)       OVER ()              AS _n
+       FROM %s
+     ),
+     bh AS (
+       SELECT *, LEAST(p_val * CAST(_n AS DOUBLE) / _r, 1.0) AS _bh_raw
+       FROM ranked
+     ),
+     bh_cummin AS (
+       SELECT *,
+         MIN(_bh_raw) OVER (ORDER BY _r DESC
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _p_adj
+       FROM bh
+     )
+     SELECT * EXCLUDE (_r, _n, _bh_raw, _p_adj, p_val),
+       GREATEST(p_val,  %.17g) AS p_val,
+       GREATEST(_p_adj, %.17g) AS p_adjust
+     FROM bh_cummin
+     ORDER BY _p_adj",
+    mod_diff_table, mod_diff_table, dbl_min, dbl_min
+  ))
 
   end_time <- Sys.time()
   total_time_difftime <- end_time - start_time

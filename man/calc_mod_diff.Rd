@@ -76,9 +76,14 @@ This function calculates differential methylation between specified case and con
 The results are stored in a DuckDB database for further analysis.
 }
 \details{
-The function connects to the specified DuckDB database and retrieves methylation data from the specified input table.
-It summarizes the data for cases and controls, calculates p-values based on the specified method, and stores the results in the
-"meth_diff" table. Resource pragmas (\code{temp_directory}, \code{threads},
+The function connects to the specified DuckDB database, retrieves methylation data from
+\code{input_table}, and summarizes it for cases and controls. For SQL-backed calc types
+(\code{fast_fisher}, \code{r_fisher}, \code{log_reg}), the statistical results are written
+directly from DuckDB to the output table without passing through R memory. BH p-value
+adjustment and final sorting are performed entirely in DuckDB using window functions.
+For R-backed calc types (\code{wilcox}, \code{beta_bin}), per-locus tests require
+collecting data into R, then writing results back to the database before the SQL-side BH
+step. Resource pragmas (\code{temp_directory}, \code{threads},
 \code{memory_limit}) are set via internal heuristics unless overridden.
 }
 \examples{
