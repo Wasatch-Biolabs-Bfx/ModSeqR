@@ -59,6 +59,11 @@ collapse_mod_windows <- function(mod_db,
   start_time <- Sys.time()
   mod_db <- .modhelper_connectDB(mod_db)
 
+  caps <- .auto_duckdb_resource_caps(0.80)
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", tempdir()))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", caps$memory_limit))
+  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", caps$threads))
+
   # Check required columns in input table
   .modhelper_check_cols(mod_db$con, input_table, c("chrom", "start", "end", "p_adjust", "meth_diff"))
   

@@ -32,8 +32,9 @@
 #' @param unmod_label Label used to name unmodified columns (default \code{"c"} yielding
 #'   \code{c_counts} and \code{c_frac}).
 #' @param min_num_calls Minimum total calls required at a position to be written (default \code{1}).
-#' @param batch_size Optional integer number of aggregated position rows to process per batch
-#'   for each sample. If \code{NULL}, all rows for a sample are processed in one batch.
+#' @param batch_size Ignored. Kept for backward compatibility. The function now
+#'   inserts directly per chromosome and issues a \code{CHECKPOINT} after each
+#'   sample, making row-level batching unnecessary.
 #' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
 #' @param threads Integer DuckDB thread count. If \code{NULL}, uses an internal heuristic
 #'   (typically all-but-one core).
@@ -46,15 +47,13 @@
 #' \enumerate{
 #'   \item Opens a DB connection and configures DuckDB pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}).
 #'   \item Determines the list of samples to process (all by default, or the intersection with \code{samples}).
-#'   \item Builds dynamic SQL to compute, per sample and position (\code{chrom}, \code{start}):
-#'         \code{num_calls}, \code{<label>_counts} for each requested code/combination, and
-#'         \code{<label>_frac} = \code{<label>_counts / num_calls}. Position aggregation
-#'         is computed chromosome-by-chromosome per sample to reduce peak \code{GROUP BY}
-#'         resource usage.
-#'   \item Inserts per-sample summaries into \code{output_table}, optionally in row-count
-#'         batches controlled by \code{batch_size}.
-#'   \item Pre-creates the \code{output_table} schema with the appropriate dynamic columns, then
-#'         inserts rows per sample. \code{end} is set equal to \code{start}.
+#'   \item For each sample, iterates chromosome by chromosome and inserts directly
+#'         into \code{output_table} using a single CTE that aggregates per position
+#'         (\code{num_calls}, \code{<label>_counts}, \code{<label>_frac}).
+#'         A \code{CHECKPOINT} is issued after each sample to flush completed work
+#'         to disk and release memory before moving to the next.
+#'   \item Pre-creates the \code{output_table} schema with the appropriate dynamic columns.
+#'         \code{end} is set equal to \code{start}.
 #' }
 #' Positions with \code{num_calls < min_num_calls} are skipped. Chromosome filtering is done in SQL.
 #'
@@ -182,16 +181,16 @@ summarize_mod_positions <- function(mod_db,
   }
   
   chr_clause <- .chrom_filter_sql(chrs)
-  pos_batch_size <- if (is.null(batch_size)) {
-    NA_integer_
-  } else {
-    as.integer(batch_size[1])
-  }
-  if (!is.na(pos_batch_size) && pos_batch_size < 1) {
-    stop("batch_size must be >= 1 when provided.")
-  }
-  
-  # Process each sample separately (chunking by sample)
+
+  # Build fraction expressions referencing CTE alias columns
+  count_cols <- paste(sprintf("%s_counts", labels), collapse = ", ")
+  frac_cols  <- paste(sprintf(
+    "CASE WHEN num_calls = 0 THEN NULL ELSE %s_counts * 1.0 / num_calls END AS %s_frac",
+    labels, labels), collapse = ",\n          ")
+
+  # Process each sample, one chromosome at a time, inserting directly into output.
+  # No staging table needed — a single CTE handles the aggregation per chunk.
+  # CHECKPOINT after each sample releases memory before moving on.
   for (samp in all_samps) {
     samp_esc <- gsub("'", "''", samp)
 
@@ -202,85 +201,32 @@ summarize_mod_positions <- function(mod_db,
       ORDER BY chrom
     ")
     sample_chroms <- DBI::dbGetQuery(mod_db$con, chrom_q)[, 1]
-    if (length(sample_chroms) == 0) {
-      next
-    }
-
-    count_nulls_pos <- paste(sprintf("CAST(NULL AS BIGINT) AS %s_counts", labels), collapse = ",\n          ")
-    pos_schema_sql <- glue::glue("\
-      CREATE OR REPLACE TEMP TABLE temp_positions AS
-      SELECT
-          CAST(NULL AS VARCHAR) AS sample_name,
-          CAST(NULL AS VARCHAR) AS chrom,
-          CAST(NULL AS BIGINT)  AS start,
-          CAST(NULL AS BIGINT)  AS num_calls,
-          {count_nulls_pos}
-      WHERE 1=0
-    ")
-    DBI::dbExecute(mod_db$con, pos_schema_sql)
+    if (length(sample_chroms) == 0) next
 
     for (chr in sample_chroms) {
       chr_esc <- gsub("'", "''", chr)
-      agg_chr_sql <- glue::glue("\
-        INSERT INTO temp_positions
-        SELECT
-            sample_name,
-            chrom,
-            start,
-            COUNT(*) AS num_calls,
-            {countsS}
-        FROM {in_id}
-        WHERE sample_name = '{samp_esc}'
-          AND chrom = '{chr_esc}'
-          AND start > 0
-        GROUP BY sample_name, chrom, start
-      ")
-      DBI::dbExecute(mod_db$con, agg_chr_sql)
+      DBI::dbExecute(mod_db$con, sprintf(
+        "INSERT INTO %s
+         WITH agg AS (
+           SELECT sample_name, chrom, start,
+             COUNT(*) AS num_calls,
+             %s
+           FROM %s
+           WHERE sample_name = '%s' AND chrom = '%s' AND start > 0
+           GROUP BY sample_name, chrom, start
+           HAVING COUNT(*) >= %d
+         )
+         SELECT sample_name, chrom, start, start AS \"end\", num_calls,
+           %s,
+           %s
+         FROM agg",
+        out_id, countsS, in_id, samp_esc, chr_esc, min_num_calls,
+        count_cols, frac_cols
+      ))
     }
 
-    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions_batched;")
-    DBI::dbExecute(mod_db$con, "
-      CREATE TEMP TABLE temp_positions_batched AS
-      SELECT
-        *,
-        ROW_NUMBER() OVER (ORDER BY chrom, start) AS rn
-      FROM temp_positions
-    ")
-
-    total_rows <- DBI::dbGetQuery(mod_db$con,
-                                  "SELECT COUNT(*) AS n FROM temp_positions_batched")$n[1]
-    if (!is.finite(total_rows) || total_rows == 0) {
-      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions_batched;")
-      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions;")
-      next
-    }
-    this_batch <- if (is.na(pos_batch_size)) total_rows else pos_batch_size
-    
-    frac_cols <- paste(sprintf(
-      "CASE WHEN num_calls = 0 THEN NULL ELSE %s_counts * 1.0 / num_calls END AS %s_frac",
-      labels, labels), collapse = ",\n          ")
-    for (row_start in seq.int(1, total_rows, by = this_batch)) {
-      row_end <- min(row_start + this_batch - 1, total_rows)
-
-      insert_sql <- glue::glue("
-        INSERT INTO {out_id}
-        SELECT
-          sample_name,
-          chrom,
-          start,
-          start AS \"end\",
-          num_calls,
-          {paste(sprintf('%s_counts', labels), collapse = ', ')},
-          {frac_cols}
-        FROM temp_positions_batched
-        WHERE rn BETWEEN {row_start} AND {row_end}
-          AND num_calls >= {min_num_calls};
-      ")
-      DBI::dbExecute(mod_db$con, insert_sql)
-    }
-    
-    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions_batched;")
-    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions;")
+    DBI::dbExecute(mod_db$con, "CHECKPOINT")
+    message("  Sample '", samp, "' done")
   }
   
   end_time <- Sys.time()

@@ -33,8 +33,9 @@
 #' @param unmod_label Label used to name unmodified columns (default \code{"c"}).
 #' @param min_num_calls Minimum total calls required for a window to be written
 #'   (default \code{1}). Windows below this threshold are skipped.
-#' @param batch_size Optional integer number of chromosomes to process per batch
-#'   for each sample. If \code{NULL}, all chromosomes for a sample are processed together.
+#' @param batch_size Ignored. Kept for backward compatibility. The function now
+#'   processes one chromosome at a time and issues a \code{CHECKPOINT} after each,
+#'   so manual batching is unnecessary.
 #' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
 #' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic
 #'   (typically all-but-one core) is used.
@@ -43,22 +44,17 @@
 #' @param overwrite If \code{TRUE} and \code{output_table} exists, it is dropped before writing.
 #'
 #' @details
-#' For each sample, the function first aggregates per-position counts from
-#' \code{input_table} (\code{num_calls} plus dynamically generated
-#' \code{<label>_counts} per \code{mod_code}/\code{unmod_code}). Position
-#' aggregation is computed chromosome-by-chromosome per sample to reduce peak
-#' \code{GROUP BY} resource usage. It then creates
-#' sliding windows by assigning each position to a window start computed as:
-#' \deqn{temp\_start = start - ((start - offset) \bmod window\_size).}
-#' For each \code{offset} in \code{seq(1, window_size - 1, by = step_size)}, it
-#' sums counts over \code{[temp_start, temp_start + window_size - 1]} and writes:
-#' \itemize{
-#'   \item \code{num_sites}: number of positions aggregated in the window
-#'   \item \code{num_calls}: sum of \code{num_calls}
-#'   \item \code{<label>_counts}: summed counts for each label
-#'   \item \code{<label>_frac}: \code{<label>_counts / num_calls} (NULL if \code{num_calls == 0})
+#' The function processes one chromosome at a time. For each chromosome it:
+#' \enumerate{
+#'   \item Aggregates per-position call counts for all samples into a persistent
+#'         staging table (not a temporary table, so DuckDB can page it to disk).
+#'   \item Handles all window offsets in a single SQL pass using a
+#'         \code{CROSS JOIN} with an inline offset list (\code{unnest}), avoiding
+#'         \eqn{N_{\text{offsets}}} redundant scans of the staging data.
+#'   \item Inserts the window summaries into \code{output_table} and issues a
+#'         \code{CHECKPOINT} to flush completed work to disk before moving on.
 #' }
-#' Window aggregation can be split by chromosome groups using \code{batch_size}.
+#' Window assignment uses: \deqn{win\_start = start - ((start - offset) \bmod window\_size).}
 #' Resource pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}) are set
 #' via internal heuristics unless overridden.
 #'
@@ -138,26 +134,24 @@ summarize_mod_windows <- function(mod_db,
   
   in_id  <- as.character(DBI::dbQuoteIdentifier(mod_db$con, input_table))
   out_id <- as.character(DBI::dbQuoteIdentifier(mod_db$con, output_table))
-  
+
   if (DBI::dbExistsTable(mod_db$con, output_table) && overwrite)
     DBI::dbRemoveTable(mod_db$con, output_table)
-  
-  # Sample list
-  samp_query <- sprintf("SELECT DISTINCT sample_name FROM %s WHERE sample_name IS NOT NULL", in_id)
-  all_samps <- DBI::dbGetQuery(mod_db$con, samp_query)[,1]
-  if (!is.null(samples)) {
-    all_samps <- intersect(all_samps, samples)
-  }
-  if (length(all_samps) == 0) stop("No samples found.")
-  
+
+  # Build sample filter clause for SQL pushdown (avoids R-side sample loop)
+  samp_clause <- if (!is.null(samples)) {
+    vals <- paste(sprintf("'%s'", gsub("'", "''", samples)), collapse = ", ")
+    sprintf("AND sample_name IN (%s)", vals)
+  } else ""
+
   specs   <- .parse_mod_specs(mod_code)
   cntsql  <- .build_pos_count_sql(unmod_code, unmod_label, specs)
   countsS <- cntsql$select_counts_pos
   labels  <- cntsql$labels_all
-  
+
   cat("Summarizing Windows...\n")
-  
-  # Prepare output schema with dynamic columns
+
+  # Pre-create output schema with dynamic columns
   count_nulls <- paste(sprintf("CAST(NULL AS BIGINT) AS %s_counts", labels), collapse = ",\n      ")
   frac_nulls  <- paste(sprintf("CAST(NULL AS DOUBLE) AS %s_frac", labels),  collapse = ",\n      ")
   schema_sql <- glue::glue("
@@ -174,136 +168,80 @@ summarize_mod_windows <- function(mod_db,
     WHERE 1=0;
   ")
   DBI::dbExecute(mod_db$con, schema_sql)
-  
-  offsets <- seq(1, window_size - 1, by = step_size)
-  
-  # If no chromosomes specified, use all unique chroms in the data
+
+  # Per-label SQL fragments for window aggregation
+  p_counts   <- paste(sprintf("p.%s_counts", labels), collapse = ", ")
+  sum_counts <- paste(sprintf("SUM(%s_counts) AS %s_counts", labels, labels),
+                      collapse = ",\n        ")
+  frac_exprs <- paste(sprintf(
+    "CASE WHEN SUM(num_calls) = 0 THEN NULL\n             ELSE SUM(%s_counts) * 1.0 / SUM(num_calls) END AS %s_frac",
+    labels, labels), collapse = ",\n        ")
+
+  offsets     <- seq(1L, window_size - 1L, by = step_size)
+  offset_list <- paste(offsets, collapse = ", ")
+
+  # Determine chromosome list (respects chrs filter and sample filter)
   if (is.null(chrs)) {
     chrs <- DBI::dbGetQuery(
       mod_db$con,
-      sprintf("SELECT DISTINCT chrom FROM %s ORDER BY chrom", in_id)
+      sprintf("SELECT DISTINCT chrom FROM %s WHERE start > 0 %s ORDER BY chrom",
+              in_id, samp_clause)
     )[, 1]
   }
-  
-  chr_clause <- .chrom_filter_sql(chrs)
-  
-  chrom_batch_size <- if (is.null(batch_size)) {
-    NA_integer_
-  } else {
-    as.integer(batch_size[1])
+
+  message("Processing ", length(chrs), " chromosomes (",
+          length(offsets), " offsets in single pass)...")
+
+  for (ci in seq_along(chrs)) {
+    chr     <- chrs[ci]
+    chr_esc <- gsub("'", "''", chr)
+
+    # Aggregate per-position counts for all (filtered) samples on this chromosome.
+    # Persistent table (not TEMP) lets DuckDB page it to disk under memory pressure.
+    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS _staging_chr_pos")
+    DBI::dbExecute(mod_db$con, sprintf(
+      "CREATE TABLE _staging_chr_pos AS
+       SELECT sample_name, start,
+         COUNT(*) AS num_calls,
+         %s
+       FROM %s
+       WHERE chrom = '%s' AND start > 0 %s
+       GROUP BY sample_name, start",
+      countsS, in_id, chr_esc, samp_clause
+    ))
+
+    # All offsets handled in one INSERT via CROSS JOIN + unnest,
+    # avoiding N redundant scans of the staging table.
+    DBI::dbExecute(mod_db$con, sprintf(
+      "INSERT INTO %s
+       WITH offsets(win_offset) AS (
+         SELECT unnest([%s])
+       ),
+       window_map AS (
+         SELECT p.sample_name,
+           (p.start - ((p.start - o.win_offset) %% %d)) AS win_start,
+           p.num_calls, %s
+         FROM _staging_chr_pos p CROSS JOIN offsets o
+       )
+       SELECT sample_name, '%s' AS chrom,
+         win_start                    AS start,
+         win_start + %d - 1           AS \"end\",
+         COUNT(*)                     AS num_sites,
+         SUM(num_calls)               AS num_calls,
+         %s,
+         %s
+       FROM window_map
+       GROUP BY sample_name, win_start
+       HAVING SUM(num_calls) >= %d",
+      out_id, offset_list, window_size, p_counts,
+      chr_esc, window_size, sum_counts, frac_exprs, min_num_calls
+    ))
+
+    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS _staging_chr_pos")
+    DBI::dbExecute(mod_db$con, "CHECKPOINT")
+    message("  [", ci, "/", length(chrs), "] ", chr, " done")
   }
-  if (!is.na(chrom_batch_size) && chrom_batch_size < 1) {
-    stop("batch_size must be >= 1 when provided.")
-  }
-  
-  # Process each sample separately
-  for (samp in all_samps) {
-    samp_esc <- gsub("'", "''", samp)
 
-    chrom_q <- glue::glue("\
-      SELECT DISTINCT chrom
-      FROM {in_id}
-      WHERE sample_name = '{samp_esc}' AND start > 0{chr_clause}
-      ORDER BY chrom
-    ")
-    sample_chroms <- DBI::dbGetQuery(mod_db$con, chrom_q)[, 1]
-    if (length(sample_chroms) == 0) {
-      next
-    }
-
-    count_nulls_pos <- paste(sprintf("CAST(NULL AS BIGINT) AS %s_counts", labels), collapse = ",\n          ")
-    pos_schema_sql <- glue::glue("\
-      CREATE OR REPLACE TEMP TABLE temp_positions AS
-      SELECT
-          CAST(NULL AS VARCHAR) AS sample_name,
-          CAST(NULL AS VARCHAR) AS chrom,
-          CAST(NULL AS BIGINT)  AS start,
-          CAST(NULL AS BIGINT)  AS num_calls,
-          {count_nulls_pos}
-      WHERE 1=0
-    ")
-    DBI::dbExecute(mod_db$con, pos_schema_sql)
-
-    for (chr in sample_chroms) {
-      chr_esc <- gsub("'", "''", chr)
-      agg_chr_sql <- glue::glue("\
-        INSERT INTO temp_positions
-        SELECT
-            sample_name,
-            chrom,
-            start,
-            COUNT(*) AS num_calls,
-            {countsS}
-        FROM {in_id}
-        WHERE sample_name = '{samp_esc}'
-          AND chrom = '{chr_esc}'
-          AND start > 0
-        GROUP BY sample_name, chrom, start
-      ")
-      DBI::dbExecute(mod_db$con, agg_chr_sql)
-    }
-    
-    # Dynamic SUMs for counts & fractions at window level
-    sum_counts <- paste(sprintf("SUM(%s_counts) AS %s_counts", labels, labels),
-                        collapse = ",\n            ")
-    frac_cols <- paste(sprintf(
-      "CASE WHEN SUM(num_calls) = 0 THEN NULL ELSE SUM(%s_counts) * 1.0 / SUM(num_calls) END AS %s_frac",
-      labels, labels), collapse = ",\n            ")
-
-    chroms <- DBI::dbGetQuery(mod_db$con,
-                              "SELECT DISTINCT chrom FROM temp_positions ORDER BY chrom")$chrom
-    if (length(chroms) == 0) {
-      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions;")
-      next
-    }
-    this_batch <- if (is.na(chrom_batch_size)) length(chroms) else chrom_batch_size
-    
-    for (chrom_start in seq.int(1, length(chroms), by = this_batch)) {
-      chrom_end <- min(chrom_start + this_batch - 1, length(chroms))
-      chrom_slice <- chroms[chrom_start:chrom_end]
-      chrom_vals <- paste(sprintf("'%s'", gsub("'", "''", chrom_slice)), collapse = ", ")
-
-      for (offset in offsets) {
-        win_sql <- glue::glue("
-          CREATE TEMP TABLE temp_table AS
-          WITH window_map AS (
-            SELECT 
-              sample_name,
-              chrom,
-              start,
-              (start - ((start - {offset}) % {window_size})) AS temp_start,
-              num_calls,
-              {paste(sprintf('%s_counts', labels), collapse = ', ')}
-            FROM temp_positions
-            WHERE chrom IN ({chrom_vals})
-          )
-          SELECT 
-            sample_name,
-            chrom,
-            temp_start AS start,
-            temp_start + {window_size} - 1 AS \"end\",
-            COUNT(*)              AS num_sites,   -- one row per position
-            SUM(num_calls)        AS num_calls,
-            {sum_counts},
-            {frac_cols}
-          FROM window_map
-          GROUP BY sample_name, chrom, temp_start
-          HAVING SUM(num_calls) >= {min_num_calls};
-        ")
-
-        DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_table;")
-        DBI::dbExecute(mod_db$con, win_sql)
-
-        ins_sql <- glue::glue("INSERT INTO {out_id} SELECT * FROM temp_table;")
-        DBI::dbExecute(mod_db$con, ins_sql)
-
-        DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_table;")
-      }
-    }
-    
-    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions;")
-  }
-  
   end_time <- Sys.time()
   message("Windows table created as ", output_table,
           " (", round(as.numeric(end_time - start_time, "mins"), 2), " min).")

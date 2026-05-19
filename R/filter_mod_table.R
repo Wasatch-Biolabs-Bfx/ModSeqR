@@ -55,12 +55,14 @@ filter_mod_table <- function(mod_db, input_table, output_table, ...) {
   # Render SQL
   sql_query <- sql_render(filtered_expr) |> as.character()
   
-  # Use a temp table to stage results
-  temp_table <- paste0("tmp_", input_table, "_", as.integer(Sys.time()))
-  dbExecute(mod_db$con, sprintf("CREATE TEMP TABLE %s AS %s", temp_table, sql_query))
-  
-  # Write to output_table
+  # Stage results in a persistent (not TEMP) table so DuckDB can page it to disk.
+  temp_table <- paste0("_filter_staging_", as.integer(Sys.time()))
+  dbExecute(mod_db$con, sprintf("DROP TABLE IF EXISTS %s", temp_table))
+  dbExecute(mod_db$con, sprintf("CREATE TABLE %s AS %s", temp_table, sql_query))
+
+  # Write to output_table, then clean up staging table
   dbExecute(mod_db$con, sprintf("CREATE OR REPLACE TABLE %s AS SELECT * FROM %s", output_table, temp_table))
+  dbExecute(mod_db$con, sprintf("DROP TABLE IF EXISTS %s", temp_table))
   
   cat("\n")
   end_time <- Sys.time()

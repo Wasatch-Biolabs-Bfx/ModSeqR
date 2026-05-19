@@ -36,8 +36,9 @@
 #' @param unmod_label Label used to name unmodified columns (default \code{"c"}).
 #' @param min_num_calls Minimum total calls required at the \emph{region} level to be written
 #'   (default \code{1}). Regions below this threshold are skipped.
-#' @param batch_size Optional integer number of annotation regions to process per batch
-#'   for each sample. If \code{NULL}, all regions are processed in one batch.
+#' @param batch_size Ignored. Kept for backward compatibility. The function now
+#'   processes one chromosome at a time (positions and annotation), issuing a
+#'   \code{CHECKPOINT} after each sample, so manual batching is unnecessary.
 #' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
 #' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic
 #'   (typically all-but-one core) is used.
@@ -52,14 +53,10 @@
 #'         is absent, it is synthesized. Basic chromosome-prefix harmonization is performed when
 #'         DB positions and annotation disagree on presence of a \code{"chr"} prefix.
 #'   \item Configures DuckDB pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}).
-#'   \item Builds per-position counts (one row per \code{sample_name}, \code{chrom}, \code{start})
-#'         for the requested classes (\code{<label>_counts}, plus fractions later). Position
-#'         aggregation is computed chromosome-by-chromosome per sample to reduce peak
-#'         \code{GROUP BY} resource usage.
-#'   \item Joins positions to regions using the chosen \code{join} type and aggregates per region:
-#'         \code{num_sites}, \code{num_calls}, \code{<label>_counts}, and
-#'         \code{<label>_frac} = \code{<label>_counts / num_calls}.
-#'         Region processing can be split into annotation-sized batches via \code{batch_size}.
+#'   \item For each sample, iterates chromosome by chromosome: aggregates positions into a
+#'         persistent staging table (not a temporary table, so DuckDB can page it to disk),
+#'         then immediately joins to the annotation for that chromosome and inserts results
+#'         into \code{output_table}. A \code{CHECKPOINT} is issued after each sample.
 #' }
 #'
 #' @return (Invisibly) a \code{"mod_db"} object pointing to the same DB file with
@@ -238,32 +235,25 @@ summarize_mod_regions <- function(mod_db,
   }
 
   DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_annotation_batched;")
-  DBI::dbExecute(mod_db$con, "
-    CREATE TEMP TABLE temp_annotation_batched AS
-    SELECT
-      chrom,
-      start,
-      \"end\",
-      region_name,
-      ROW_NUMBER() OVER (ORDER BY chrom, start, \"end\", region_name) AS rn
-    FROM temp_annotation
-  ")
-
+  # Validate annotation was loaded
   total_regions <- DBI::dbGetQuery(mod_db$con,
-                                   "SELECT COUNT(*) AS n FROM temp_annotation_batched")$n[1]
+                                   "SELECT COUNT(*) AS n FROM temp_annotation")$n[1]
   if (!is.finite(total_regions) || total_regions == 0) {
     stop("No regions found in region_file after parsing.")
   }
-  reg_batch_size <- if (is.null(batch_size)) {
-    total_regions
-  } else {
-    as.integer(batch_size[1])
-  }
-  if (!is.finite(reg_batch_size) || reg_batch_size < 1) {
-    stop("batch_size must be >= 1 when provided.")
-  }
-  
-  # ---- Process per sample: position counts -> region aggregation ---------------
+
+  # Build dynamic SUMs and fractions at region level (computed once, reused per chr)
+  sum_counts <- paste(sprintf("COALESCE(SUM(p.%s_counts), 0) AS %s_counts", labels, labels),
+                      collapse = ",\n          ")
+  frac_cols  <- paste(sprintf(
+    "CASE WHEN COALESCE(SUM(p.num_calls),0) = 0 THEN NULL ELSE COALESCE(SUM(p.%s_counts),0) * 1.0 / COALESCE(SUM(p.num_calls),0) END AS %s_frac",
+    labels, labels), collapse = ",\n          ")
+  join_kw <- switch(join, inner = "JOIN", left = "LEFT JOIN", right = "RIGHT JOIN")
+
+  # ---- Process per sample, one chromosome at a time ----------------------------
+  # Persistent staging table (not TEMP) lets DuckDB page positions to disk.
+  # Annotation is filtered per-chromosome in SQL, avoiding a batching loop.
+  # CHECKPOINT after each sample releases memory before moving on.
   for (samp in all_samps) {
     samp_esc <- gsub("'", "''", samp)
 
@@ -274,96 +264,52 @@ summarize_mod_regions <- function(mod_db,
       ORDER BY chrom
     ")
     sample_chroms <- DBI::dbGetQuery(mod_db$con, chrom_q)[, 1]
-    if (length(sample_chroms) == 0) {
-      next
-    }
-
-    count_nulls_pos <- paste(sprintf("CAST(NULL AS BIGINT) AS %s_counts", labels), collapse = ",\n          ")
-    pos_schema_sql <- glue::glue("\
-      CREATE OR REPLACE TEMP TABLE temp_positions AS
-      SELECT
-          CAST(NULL AS VARCHAR) AS sample_name,
-          CAST(NULL AS VARCHAR) AS chrom,
-          CAST(NULL AS BIGINT)  AS start,
-          CAST(NULL AS BIGINT)  AS \"end\",
-          CAST(NULL AS BIGINT)  AS num_calls,
-          {count_nulls_pos}
-      WHERE 1=0
-    ")
-    DBI::dbExecute(mod_db$con, pos_schema_sql)
+    if (length(sample_chroms) == 0) next
 
     for (chr in sample_chroms) {
       chr_esc <- gsub("'", "''", chr)
-      agg_chr_sql <- glue::glue("\
-        INSERT INTO temp_positions
-        SELECT
-            sample_name,
-            chrom,
-            start,
-            \"end\",
-            COUNT(*) AS num_calls,
-            {countsS}
-        FROM {in_id}
-        WHERE sample_name = '{samp_esc}'
-          AND chrom = '{chr_esc}'
-          AND start > 0
-        GROUP BY sample_name, chrom, start, \"end\"
-      ")
-      DBI::dbExecute(mod_db$con, agg_chr_sql)
-    }
-    
-    # Build dynamic SUMs and fractions at region level
-    sum_counts <- paste(sprintf("COALESCE(SUM(p.%s_counts), 0) AS %s_counts", labels, labels),
-                        collapse = ",\n          ")
-    frac_cols <- paste(sprintf(
-      "CASE WHEN COALESCE(SUM(p.num_calls),0) = 0 THEN NULL ELSE COALESCE(SUM(p.%s_counts),0) * 1.0 / COALESCE(SUM(p.num_calls),0) END AS %s_frac",
-      labels, labels), collapse = ",\n          ")
-    
-    # Choose JOIN keyword
-    join_kw <- switch(join,
-                      inner = "JOIN",
-                      left  = "LEFT JOIN",
-                      right = "RIGHT JOIN")
 
-    for (reg_start in seq.int(1, total_regions, by = reg_batch_size)) {
-      reg_end <- min(reg_start + reg_batch_size - 1, total_regions)
+      # Aggregate per-position counts into a persistent staging table
+      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS _staging_pos")
+      DBI::dbExecute(mod_db$con, sprintf(
+        "CREATE TABLE _staging_pos AS
+         SELECT sample_name, chrom, start, \"end\",
+           COUNT(*) AS num_calls,
+           %s
+         FROM %s
+         WHERE sample_name = '%s' AND chrom = '%s' AND start > 0
+         GROUP BY sample_name, chrom, start, \"end\"",
+        countsS, in_id, samp_esc, chr_esc
+      ))
 
-      ann_chunk_sql <- glue::glue("
-        CREATE OR REPLACE TEMP VIEW temp_annotation_chunk AS
-        SELECT chrom, start, \"end\", region_name
-        FROM temp_annotation_batched
-        WHERE rn BETWEEN {reg_start} AND {reg_end}
-      ")
-      DBI::dbExecute(mod_db$con, ann_chunk_sql)
+      # Join positions to annotation for this chromosome and insert into output
+      DBI::dbExecute(mod_db$con, sprintf(
+        "INSERT INTO %s
+         SELECT
+           p.sample_name,
+           a.region_name,
+           a.chrom,
+           a.start,
+           a.\"end\",
+           COUNT(*)                       AS num_sites,
+           COALESCE(SUM(p.num_calls), 0)  AS num_calls,
+           %s,
+           %s
+         FROM _staging_pos p
+         %s temp_annotation a
+           ON p.chrom = a.chrom
+          AND CAST(p.start AS DOUBLE) BETWEEN CAST(a.start AS DOUBLE) AND CAST(a.\"end\" AS DOUBLE)
+         WHERE a.chrom = '%s'
+         GROUP BY p.sample_name, a.region_name, a.chrom, a.start, a.\"end\"
+         HAVING COALESCE(SUM(p.num_calls), 0) >= %d",
+        out_id, sum_counts, frac_cols, join_kw, chr_esc, min_num_calls
+      ))
 
-      reg_sql <- glue::glue("
-        CREATE TEMP TABLE temp_regions AS
-        SELECT
-          p.sample_name,
-          a.region_name,
-          a.chrom,
-          a.start,
-          a.\"end\",
-          COUNT(*)                       AS num_sites,
-          COALESCE(SUM(p.num_calls), 0)  AS num_calls,
-          {sum_counts},
-          {frac_cols}
-        FROM temp_positions p
-        {join_kw} temp_annotation_chunk a
-          ON p.chrom = a.chrom
-         AND CAST(p.start AS DOUBLE) BETWEEN CAST(a.start AS DOUBLE) AND CAST(a.\"end\" AS DOUBLE)
-        GROUP BY p.sample_name, a.region_name, a.chrom, a.start, a.\"end\"
-        HAVING COALESCE(SUM(p.num_calls), 0) >= {min_num_calls};
-      ")
-
-      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_regions;")
-      DBI::dbExecute(mod_db$con, reg_sql)
-      DBI::dbExecute(mod_db$con, glue::glue("INSERT INTO {out_id} SELECT * FROM temp_regions;"))
-      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_regions;")
-      DBI::dbExecute(mod_db$con, "DROP VIEW IF EXISTS temp_annotation_chunk;")
+      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS _staging_pos")
     }
 
-    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_positions;")
+    DBI::dbExecute(mod_db$con, "CHECKPOINT")
+    message("  Sample '", samp, "' done")
   }
   
   # ---- Finish ------------------------------------------------------------------

@@ -53,8 +53,9 @@ all samples present in \code{input_table} are processed.}
 \item{min_num_calls}{Minimum total calls required for a window to be written
 (default \code{1}). Windows below this threshold are skipped.}
 
-\item{batch_size}{Optional integer number of chromosomes to process per batch
-for each sample. If \code{NULL}, all chromosomes for a sample are processed together.}
+\item{batch_size}{Ignored. Kept for backward compatibility. The function now
+processes one chromosome at a time and issues a \code{CHECKPOINT} after each,
+so manual batching is unnecessary.}
 
 \item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
 
@@ -87,22 +88,17 @@ Windows are created using a \strong{tiling + offsets} strategy so that every
 total modification sites, total calls, per-class counts, and per-class fractions.
 }
 \details{
-For each sample, the function first aggregates per-position counts from
-\code{input_table} (\code{num_calls} plus dynamically generated
-\code{<label>_counts} per \code{mod_code}/\code{unmod_code}). Position
-aggregation is computed chromosome-by-chromosome per sample to reduce peak
-\code{GROUP BY} resource usage. It then creates
-sliding windows by assigning each position to a window start computed as:
-\deqn{temp\_start = start - ((start - offset) \bmod window\_size).}
-For each \code{offset} in \code{seq(1, window_size - 1, by = step_size)}, it
-sums counts over \code{[temp_start, temp_start + window_size - 1]} and writes:
-\itemize{
-  \item \code{num_sites}: number of positions aggregated in the window
-  \item \code{num_calls}: sum of \code{num_calls}
-  \item \code{<label>_counts}: summed counts for each label
-  \item \code{<label>_frac}: \code{<label>_counts / num_calls} (NULL if \code{num_calls == 0})
+The function processes one chromosome at a time. For each chromosome it:
+\enumerate{
+  \item Aggregates per-position call counts for all samples into a persistent
+        staging table (not a temporary table, so DuckDB can page it to disk).
+  \item Handles all window offsets in a single SQL pass using a
+        \code{CROSS JOIN} with an inline offset list (\code{unnest}), avoiding
+        \eqn{N_{\text{offsets}}} redundant scans of the staging data.
+  \item Inserts the window summaries into \code{output_table} and issues a
+        \code{CHECKPOINT} to flush completed work to disk before moving on.
 }
-Window aggregation can be split by chromosome groups using \code{batch_size}.
+Window assignment uses: \deqn{win\_start = start - ((start - offset) \bmod window\_size).}
 Resource pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}) are set
 via internal heuristics unless overridden.
 }
