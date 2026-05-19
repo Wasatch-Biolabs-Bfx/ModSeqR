@@ -1,6 +1,6 @@
-FROM rocker/r-ver:4.3.2
+FROM rocker/r-ver:4.6.0
 
-# 1. System dependencies (Added libuv1-dev for the 'fs' package)
+# 1. System dependencies
 RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev \
     libssl-dev \
@@ -14,13 +14,20 @@ RUN apt-get update && apt-get install -y \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Use Posit Binaries
+# 2. Install R dependencies from Posit Package Manager (binary packages for speed)
 ENV ARROW_R_WITH_ZSTD=libzstd
-RUN R -e "options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux__/jammy/latest')); \
-    install.packages(c('devtools', 'remotes', 'arrow', 'duckdb', 'duckplyr', 'dplyr', 'ggplot2'))"
+RUN R -e "options(repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux__/noble/latest')); \
+    install.packages(c('devtools', 'remotes', 'arrow', 'duckdb', 'duckplyr', \
+                       'dplyr', 'dbplyr', 'glue', 'ggplot2', 'readr', \
+                       'tidyr', 'withr', 'testthat'))"
 
-# 3. Install ModSeqR
-RUN R -e "devtools::install_github('Wasatch-Biolabs-Bfx/ModSeqR', upgrade='never'); \
-    if (!require('ModSeqR')) { stop('Installation failed!') }"
+# 3. Install ModSeqR v1.2.0
+RUN R -e "remotes::install_github('Wasatch-Biolabs-Bfx/ModSeqR@performance-improvements', upgrade='never'); \
+    if (!requireNamespace('ModSeqR', quietly = TRUE)) stop('ModSeqR installation failed')"
 
-WORKDIR /
+LABEL org.opencontainers.image.title="ModSeqR" \
+      org.opencontainers.image.version="1.2.0" \
+      org.opencontainers.image.vendor="Wasatch Biolabs" \
+      org.opencontainers.image.source="https://github.com/Wasatch-Biolabs-Bfx/ModSeqR"
+
+WORKDIR /data
