@@ -143,6 +143,12 @@ collapse_mod_windows <- function(mod_db,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
   
+  cols <- DBI::dbListFields(mod_db$con, table_name)
+  mod_db$last_result <- if ("sample_name" %in% cols) {
+    dplyr::tbl(mod_db$con, table_name) |> dplyr::count(sample_name) |> dplyr::collect()
+  } else {
+    DBI::dbGetQuery(mod_db$con, sprintf("SELECT COUNT(*) AS n FROM %s", table_name))$n
+  }
   mod_db$current_table <- table_name
   mod_db <- .modhelper_cleanup(mod_db)
   invisible(mod_db)

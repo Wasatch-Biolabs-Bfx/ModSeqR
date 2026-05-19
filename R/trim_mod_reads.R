@@ -159,6 +159,9 @@ trim_mod_reads <- function(mod_db,
     as.numeric(elapsed, units = "secs")
   ))
   
+  mod_db$last_result <- dplyr::tbl(mod_db$con, output_table) |>
+    dplyr::count(sample_name) |>
+    dplyr::collect()
   mod_db$current_table <- output_table
   mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
   invisible(mod_db)

@@ -149,11 +149,14 @@ classify_mod_reads <- function(mod_db,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
   
+  mod_db$last_result <- dplyr::tbl(mod_db$con, table_name) |>
+    dplyr::count(classification) |>
+    dplyr::collect()
   mod_db$current_table = table_name
-  
+
   # print out table header for user
   print(head(tbl(mod_db$con, table_name)))
-  
+
   mod_db <- .modhelper_cleanup(mod_db)
   invisible(mod_db)
 }

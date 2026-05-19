@@ -29,6 +29,7 @@ remove_mod_table <- function(mod_db, table_name)
     message(glue("Table '{table_name}' does not exist in the database. No action taken."))
   }
   
+  mod_db$last_result <- table_name
   mod_db <- .modhelper_cleanup(mod_db)
   invisible(mod_db)
 }

@@ -83,6 +83,7 @@ plot_mod_diff <- function(mod_db,
     message("Differential Methylation Plotted!",
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
+  mod_db$last_result <- plot
   mod_db <- .modhelper_closeDB(mod_db)
   invisible(mod_db)
 }

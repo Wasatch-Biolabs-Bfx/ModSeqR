@@ -157,6 +157,10 @@ rename_mod_samples <- function(mod_db,
     message("\nRows updated: ", n_changed)
   }
   
+  mod_db$last_result <- DBI::dbGetQuery(
+    mod_db$con,
+    sprintf("SELECT DISTINCT sample_name FROM %s ORDER BY sample_name", tbl_id)
+  )$sample_name
   mod_db$current_table <- table
   invisible(mod_db)
 }

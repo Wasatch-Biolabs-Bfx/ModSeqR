@@ -51,6 +51,7 @@ export_mod_table <- function(mod_db,
   message("Exporting '", table, "' to: ", out_path)
   n <- DBI::dbExecute(mod_db$con, sql)
   message("Rows written: ", n)
-  
+
+  mod_db$last_result <- out_path
   invisible(mod_db)
 }

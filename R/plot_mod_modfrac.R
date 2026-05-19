@@ -133,16 +133,17 @@ plot_mod_modfrac<- function(mod_db,
       )
     
     print(p)
-    
+    mod_db$last_result <- p
+
     # Save the plot if save_path is specified
     if (!is.null(save_path)) {
       ggsave(filename = save_path, plot = p, width = 8, height = 6, dpi = 300)
       cat("Statistics plot saved to ", save_path, "\n")
     }
   }
-  
+
   end_time <- Sys.time()
-  
+
   message("Time elapsed: ", end_time - start_time, "\n")
   mod_db <- .modhelper_closeDB(mod_db)
   invisible(mod_db)

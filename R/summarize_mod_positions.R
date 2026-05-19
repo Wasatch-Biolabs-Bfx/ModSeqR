@@ -285,6 +285,9 @@ summarize_mod_positions <- function(mod_db,
   message("Positions table created as ", output_table,
           " (", round(as.numeric(end_time - start_time, "secs"), 1), "s).")
   
+  mod_db$last_result <- dplyr::tbl(mod_db$con, output_table) |>
+    dplyr::count(sample_name) |>
+    dplyr::collect()
   mod_db$current_table <- output_table
   mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
   invisible(mod_db)

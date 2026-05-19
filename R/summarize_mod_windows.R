@@ -306,6 +306,9 @@ summarize_mod_windows <- function(mod_db,
   message("Windows table created as ", output_table,
           " (", round(as.numeric(end_time - start_time, "mins"), 2), " min).")
   
+  mod_db$last_result <- dplyr::tbl(mod_db$con, output_table) |>
+    dplyr::count(sample_name) |>
+    dplyr::collect()
   mod_db$current_table <- output_table
   mod_db <- ModSeqR:::.modhelper_cleanup(mod_db)
   invisible(mod_db)

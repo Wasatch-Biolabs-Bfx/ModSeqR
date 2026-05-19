@@ -64,7 +64,14 @@ filter_mod_table <- function(mod_db, input_table, output_table, ...) {
   end_time <- Sys.time()
   
   message("Filter complete! Time elapsed: ", end_time - start_time, "\n")
-  
+
+  cols <- DBI::dbListFields(mod_db$con, output_table)
+  mod_db$last_result <- if ("sample_name" %in% cols) {
+    dplyr::tbl(mod_db$con, output_table) |> dplyr::count(sample_name) |> dplyr::collect()
+  } else {
+    DBI::dbGetQuery(mod_db$con, sprintf("SELECT COUNT(*) AS n FROM %s", output_table))$n
+  }
+
   mod_db <- .modhelper_cleanup(mod_db)
   invisible(mod_db)
 }

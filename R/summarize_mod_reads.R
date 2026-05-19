@@ -114,6 +114,9 @@ summarize_mod_reads <- function(mod_db,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
   
+  mod_db$last_result <- dplyr::tbl(mod_db$con, output_reads_table) |>
+    dplyr::count(sample_name) |>
+    dplyr::collect()
   print(head(dplyr::tbl(mod_db$con, output_reads_table)))
   mod_db$current_table = output_reads_table
   mod_db <- .modhelper_cleanup(mod_db)

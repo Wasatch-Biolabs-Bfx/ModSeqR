@@ -95,5 +95,6 @@ plot_mod_diff_density <- function(mod_db,
     ggplot2::theme_minimal()
 
   print(p)
+  mod_db$last_result <- p
   invisible(mod_db)
 }

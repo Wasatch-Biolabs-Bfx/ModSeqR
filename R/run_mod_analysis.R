@@ -189,10 +189,16 @@ run_mod_analysis <- function(mod_db,
   # write.csv(df_wide_significant, Sig_CGs_path, row.names = FALSE)
   
   cat("\nRun Analysis Complete!\n")
-  
+
+  mod_db$last_result <- c(
+    mod_diff = mod_diff_path,
+    all_cpgs = all_CGs_path,
+    sig_cpgs = Sig_CGs_path
+  )
+
   # Record the end time
   end_time <- Sys.time()
-  
+
   mod_db <- .modhelper_closeDB(mod_db)
   total_time_difftime <- end_time - start_time
   

@@ -80,8 +80,14 @@ run_mod_dplyr <- function(
     
     end_time <- Sys.time()
     message("Query Finished. Time elapsed: ", end_time - start_time, "\n")
+    cols <- DBI::dbListFields(mod_db$con, output_table)
+    mod_db$last_result <- if ("sample_name" %in% cols) {
+      dplyr::tbl(mod_db$con, output_table) |> dplyr::count(sample_name) |> dplyr::collect()
+    } else {
+      DBI::dbGetQuery(mod_db$con, paste0("SELECT COUNT(*) AS n FROM ", output_table))$n
+    }
     mod_db <- .modhelper_closeDB(mod_db)
-    
+
     invisible(mod_db)
   }
 }

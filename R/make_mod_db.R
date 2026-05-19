@@ -382,6 +382,9 @@ make_mod_db <- function(ch3_files,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
   
+  mod_db$last_result <- dplyr::tbl(mod_db$con, "calls") |>
+    dplyr::count(sample_name) |>
+    dplyr::collect()
   mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
   invisible(mod_db)
 }
