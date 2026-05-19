@@ -597,41 +597,68 @@ calc_mod_diff <- function(mod_db,
 
 .calc_diff_logreg <- function(in_dat)
 {
-  pvals <-
-    in_dat |>
-    mutate(
-      cov = num_calls + mod_counts,
-      mod_frac = mod_counts / cov) |>
-    collect() |>
-    summarize(
-      .by = c(chrom, start),
-      mean_cov = mean(cov, na.rm = TRUE),
-      mean_frac_case = mean(mod_frac[exp_group == "case"]),
-      mean_frac_ctrl = mean(mod_frac[exp_group == "control"]),
-      mean_diff = mean_frac_case - mean_frac_ctrl,
-      p_val = .logreg(mod_frac, cov, exp_group))
+  group_vars <- setdiff(colnames(in_dat),
+                        c("sample_name", "exp_group", "num_calls", "mod_counts", "num_sites"))
 
-  # Pivot wider, add pvals, and return
-  in_dat |>
-    pivot_wider(
-      id_cols = c(chrom, ref_position),
-      names_from = sample_name,
-      values_from = c(num_calls, mod_counts),
-      values_fill = 0) |>
-    inner_join(
-      pvals, by = join_by(chrom, ref_position),
-      copy = TRUE)
+  dat <- in_dat |>
+    dplyr::select(dplyr::any_of(c(group_vars, "sample_name", "exp_group",
+                                  "num_calls", "mod_counts"))) |>
+    dplyr::collect()
+
+  dat |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
+    dplyr::summarise(
+      num_samples_case    = sum(exp_group == "case"),
+      num_samples_control = sum(exp_group == "control"),
+
+      num_calls_case    = sum(num_calls[exp_group == "case"],    na.rm = TRUE),
+      num_calls_control = sum(num_calls[exp_group == "control"], na.rm = TRUE),
+
+      mod_counts_case    = sum(mod_counts[exp_group == "case"],   na.rm = TRUE),
+      mod_counts_control = sum(mod_counts[exp_group == "control"], na.rm = TRUE),
+
+      mod_frac_case = mean(mod_counts[exp_group == "case"] /
+                             pmax(num_calls[exp_group == "case"], 1), na.rm = TRUE),
+      mod_frac_control = mean(mod_counts[exp_group == "control"] /
+                                pmax(num_calls[exp_group == "control"], 1), na.rm = TRUE),
+
+      meth_diff = mean(mod_counts[exp_group == "case"] /
+                         pmax(num_calls[exp_group == "case"], 1), na.rm = TRUE) -
+                  mean(mod_counts[exp_group == "control"] /
+                         pmax(num_calls[exp_group == "control"], 1), na.rm = TRUE),
+
+      p_val = .logreg(mod_counts / pmax(num_calls, 1), num_calls, exp_group),
+
+      .groups = "drop"
+    )
 }
 
 
-.logreg <- function(mod_frac,
-                    cov,
-                    exp_group)
+# Weighted binomial logistic regression LRT.
+# Fits intercept-only (null) vs intercept + group (alt), returns chi-sq p-value (1 df).
+# mod_frac: per-sample modification fraction
+# cov:      per-sample total read count (used as weights)
+# exp_group: character vector, "case" or "control"
+.logreg <- function(mod_frac, cov, exp_group)
 {
-  exp_group <- as.numeric(factor(exp_group))
-  fit <- glm.fit(exp_group, mod_frac,
-                 weights = cov / sum(cov), family = binomial())
-  deviance <- fit$null.deviance - fit$deviance
+  ok <- is.finite(mod_frac) & is.finite(cov) & cov > 0
+  if (sum(ok) < 2 || length(unique(exp_group[ok])) < 2) return(NA_real_)
 
-  pchisq(deviance, 1, lower.tail = FALSE)
+  mf  <- mod_frac[ok]
+  w   <- cov[ok]
+  grp <- as.integer(exp_group[ok] == "case")
+
+  fit_null <- tryCatch(
+    glm.fit(cbind(1),      mf, weights = w, family = binomial()),
+    error = function(e) NULL
+  )
+  fit_alt <- tryCatch(
+    glm.fit(cbind(1, grp), mf, weights = w, family = binomial()),
+    error = function(e) NULL
+  )
+
+  if (is.null(fit_null) || is.null(fit_alt)) return(NA_real_)
+
+  lrt_stat <- max(fit_null$deviance - fit_alt$deviance, 0)
+  pchisq(lrt_stat, df = 1, lower.tail = FALSE)
 }

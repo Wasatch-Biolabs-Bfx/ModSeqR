@@ -298,9 +298,32 @@ test_that("beta_bin collects only needed columns and batches by chromosome", {
 # ---- calc_mod_diff: log_reg ----------------------------------------------
 
 test_that("calc_mod_diff log_reg produces valid output", {
-  # log_reg currently references a deprecated 'ref_position' column instead
-  # of 'start', causing a schema error. Skipped until the function is fixed.
-  skip("log_reg has a known pre-existing schema bug (uses 'ref_position' instead of 'start')")
+  skip_if_not_installed("duckdb")
+  skip_if_not_installed("dplyr")
+
+  tmpdir <- withr::local_tempdir()
+  dbfile <- file.path(tmpdir, "test.mod.db")
+  con    <- DBI::dbConnect(duckdb::duckdb(dbfile))
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+
+  DBI::dbWriteTable(con, "positions", .positions_df(n_case = 3, n_ctrl = 3))
+  mod_db_obj <- .make_mod_db(con, dbfile)
+
+  testthat::with_mocked_bindings(.package = "ModSeqR",
+    .modhelper_connectDB = function(x) x,
+    .modhelper_cleanup   = function(x) x,
+    calc_mod_diff(mod_db_obj, "positions",
+                 cases    = paste0("case", 1:3),
+                 controls = paste0("ctrl", 1:3),
+                 mod_type = "mh", calc_type = "log_reg")
+  )
+
+  out <- dplyr::tbl(con, "mod_diff_positions") |> dplyr::collect()
+  expect_true(all(c("p_val", "p_adjust", "meth_diff",
+                    "mh_counts_case", "mh_counts_control") %in% names(out)))
+  expect_true(all(out$p_adjust >= 0 & out$p_adjust <= 1, na.rm = TRUE))
+  expect_gt(out$meth_diff[out$start == 100], 0)
+  expect_lt(out$meth_diff[out$start == 200], 0)
 })
 
 # ---- calc_mod_diff: mod_type rename --------------------------------------
