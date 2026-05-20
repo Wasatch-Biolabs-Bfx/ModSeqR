@@ -74,12 +74,11 @@
 #'                controls = c("Sperm1_chr21", "Sperm2_chr21", "Sperm3_chr21")))
 #' }
 #'
-#' @importFrom DBI dbConnect dbDisconnect dbExistsTable dbRemoveTable dbExecute dbWriteTable
+#' @importFrom DBI dbConnect dbDisconnect dbExistsTable dbRemoveTable dbExecute dbWriteTable dbGetQuery dbListFields
 #' @importFrom duckdb duckdb
-#' @importFrom dplyr tbl select any_of mutate case_when filter pull summarize inner_join join_by rename_with collect arrange
+#' @importFrom dplyr tbl select any_of mutate case_when filter pull summarize inner_join join_by rename_with collect arrange distinct
 #' @importFrom dbplyr sql_render remote_con
 #' @importFrom glue glue
-#' @importFrom tidyr pivot_wider
 #' @importFrom stats fisher.test p.adjust dhyper phyper glm.fit pchisq optim plogis qlogis var
 #'
 #' @export
@@ -312,6 +311,9 @@ calc_mod_diff <- function(mod_db,
     mod_diff_table, mod_diff_table, dbl_min, dbl_min
   ))
 
+  # Clean up fisher staging table if present (created by .calc_diff_fisher())
+  DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS _diff_staging")
+
   end_time <- Sys.time()
   total_time_difftime <- end_time - start_time
 
@@ -485,63 +487,98 @@ calc_mod_diff <- function(mod_db,
 }
 
 
-## Calculate p-values using fisher exact tests. If there are multiple samples,
-## they will be combined.
-.calc_diff_fisher <- function(in_dat,
-                              calc_type)
+## Calculate p-values using Fisher exact test. Aggregates per chromosome in
+## DuckDB using conditional aggregation (avoids pivot_wider collect), runs the
+## Fisher test in R on the small per-chromosome frame, and writes results to a
+## persistent staging table one chromosome at a time so peak R memory usage is
+## bounded regardless of dataset size.
+.calc_diff_fisher <- function(in_dat, calc_type)
 {
-  # Combine replicates and pivot wider
-  dat <-
-    in_dat |>
-    dplyr::summarize(
-      .by = c(exp_group, any_of(c("region_name", "chrom", "start", "end"))),
-      num_calls = sum(num_calls, na.rm = TRUE),
-      mod_counts = sum(mod_counts, na.rm = TRUE)) |>
-    dplyr::mutate(
-      c_counts = num_calls - mod_counts) |>
-    pivot_wider(
-      names_from = exp_group,
-      values_from = c(num_calls, mod_counts, c_counts),
-      values_fill = 0)
+  con        <- dbplyr::remote_con(in_dat)
+  group_vars <- setdiff(colnames(in_dat),
+                        c("sample_name", "exp_group", "num_calls", "mod_counts", "num_sites"))
 
-  # Extract matrix and calculate p-vals
-  pvals <-
-    dat |>
-    dplyr::select(!any_of(c("region_name", "chrom", "start", "end"))) |>
-    distinct() |>
-    dplyr::mutate(
-      mod_frac_case = mod_counts_case /
-        (num_calls_case),
-      mod_frac_control = mod_counts_control /
-        (num_calls_control),
-      meth_diff = mod_counts_case /
-        (num_calls_case) -
-        mod_counts_control /
-        (num_calls_control)) |>
-    collect() |>
-    dplyr::mutate(
-      p_val = switch(
-        calc_type,
-        fast_fisher = .fast_fisher(
-          q = mod_counts_case,
-          m = mod_counts_case + mod_counts_control,
-          n = c_counts_case + c_counts_control,
-          k = num_calls_case),
-        r_fisher = .r_fisher(
-          a = mod_counts_control,
-          b = mod_counts_case,
-          c = c_counts_control,
-          d = c_counts_case)))
+  qi <- function(nms) paste(
+    vapply(nms, function(nm) as.character(DBI::dbQuoteIdentifier(con, nm)), character(1)),
+    collapse = ", "
+  )
+  gvars_sql <- qi(group_vars)
+  src_sql   <- as.character(dbplyr::sql_render(in_dat))
 
-  dat |>
-    inner_join(
-      pvals,
-      by = join_by(num_calls_case, num_calls_control,
-                   mod_counts_case, mod_counts_control,
-                   c_counts_case,   c_counts_control),
-      copy = TRUE)
+  # Determine chromosomes to iterate over; fall back to single batch if no chrom column.
+  has_chrom <- "chrom" %in% group_vars
+  if (has_chrom) {
+    chroms <- DBI::dbGetQuery(
+      con,
+      sprintf("SELECT DISTINCT chrom FROM (%s) _tmp ORDER BY chrom", src_sql)
+    )[[1]]
+  } else {
+    chroms <- NA_character_
+  }
 
+  staging_table   <- "_diff_staging"
+  staging_created <- FALSE
+  if (DBI::dbExistsTable(con, staging_table)) DBI::dbRemoveTable(con, staging_table)
 
+  for (chr in chroms) {
+    chr_filter <- if (has_chrom && !is.na(chr)) {
+      sprintf("AND chrom = '%s'", gsub("'", "''", chr))
+    } else {
+      ""
+    }
+
+    # Conditional aggregation in DuckDB replaces pivot_wider in R.
+    # SUM(CASE WHEN ...) pivots case/control columns without collecting any rows.
+    agg_sql <- sprintf("
+      SELECT %s,
+        COUNT(DISTINCT CASE WHEN exp_group = 'case'    THEN sample_name END) AS num_samples_case,
+        COUNT(DISTINCT CASE WHEN exp_group = 'control' THEN sample_name END) AS num_samples_control,
+        SUM(CASE WHEN exp_group = 'case'    THEN num_calls               ELSE 0 END) AS num_calls_case,
+        SUM(CASE WHEN exp_group = 'control' THEN num_calls               ELSE 0 END) AS num_calls_control,
+        SUM(CASE WHEN exp_group = 'case'    THEN CAST(mod_counts AS DOUBLE) ELSE 0 END) AS mod_counts_case,
+        SUM(CASE WHEN exp_group = 'control' THEN CAST(mod_counts AS DOUBLE) ELSE 0 END) AS mod_counts_control
+      FROM (%s) _src
+      WHERE 1=1 %s
+      GROUP BY %s
+      HAVING num_calls_case > 0 AND num_calls_control > 0",
+      gvars_sql, src_sql, chr_filter, gvars_sql
+    )
+
+    chr_data <- DBI::dbGetQuery(con, agg_sql)
+    if (nrow(chr_data) == 0) next
+
+    chr_data$c_counts_case    <- chr_data$num_calls_case    - chr_data$mod_counts_case
+    chr_data$c_counts_control <- chr_data$num_calls_control - chr_data$mod_counts_control
+    chr_data$mod_frac_case    <- chr_data$mod_counts_case    / chr_data$num_calls_case
+    chr_data$mod_frac_control <- chr_data$mod_counts_control / chr_data$num_calls_control
+    chr_data$meth_diff        <- chr_data$mod_frac_case - chr_data$mod_frac_control
+
+    chr_data$p_val <- switch(
+      calc_type,
+      fast_fisher = .fast_fisher(
+        q = chr_data$mod_counts_case,
+        m = chr_data$mod_counts_case + chr_data$mod_counts_control,
+        n = chr_data$c_counts_case   + chr_data$c_counts_control,
+        k = chr_data$num_calls_case
+      ),
+      r_fisher = .r_fisher(
+        a = chr_data$mod_counts_control,
+        b = chr_data$mod_counts_case,
+        c = chr_data$c_counts_control,
+        d = chr_data$c_counts_case
+      )
+    )
+
+    DBI::dbWriteTable(con, staging_table, chr_data,
+                      append = staging_created, overwrite = !staging_created)
+    staging_created <- TRUE
+    DBI::dbExecute(con, "CHECKPOINT")
+    rm(chr_data)
+  }
+
+  if (!staging_created) return(data.frame())
+
+  dplyr::tbl(con, staging_table)
 }
 
 .fast_fisher <- function(q, m, n, k) {
