@@ -1,3 +1,24 @@
+# ModSeqR v1.2.1 Release Notes
+
+---
+
+## Performance & Memory
+
+- **DuckDB spill-to-disk now configured at connection time** — `memory_limit` (75% of RAM) and
+  `temp_directory` are set via the `config=` parameter to `duckdb()` before any query runs,
+  ensuring spill-to-disk is always active as a backstop for large datasets.
+
+- **Per-chromosome loops removed from `fast_fisher` and `r_fisher`** — previously these methods
+  iterated one chromosome at a time, accumulating 25+ DuckDB round-trips and one `CHECKPOINT` per
+  chromosome. Replaced with a single SQL conditional aggregation over the full dataset; DuckDB
+  aggregates into a compact pivoted frame (one row per locus) before anything enters R.
+
+- **Per-chromosome loop removed from `wilcox`** — reverted to a single CTE over the full dataset,
+  letting DuckDB parallelize across all chromosomes at once. Spill-to-disk handles datasets that
+  exceed RAM within a single query.
+
+---
+
 # ModSeqR v1.2.0 Release Notes
 
 ---

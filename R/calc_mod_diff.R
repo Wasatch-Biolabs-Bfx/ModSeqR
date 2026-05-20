@@ -311,9 +311,6 @@ calc_mod_diff <- function(mod_db,
     mod_diff_table, mod_diff_table, dbl_min, dbl_min
   ))
 
-  # Clean up staging table used by per-chromosome calc methods
-  DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS _diff_staging")
-
   end_time <- Sys.time()
   total_time_difftime <- end_time - start_time
 
@@ -354,10 +351,8 @@ calc_mod_diff <- function(mod_db,
 ## tie-corrected variance formula, and the Abramowitz & Stegun 26.2.16 normal CDF
 ## approximation (max error ~7.5e-8). Always uses the normal approximation with
 ## continuity correction (wilcox.test(exact=FALSE, correct=TRUE)).
-##
-## Processes one chromosome at a time and writes results to a persistent staging
-## table so DuckDB's window-function intermediates are bounded in size regardless
-## of genome-wide dataset scale. Returns a tbl_lazy pointing to the staging table.
+## Returns a tbl_lazy; connection-time spill-to-disk config handles datasets that
+## exceed RAM within a single query.
 .calc_diff_wilcox <- function(in_dat)
 {
   con        <- dbplyr::remote_con(in_dat)
@@ -372,158 +367,125 @@ calc_mod_diff <- function(mod_db,
   src_sql   <- as.character(dbplyr::sql_render(in_dat))
   gvars_sql <- qi(group_vars)
 
-  has_chrom <- "chrom" %in% group_vars
-  if (has_chrom) {
-    chroms <- DBI::dbGetQuery(
-      con,
-      sprintf("SELECT DISTINCT chrom FROM (%s) _tmp ORDER BY chrom", src_sql)
-    )[[1]]
-  } else {
-    chroms <- NA_character_
-  }
-
-  staging_table   <- "_diff_staging"
-  staging_created <- FALSE
-  if (DBI::dbExistsTable(con, staging_table)) DBI::dbRemoveTable(con, staging_table)
-
-  for (chr in chroms) {
-    chr_filter <- if (has_chrom && !is.na(chr)) {
-      paste0("AND chrom = '", gsub("'", "''", chr), "'")
-    } else {
-      ""
-    }
-
-    # Full wilcox CTE for one chromosome. Window functions PARTITION BY group_vars
-    # (which include chrom), so each chromosome's computation is self-contained.
-    sql <- glue::glue("
-      WITH
-      _frac AS (
-        SELECT *, mod_counts * 1.0 / num_calls AS _mf
-        FROM ({src_sql}) _s
-        WHERE num_calls > 0 AND mod_counts IS NOT NULL {chr_filter}
-      ),
-      _rn AS (
-        SELECT *,
-          ROW_NUMBER() OVER (PARTITION BY {gvars_sql} ORDER BY _mf) AS _row_n
-        FROM _frac
-      ),
-      _ranked AS (
-        SELECT *,
-          AVG(CAST(_row_n AS DOUBLE)) OVER (PARTITION BY {gvars_sql}, _mf) AS _rank
-        FROM _rn
-      ),
-      _grp AS (
-        SELECT
-          {gvars_sql}, exp_group,
-          COUNT(*)        AS _n_g,
-          SUM(_rank)      AS _rank_sum,
-          SUM(num_calls)  AS _nc_g,
-          SUM(mod_counts) AS _mc_g,
-          AVG(_mf)        AS _mf_avg
-        FROM _ranked
-        GROUP BY {gvars_sql}, exp_group
-      ),
-      _tg AS (
-        SELECT {gvars_sql}, _mf, COUNT(*) AS _t
-        FROM _ranked
-        GROUP BY {gvars_sql}, _mf
-      ),
-      _ties AS (
-        SELECT {gvars_sql},
-          SUM(POWER(CAST(_t AS DOUBLE), 3) - CAST(_t AS DOUBLE)) AS _tie_sum
-        FROM _tg
-        GROUP BY {gvars_sql}
-      ),
-      _locus AS (
-        SELECT
-          {gvars_sql},
-          MAX(CASE WHEN exp_group = 'case'    THEN _n_g      END) AS num_samples_case,
-          MAX(CASE WHEN exp_group = 'control' THEN _n_g      END) AS num_samples_control,
-          MAX(CASE WHEN exp_group = 'case'    THEN _nc_g     END) AS num_calls_case,
-          MAX(CASE WHEN exp_group = 'control' THEN _nc_g     END) AS num_calls_control,
-          MAX(CASE WHEN exp_group = 'case'    THEN _mc_g     END) AS mod_counts_case,
-          MAX(CASE WHEN exp_group = 'control' THEN _mc_g     END) AS mod_counts_control,
-          MAX(CASE WHEN exp_group = 'case'    THEN _mf_avg   END) AS mod_frac_case,
-          MAX(CASE WHEN exp_group = 'control' THEN _mf_avg   END) AS mod_frac_control,
-          MAX(CASE WHEN exp_group = 'case'    THEN _rank_sum END) AS _W,
-          MAX(CASE WHEN exp_group = 'case'    THEN _n_g      END) AS _n1,
-          MAX(CASE WHEN exp_group = 'control' THEN _n_g      END) AS _n2
-        FROM _grp
-        GROUP BY {gvars_sql}
-      ),
-      _u AS (
-        SELECT l.*,
-          COALESCE(t._tie_sum, 0.0)      AS _tie_sum,
-          _n1 * _n2 * 1.0 / 2.0         AS _mu_U,
-          _W - _n1 * (_n1 + 1.0) / 2.0  AS _U,
-          SQRT(
-            _n1 * _n2 * 1.0 / 12.0 * (
-              (_n1 + _n2 + 1.0) -
-              COALESCE(t._tie_sum, 0.0) /
-                NULLIF((_n1 + _n2) * (_n1 + _n2 - 1.0), 0.0)
-            )
-          ) AS _sig
-        FROM _locus l
-        LEFT JOIN _ties t USING ({gvars_sql})
-      ),
-      _z AS (
-        SELECT *,
-          CASE
-            WHEN _sig IS NULL OR _sig = 0.0 THEN NULL
-            WHEN _U > _mu_U THEN (_U - _mu_U - 0.5) / _sig
-            WHEN _U < _mu_U THEN (_U - _mu_U + 0.5) / _sig
-            ELSE 0.0
-          END AS _z
-        FROM _u
-      ),
-      _cdf AS (
-        SELECT *,
-          1.0 / (1.0 + 0.2316419 * ABS(_z))                        AS _t1,
-          (1.0 / SQRT(2.0 * PI())) * EXP(-POWER(ABS(_z), 2) / 2.0) AS _phi
-        FROM _z
-      )
+  sql <- glue::glue("
+    WITH
+    _frac AS (
+      SELECT *, mod_counts * 1.0 / num_calls AS _mf
+      FROM ({src_sql}) _s
+      WHERE num_calls > 0 AND mod_counts IS NOT NULL
+    ),
+    _rn AS (
+      SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY {gvars_sql} ORDER BY _mf) AS _row_n
+      FROM _frac
+    ),
+    _ranked AS (
+      SELECT *,
+        AVG(CAST(_row_n AS DOUBLE)) OVER (PARTITION BY {gvars_sql}, _mf) AS _rank
+      FROM _rn
+    ),
+    _grp AS (
+      SELECT
+        {gvars_sql}, exp_group,
+        COUNT(*)        AS _n_g,
+        SUM(_rank)      AS _rank_sum,
+        SUM(num_calls)  AS _nc_g,
+        SUM(mod_counts) AS _mc_g,
+        AVG(_mf)        AS _mf_avg
+      FROM _ranked
+      GROUP BY {gvars_sql}, exp_group
+    ),
+    _tg AS (
+      SELECT {gvars_sql}, _mf, COUNT(*) AS _t
+      FROM _ranked
+      GROUP BY {gvars_sql}, _mf
+    ),
+    _ties AS (
+      SELECT {gvars_sql},
+        SUM(POWER(CAST(_t AS DOUBLE), 3) - CAST(_t AS DOUBLE)) AS _tie_sum
+      FROM _tg
+      GROUP BY {gvars_sql}
+    ),
+    _locus AS (
       SELECT
         {gvars_sql},
-        num_samples_case,
-        num_samples_control,
-        num_calls_case,
-        num_calls_control,
-        mod_counts_case,
-        mod_counts_control,
-        mod_frac_case,
-        mod_frac_control,
-        mod_frac_case - mod_frac_control AS meth_diff,
-        CASE WHEN _z IS NULL THEN NULL
-        ELSE LEAST(2.0 * _phi * (
-             0.319381530  * _t1
-           - 0.356563782  * POWER(_t1, 2)
-           + 1.781477937  * POWER(_t1, 3)
-           - 1.821255978  * POWER(_t1, 4)
-           + 1.330274429  * POWER(_t1, 5)
-        ), 1.0) END AS p_val
-      FROM _cdf
-    ")
+        MAX(CASE WHEN exp_group = 'case'    THEN _n_g      END) AS num_samples_case,
+        MAX(CASE WHEN exp_group = 'control' THEN _n_g      END) AS num_samples_control,
+        MAX(CASE WHEN exp_group = 'case'    THEN _nc_g     END) AS num_calls_case,
+        MAX(CASE WHEN exp_group = 'control' THEN _nc_g     END) AS num_calls_control,
+        MAX(CASE WHEN exp_group = 'case'    THEN _mc_g     END) AS mod_counts_case,
+        MAX(CASE WHEN exp_group = 'control' THEN _mc_g     END) AS mod_counts_control,
+        MAX(CASE WHEN exp_group = 'case'    THEN _mf_avg   END) AS mod_frac_case,
+        MAX(CASE WHEN exp_group = 'control' THEN _mf_avg   END) AS mod_frac_control,
+        MAX(CASE WHEN exp_group = 'case'    THEN _rank_sum END) AS _W,
+        MAX(CASE WHEN exp_group = 'case'    THEN _n_g      END) AS _n1,
+        MAX(CASE WHEN exp_group = 'control' THEN _n_g      END) AS _n2
+      FROM _grp
+      GROUP BY {gvars_sql}
+    ),
+    _u AS (
+      SELECT l.*,
+        COALESCE(t._tie_sum, 0.0)      AS _tie_sum,
+        _n1 * _n2 * 1.0 / 2.0         AS _mu_U,
+        _W - _n1 * (_n1 + 1.0) / 2.0  AS _U,
+        SQRT(
+          _n1 * _n2 * 1.0 / 12.0 * (
+            (_n1 + _n2 + 1.0) -
+            COALESCE(t._tie_sum, 0.0) /
+              NULLIF((_n1 + _n2) * (_n1 + _n2 - 1.0), 0.0)
+          )
+        ) AS _sig
+      FROM _locus l
+      LEFT JOIN _ties t USING ({gvars_sql})
+    ),
+    _z AS (
+      SELECT *,
+        CASE
+          WHEN _sig IS NULL OR _sig = 0.0 THEN NULL
+          WHEN _U > _mu_U THEN (_U - _mu_U - 0.5) / _sig
+          WHEN _U < _mu_U THEN (_U - _mu_U + 0.5) / _sig
+          ELSE 0.0
+        END AS _z
+      FROM _u
+    ),
+    _cdf AS (
+      SELECT *,
+        1.0 / (1.0 + 0.2316419 * ABS(_z))                        AS _t1,
+        (1.0 / SQRT(2.0 * PI())) * EXP(-POWER(ABS(_z), 2) / 2.0) AS _phi
+      FROM _z
+    )
+    SELECT
+      {gvars_sql},
+      num_samples_case,
+      num_samples_control,
+      num_calls_case,
+      num_calls_control,
+      mod_counts_case,
+      mod_counts_control,
+      mod_frac_case,
+      mod_frac_control,
+      mod_frac_case - mod_frac_control AS meth_diff,
+      CASE WHEN _z IS NULL THEN NULL
+      ELSE LEAST(2.0 * _phi * (
+           0.319381530  * _t1
+         - 0.356563782  * POWER(_t1, 2)
+         + 1.781477937  * POWER(_t1, 3)
+         - 1.821255978  * POWER(_t1, 4)
+         + 1.330274429  * POWER(_t1, 5)
+      ), 1.0) END AS p_val
+    FROM _cdf
+  ")
 
-    if (!staging_created) {
-      DBI::dbExecute(con, sprintf("CREATE TABLE %s AS %s", staging_table, sql))
-      staging_created <- TRUE
-    } else {
-      DBI::dbExecute(con, sprintf("INSERT INTO %s %s", staging_table, sql))
-    }
-    DBI::dbExecute(con, "CHECKPOINT")
-  }
-
-  if (!staging_created) return(data.frame())
-
-  dplyr::tbl(con, staging_table)
+  dplyr::tbl(con, dplyr::sql(sql))
 }
 
 
-## Calculate p-values using Fisher exact test. Aggregates per chromosome in
-## DuckDB using conditional aggregation (avoids pivot_wider collect), runs the
-## Fisher test in R on the small per-chromosome frame, and writes results to a
-## persistent staging table one chromosome at a time so peak R memory usage is
-## bounded regardless of dataset size.
+## Calculate p-values using Fisher exact test.
+## Runs a single SQL conditional aggregation over the full dataset (no pivot_wider,
+## no per-chromosome loop). Collects the compact result into R — one row per locus,
+## already pivoted — then runs vectorized Fisher and returns a data frame.
+## DuckDB's connection-time spill-to-disk config handles datasets where the
+## aggregated result is larger than available RAM.
 .calc_diff_fisher <- function(in_dat, calc_type)
 {
   con        <- dbplyr::remote_con(in_dat)
@@ -537,80 +499,44 @@ calc_mod_diff <- function(mod_db,
   gvars_sql <- qi(group_vars)
   src_sql   <- as.character(dbplyr::sql_render(in_dat))
 
-  # Determine chromosomes to iterate over; fall back to single batch if no chrom column.
-  has_chrom <- "chrom" %in% group_vars
-  if (has_chrom) {
-    chroms <- DBI::dbGetQuery(
-      con,
-      sprintf("SELECT DISTINCT chrom FROM (%s) _tmp ORDER BY chrom", src_sql)
-    )[[1]]
-  } else {
-    chroms <- NA_character_
-  }
+  agg_sql <- sprintf("
+    SELECT %s,
+      COUNT(DISTINCT CASE WHEN exp_group = 'case'    THEN sample_name END) AS num_samples_case,
+      COUNT(DISTINCT CASE WHEN exp_group = 'control' THEN sample_name END) AS num_samples_control,
+      SUM(CASE WHEN exp_group = 'case'    THEN num_calls                   ELSE 0 END) AS num_calls_case,
+      SUM(CASE WHEN exp_group = 'control' THEN num_calls                   ELSE 0 END) AS num_calls_control,
+      SUM(CASE WHEN exp_group = 'case'    THEN CAST(mod_counts AS DOUBLE)  ELSE 0 END) AS mod_counts_case,
+      SUM(CASE WHEN exp_group = 'control' THEN CAST(mod_counts AS DOUBLE)  ELSE 0 END) AS mod_counts_control
+    FROM (%s) _src
+    GROUP BY %s
+    HAVING num_calls_case > 0 AND num_calls_control > 0",
+    gvars_sql, src_sql, gvars_sql
+  )
 
-  staging_table   <- "_diff_staging"
-  staging_created <- FALSE
-  if (DBI::dbExistsTable(con, staging_table)) DBI::dbRemoveTable(con, staging_table)
+  dat <- DBI::dbGetQuery(con, agg_sql)
+  if (nrow(dat) == 0) return(data.frame())
 
-  for (chr in chroms) {
-    chr_filter <- if (has_chrom && !is.na(chr)) {
-      sprintf("AND chrom = '%s'", gsub("'", "''", chr))
-    } else {
-      ""
-    }
+  dat$c_counts_case    <- dat$num_calls_case    - dat$mod_counts_case
+  dat$c_counts_control <- dat$num_calls_control - dat$mod_counts_control
+  dat$mod_frac_case    <- dat$mod_counts_case    / dat$num_calls_case
+  dat$mod_frac_control <- dat$mod_counts_control / dat$num_calls_control
+  dat$meth_diff        <- dat$mod_frac_case - dat$mod_frac_control
 
-    # Conditional aggregation in DuckDB replaces pivot_wider in R.
-    # SUM(CASE WHEN ...) pivots case/control columns without collecting any rows.
-    agg_sql <- sprintf("
-      SELECT %s,
-        COUNT(DISTINCT CASE WHEN exp_group = 'case'    THEN sample_name END) AS num_samples_case,
-        COUNT(DISTINCT CASE WHEN exp_group = 'control' THEN sample_name END) AS num_samples_control,
-        SUM(CASE WHEN exp_group = 'case'    THEN num_calls               ELSE 0 END) AS num_calls_case,
-        SUM(CASE WHEN exp_group = 'control' THEN num_calls               ELSE 0 END) AS num_calls_control,
-        SUM(CASE WHEN exp_group = 'case'    THEN CAST(mod_counts AS DOUBLE) ELSE 0 END) AS mod_counts_case,
-        SUM(CASE WHEN exp_group = 'control' THEN CAST(mod_counts AS DOUBLE) ELSE 0 END) AS mod_counts_control
-      FROM (%s) _src
-      WHERE 1=1 %s
-      GROUP BY %s
-      HAVING num_calls_case > 0 AND num_calls_control > 0",
-      gvars_sql, src_sql, chr_filter, gvars_sql
+  dat$p_val <- switch(calc_type,
+    fast_fisher = .fast_fisher(
+      q = dat$mod_counts_case,
+      m = dat$mod_counts_case + dat$mod_counts_control,
+      n = dat$c_counts_case   + dat$c_counts_control,
+      k = dat$num_calls_case
+    ),
+    r_fisher = .r_fisher(
+      a = dat$mod_counts_control,
+      b = dat$mod_counts_case,
+      c = dat$c_counts_control,
+      d = dat$c_counts_case
     )
-
-    chr_data <- DBI::dbGetQuery(con, agg_sql)
-    if (nrow(chr_data) == 0) next
-
-    chr_data$c_counts_case    <- chr_data$num_calls_case    - chr_data$mod_counts_case
-    chr_data$c_counts_control <- chr_data$num_calls_control - chr_data$mod_counts_control
-    chr_data$mod_frac_case    <- chr_data$mod_counts_case    / chr_data$num_calls_case
-    chr_data$mod_frac_control <- chr_data$mod_counts_control / chr_data$num_calls_control
-    chr_data$meth_diff        <- chr_data$mod_frac_case - chr_data$mod_frac_control
-
-    chr_data$p_val <- switch(
-      calc_type,
-      fast_fisher = .fast_fisher(
-        q = chr_data$mod_counts_case,
-        m = chr_data$mod_counts_case + chr_data$mod_counts_control,
-        n = chr_data$c_counts_case   + chr_data$c_counts_control,
-        k = chr_data$num_calls_case
-      ),
-      r_fisher = .r_fisher(
-        a = chr_data$mod_counts_control,
-        b = chr_data$mod_counts_case,
-        c = chr_data$c_counts_control,
-        d = chr_data$c_counts_case
-      )
-    )
-
-    DBI::dbWriteTable(con, staging_table, chr_data,
-                      append = staging_created, overwrite = !staging_created)
-    staging_created <- TRUE
-    DBI::dbExecute(con, "CHECKPOINT")
-    rm(chr_data)
-  }
-
-  if (!staging_created) return(data.frame())
-
-  dplyr::tbl(con, staging_table)
+  )
+  dat
 }
 
 .fast_fisher <- function(q, m, n, k) {

@@ -2,8 +2,8 @@
 
 # ModSeqR
 
-## Version 1.2.0
-**(Updated May 19th 2026)**
+## Version 1.2.1
+**(Updated May 20th 2026)**
 
 **Publication:** If you use ModSeqR in your research, please cite our paper in *BMC Genomics*:  
 [ModSeqR: An R package for managing direct whole methylome sequencing data](https://link.springer.com/article/10.1186/s12864-026-12655-5)

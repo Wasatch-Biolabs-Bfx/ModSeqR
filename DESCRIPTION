@@ -1,7 +1,7 @@
 Package: ModSeqR
 Type: Package
 Title: Process and Analyze Nanopore Sequencing Methylation Data
-Version: 1.2.0
+Version: 1.2.1
 Authors@R:
     c(
       person(given = "Hailey", family = "Zimmerman", email = "hailey@renewbt.com", role = c("aut", "cre")),

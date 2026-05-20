@@ -23,32 +23,32 @@
 
 .modhelper_connectDB <- function(mod_db)
 {
-  # Open the database connection
-  if (inherits(mod_db, "character")) { # if given a string file name- create a new database
-    # Open the database connection - first check to make sure correct name is there
-    if (is.character(mod_db)) {
-      if (!grepl(".mod.db$", mod_db)) {
-        mod_db <- paste0(mod_db, ".mod.db")
-      }
-    }
-    # make mod_object
+  # Compute resource caps and prepare spill directory before opening the connection.
+  # Passing config= to duckdb() sets memory_limit and temp_directory at the engine
+  # level — before any query runs — so spill-to-disk is always active as a backstop.
+  caps     <- .auto_duckdb_resource_caps(0.75)
+  tmp_path <- file.path(tempdir(), "modseqr_duckdb_tmp")
+  dir.create(tmp_path, recursive = TRUE, showWarnings = FALSE)
+  cfg <- list(
+    memory_limit   = caps$memory_limit,
+    temp_directory = tmp_path,
+    threads        = as.character(caps$threads)
+  )
+
+  if (inherits(mod_db, "character")) {
+    if (!grepl(".mod.db$", mod_db)) mod_db <- paste0(mod_db, ".mod.db")
     database <- list(db_file = mod_db, current_table = NULL, con = NULL, last_result = NULL)
     class(database) <- "mod_db"
-    
-    #add in the connection
-    database$con <- dbConnect(duckdb(database$db_file), read_only = FALSE)
+    database$con <- dbConnect(duckdb(database$db_file, config = cfg), read_only = FALSE)
     defer(.modhelper_closeDB(database), parent.frame())
-    
-    # return database object
     return(database)
-  
-  } else if (inherits(mod_db, "mod_db")) { # if given a mod_db OBJECT!
-    mod_db$con <- dbConnect(duckdb(mod_db$db_file), read_only = FALSE)
+
+  } else if (inherits(mod_db, "mod_db")) {
+    mod_db$con <- dbConnect(duckdb(mod_db$db_file, config = cfg), read_only = FALSE)
     defer(.modhelper_closeDB(mod_db), parent.frame())
-    
     return(mod_db)
+
   } else {
     stop("Invalid mod_db class. Must be character or mod_db.")
   }
-  
 }
