@@ -32,6 +32,13 @@
 #'   out windows with poor breadth of coverage. Only applies when the input
 #'   table contains a \code{num_sites} column (i.e., windows).
 #'   Default is \code{NULL} (no filtering).
+#' @param min_cov Minimum average coverage per modification site,
+#'   estimated as \code{num_calls / num_sites} for each sample in each window.
+#'   Windows where any sample falls below this threshold are dropped before
+#'   testing. For example, \code{min_cov = 5} requires an average of
+#'   at least 5 calls per CpG site per sample. Only applies when the input
+#'   table contains both \code{num_calls} and \code{num_sites} columns.
+#'   Default is \code{NULL} (no filtering).
 #' @param overwrite If TRUE and output_table exists, it is dropped before writing.
 #'
 #' @details
@@ -73,6 +80,7 @@ calc_mod_diff <- function(mod_db,
                           threads = NULL,
                           memory_limit = NULL,
                           min_sites = NULL, 
+                          min_cov = NULL,
                           overwrite = TRUE)
 {
   start_time <- Sys.time()
@@ -197,6 +205,53 @@ calc_mod_diff <- function(mod_db,
     }
   }
   
+  # Filter windows with insufficient per-site coverage
+  if (!is.null(min_cov) && min_cov > 0) {
+    if (!"num_sites" %in% cols) {
+      warning("min_cov was set but '", call_type,
+              "' has no 'num_sites' column. Filter skipped.")
+    } else {
+      n_before <- in_dat |> dplyr::count() |> dplyr::pull(n)
+      
+      in_dat <- in_dat |>
+        dplyr::filter(num_sites > 0) |>
+        dplyr::mutate(cov_per_site = num_calls / num_sites) |>
+        dplyr::filter(cov_per_site >= min_cov)
+      
+      n_after <- in_dat |> dplyr::count() |> dplyr::pull(n)
+      
+      message(
+        "Coverage filter (min_cov = ", min_cov, "): ",
+        format(n_after, big.mark = ","), " of ",
+        format(n_before, big.mark = ","), " sample-windows passed ",
+        "(dropped ", format(n_before - n_after, big.mark = ","), ")."
+      )
+      
+      if (n_after == 0) {
+        stop("All windows were removed by the min_cov filter. ",
+             "Try a lower value (current: ", min_cov, ").")
+      }
+      
+      remaining_samples <- in_dat |>
+        dplyr::distinct(sample_name, exp_group) |>
+        dplyr::collect()
+      
+      missing_cases <- cases[!cases %in% remaining_samples$sample_name]
+      missing_ctrls <- controls[!controls %in% remaining_samples$sample_name]
+      
+      if (length(missing_cases) > 0) {
+        warning("min_cov filter removed ALL windows for case sample(s): ",
+                paste(missing_cases, collapse = ", "),
+                ". Consider lowering min_cov.")
+      }
+      if (length(missing_ctrls) > 0) {
+        warning("min_cov filter removed ALL windows for control sample(s): ",
+                paste(missing_ctrls, collapse = ", "),
+                ". Consider lowering min_cov.")
+      }
+    }
+  }
+  
   # Check sample names present
   all_samples <- unique(dplyr::pull(in_dat, sample_name))
   if (any(!cases %in% all_samples)) {
@@ -304,7 +359,7 @@ calc_mod_diff <- function(mod_db,
   group_vars <- setdiff(
     colnames(frac_dat),
     c("sample_name", "exp_group", "num_calls", "mod_counts", "mod_frac", 
-      "num_sites")
+      "num_sites", "cov_per_site")
   )
   
   # Summarize per region/window and run Wilcoxon tests
