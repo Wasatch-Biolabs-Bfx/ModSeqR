@@ -208,7 +208,7 @@ See the full license text in the [LICENSE](./LICENSE) file included with this re
 
 If you have any suggestions or requested features, please email Jonathon Hill at jhill@byu.edu.
 
-## Citation
+
 
 ## Citation
 
