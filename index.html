@@ -79,7 +79,7 @@
 <h2 id="creating-ch3-files">Creating .ch3 Files<a class="anchor" aria-label="anchor" href="#creating-ch3-files"></a>
 </h2>
 <p>If your sequencing data is coming from <a href="https://www.wasatchbiolabs.com/" class="external-link">Wasatch Biolabs</a>, <code>.ch3</code> files can be delivered directly with your batch upon request. These files contain methylation calls from a third-generation sequencing run. Typically, one .ch3 file is created per sample, and each file compresses large amounts of raw data into a usable intermediate format.</p>
-<p>If .ch3 files were not provided, you can build them yourself using the make_ch3_archive() function in this package. This takes a tab-delimited file of methylation calls (such as the output of modkit extract-calls) and compresses it into .ch3 format for downstream use.</p>
+<p>If .ch3 files were not provided, you can build them yourself using the <code>make_ch3_archive()</code> function in this package. This takes a tab-delimited file of methylation calls (such as the output of <code>modkit extract-calls</code>) and compresses it into .ch3 format for downstream use.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Convert a calls.tsv file to compressed .ch3 format</span></span>
 <span><span class="fu"><a href="reference/make_mod_archive.html">make_mod_archive</a></span><span class="op">(</span></span>

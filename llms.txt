@@ -57,9 +57,10 @@ is created per sample, and each file compresses large amounts of raw
 data into a usable intermediate format.
 
 If .ch3 files were not provided, you can build them yourself using the
-make_ch3_archive() function in this package. This takes a tab-delimited
-file of methylation calls (such as the output of modkit extract-calls)
-and compresses it into .ch3 format for downstream use.
+`make_ch3_archive()` function in this package. This takes a
+tab-delimited file of methylation calls (such as the output of
+`modkit extract-calls`) and compresses it into .ch3 format for
+downstream use.
 
 ``` r
 
