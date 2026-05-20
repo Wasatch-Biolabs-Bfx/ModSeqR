@@ -308,8 +308,6 @@ Hill at <jhill@byu.edu>.
 
 ## Citation
 
-## Citation
-
 If you use ModSeqR in your research, please cite:
 
 Zimmerman, H.E., Moore, J.L., Miller, R.H. et al. ModSeqR: an R package
