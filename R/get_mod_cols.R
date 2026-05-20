@@ -22,16 +22,14 @@
 get_mod_cols <- function(mod_db, table_name) {
   mod_db <- .modhelper_connectDB(mod_db)
 
-  if (!(table_name %in% dbListTables(mod_db$con))) {
-    .modhelper_closeDB(mod_db)
+  if (!(table_name %in% dbListTables(.get_con(mod_db)))) {
     stop(paste("Table", table_name, "does not exist in the database."))
   }
 
-  col_names <- dbListFields(mod_db$con, table_name)
+  col_names <- dbListFields(.get_con(mod_db), table_name)
 
   cat(paste0("Columns in ", table_name, ":\n"))
   for (col in col_names) cat("  ", col, "\n")
 
-  .modhelper_closeDB(mod_db)
   invisible(col_names)
 }

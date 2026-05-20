@@ -58,12 +58,12 @@ plot_mod_modfrac <- function(mod_db,
   mod_db <- .modhelper_connectDB(mod_db)
 
   # Check for specific table and connect to it in the database
-  if (!dbExistsTable(mod_db$con, input_table)) {
+  if (!dbExistsTable(.get_con(mod_db), input_table)) {
     stop(paste0(input_table, " Table does not exist in the database. Check spelling or make sure you create it first.\n"))
   }
 
   # Determine total number of rows first
-  total_rows <- tbl(mod_db$con, input_table) |> summarise(n = n()) |> pull(n)
+  total_rows <- tbl(.get_con(mod_db), input_table) |> summarise(n = n()) |> pull(n)
 
   # Sample in SQL if max_rows is given and valid
   if (!is.null(max_rows)) {
@@ -72,12 +72,12 @@ plot_mod_modfrac <- function(mod_db,
                   ") exceeds available rows in the table (", total_rows, ")."))
     }
 
-    modseq_dat <- tbl(mod_db$con, sql(paste0(
+    modseq_dat <- tbl(.get_con(mod_db), sql(paste0(
       "SELECT * FROM ", input_table,
       " USING SAMPLE ", max_rows, " ROWS"
     )))
   } else {
-    modseq_dat <- tbl(mod_db$con, input_table)
+    modseq_dat <- tbl(.get_con(mod_db), input_table)
   }
 
   # decide if per base or per region
@@ -149,6 +149,5 @@ plot_mod_modfrac <- function(mod_db,
   end_time <- Sys.time()
 
   message("Time elapsed: ", end_time - start_time, "\n")
-  mod_db <- .modhelper_closeDB(mod_db)
   invisible(mod_db)
 }

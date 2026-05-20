@@ -22,8 +22,8 @@ remove_mod_table <- function(mod_db, table_name)
     stop("Error: 'table_name' must be a non-empty single string.")
   }
   
-  if (dbExistsTable(mod_db$con, table_name)) {
-    dbRemoveTable(mod_db$con, table_name)
+  if (dbExistsTable(.get_con(mod_db), table_name)) {
+    dbRemoveTable(.get_con(mod_db), table_name)
     message(glue("Table '{table_name}' successfully removed from the database."))
     } 
   else {

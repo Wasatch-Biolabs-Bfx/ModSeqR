@@ -39,17 +39,18 @@ analyze within a single directory to get started.
 
 # The mod_db object and piping
 
-Most ModSeqR functions return an object of class `mod_db` — a lightweight list that holds four
+Most ModSeqR functions return an object of class `mod_db` — a lightweight list that holds five
 pieces of state:
 
 | Slot | Contents |
 |---|---|
 | `db_file` | Path to the `.mod.db` DuckDB file on disk |
 | `current_table` | Name of the most recently written table (updated automatically) |
-| `con` | Active DBI connection while a function runs; `"none"` when closed |
 | `last_result` | The most recently computed in-memory result (see below) |
+| `config` | Resource settings: `memory_limit`, `temp_dir`, `threads` (auto-detected if `NULL`) |
+| `.conn_env` | Environment holding the live DBI connection; managed automatically |
 
-Typing a `mod_db` variable — or calling `print()` on it — shows all four slots:
+Typing a `mod_db` variable — or calling `print()` on it — shows the key slots:
 
 ```{r eval=FALSE}
 print(mod_db)
@@ -59,8 +60,41 @@ print(mod_db)
 # Current table:
 #   mod_diff_windows
 # Connection:
-#   NULL
+#   persistent (open)
 # Last result: <matrix> [6 x 6]
+```
+
+## Connection lifecycle
+
+`make_mod_db()` closes its build connection and returns a *disconnected* object. The first
+pipeline function call opens a connection automatically (lazy open). To connect to a database
+that already exists on disk — for example in a new R session — use `connect_mod_db()`:
+
+```{r eval=FALSE}
+# Connect to an existing database with auto-detected resources
+mod_db <- connect_mod_db("my_analysis.mod.db")
+
+# Optionally specify resource limits
+mod_db <- connect_mod_db("my_analysis.mod.db",
+                          memory_limit = "32GB",
+                          threads      = 8,
+                          temp_dir     = "/scratch/duckdb_tmp")
+```
+
+Only one connection per database file is allowed at a time. Attempting a second
+`connect_mod_db()` to the same file while a connection is live raises a clear error:
+
+```{r eval=FALSE}
+mod_db2 <- connect_mod_db("my_analysis.mod.db")
+#> Error: 'my_analysis.mod.db' already has an active connection.
+#> Call disconnect_mod_db() first or let the existing object go out of scope.
+```
+
+The connection closes automatically when the `mod_db` object is garbage-collected. You can also
+close it explicitly:
+
+```{r eval=FALSE}
+disconnect_mod_db(mod_db)
 ```
 
 ## Piping
@@ -182,28 +216,40 @@ Once data is obtained in this format, the first step is done using the
 files, and creates a database in the form of a local file.
 
 ## make_mod_db
-`make_mod_db()` builds the DuckDB database from one or more `.ch3` Parquet files. 
+`make_mod_db()` builds the DuckDB database from one or more `.ch3` Parquet files.
 
-It requires two arguments: `ch3_files`, which can be a directory or a vector of file paths, and `db_name`, which is the path where the DuckDB file will be created (the .mod.db suffix is added if missing). 
+It requires two arguments: `ch3_files`, which can be a directory or a vector of file paths, and `db_name`, which is the path where the DuckDB file will be created (the `.mod.db` suffix is added if missing).
 
-You may optionally pass a named character vector to assign explicit `sample_name`s; otherwise, `sample_name` is derived from the file’s basename by removing a trailing -<digits> (if present) and the .ch3 extension (e.g., Astrocytes-12.ch3 → Astrocytes, M1.combined.ch3 → M1.combined). Additional filters include `chrom` (vector of chromosomes to keep), `min_read_length` (default 50), `min_call_prob` (default 0.9), `min_base_qual` (default 10), and an optional `flag` filter. The function configures DuckDB pragmas for performance (temp directory, threads ≈ all-but-one core, memory ≈ 50% RAM), drops any existing tables, and creates a `calls` table with: `sample_name`, `chrom`, `start`, `end`,`read_position`, `call_code`, `read_length`, `call_prob`, `base_qual`, and `flag`.
+You may optionally pass a named character vector to assign explicit `sample_name`s; otherwise, `sample_name` is derived from the file’s basename by removing a trailing -<digits> (if present) and the `.ch3` extension (e.g., `Astrocytes-12.ch3` → `Astrocytes`, `M1.combined.ch3` → `M1.combined`). Additional filters include `chrom` (vector of chromosomes to keep), `min_read_length` (default 50), `min_call_prob` (default 0.9), `min_base_qual` (default 10), and an optional `flag` filter. The function configures DuckDB resource limits at connection time (memory, threads, temp directory for spill-to-disk), drops any existing tables, and creates a `calls` table with: `sample_name`, `chrom`, `start`, `end`, `read_position`, `call_code`, `read_length`, `call_prob`, `base_qual`, and `flag`.
 
-Here is an example:
+The function returns a *disconnected* `mod_db` object. Pass it directly to any pipeline function — the connection opens automatically on the first use — or call `connect_mod_db()` in a new session to reconnect to the same file.
 
 ```{r eval=FALSE}
-# Example: directory of CH3 files; auto-derived sample names
-ch3_files <- system.file("TEST_DATA", package = "ModSeqR")   # adjust as needed
-mod_db    <- tempfile("example_db")
-make_mod_db(ch3_files, mod_db)
-
-# Example: explicit sample names override the fallback
-make_mod_db(
-  ch3_files = c(
-    sample1  = "/data/sample1-0.ch3",
-    sample2     = "/data/sample2.ch3"
-  ),
-  db_name   = "named_samples"
+# Build from a directory of CH3 files; auto-derived sample names
+mod_db <- make_mod_db(
+  ch3_files = "/path/to/ch3_dir",
+  db_name   = "my_db"
 )
+
+# Explicit resource caps
+mod_db <- make_mod_db(
+  ch3_files    = "/path/to/ch3_dir",
+  db_name      = "my_db",
+  memory_limit = "32GB",
+  threads      = 8
+)
+
+# Explicit sample names (override the auto-derived fallback)
+mod_db <- make_mod_db(
+  ch3_files = c(
+    Sample1 = "/data/sample1-0.ch3",
+    Sample2 = "/data/sample2.ch3"
+  ),
+  db_name = "named_samples"
+)
+
+# Reconnect to the same database in a later R session
+mod_db <- connect_mod_db("my_db.mod.db")
 ```
 
 

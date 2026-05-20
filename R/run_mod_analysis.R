@@ -94,10 +94,8 @@ run_mod_analysis <- function(mod_db,
   if (table_exists) {
     # Table already exists — skip summarization, detect type
     table_type <- .modhelper_detect_table_type(tmp_db$con, input_table)
-    tmp_db <- .modhelper_closeDB(tmp_db)
     cat(paste0("Table '", input_table, "' found in database (type: ", table_type, "). Skipping summarization.\n"))
   } else {
-    tmp_db <- .modhelper_closeDB(tmp_db)
     # Table does not exist — run appropriate summarization
     if (input_table == "positions") {
       summarize_mod_positions(mod_db)
@@ -149,7 +147,7 @@ run_mod_analysis <- function(mod_db,
   mod_db <- .modhelper_connectDB(mod_db)
 
   dbExecute(
-    mod_db$con,
+    .get_con(mod_db),
     glue("COPY {diff_table_name} TO '{mod_diff_path}' (HEADER, DELIMITER ',')")
   )
 
@@ -159,7 +157,7 @@ run_mod_analysis <- function(mod_db,
   all_CGs_path <- file.path(new_dir, "All_CpGs.csv")
 
   dbExecute(
-    mod_db$con,
+    .get_con(mod_db),
     glue("COPY {input_table} TO '{all_CGs_path}' (HEADER, DELIMITER ',')")
   )
 
@@ -174,7 +172,7 @@ run_mod_analysis <- function(mod_db,
     collapse_mod_windows(mod_db)
 
     dbExecute(
-      mod_db$con,
+      .get_con(mod_db),
       glue("COPY collapsed_windows TO '{Sig_CGs_path}' (HEADER, DELIMITER ',')")
     )
   } else{
@@ -190,7 +188,7 @@ run_mod_analysis <- function(mod_db,
     ) TO '{Sig_CGs_path}' (HEADER, DELIMITER ',')
   ")
 
-    dbExecute(mod_db$con, sql)
+    dbExecute(.get_con(mod_db), sql)
   }
 
   cat("\nRun Analysis Complete!\n")
@@ -204,7 +202,6 @@ run_mod_analysis <- function(mod_db,
   # Record the end time
   end_time <- Sys.time()
 
-  mod_db <- .modhelper_closeDB(mod_db)
   total_time_difftime <- end_time - start_time
 
   # Convert the total_time_difftime object to numeric seconds for a reliable comparison

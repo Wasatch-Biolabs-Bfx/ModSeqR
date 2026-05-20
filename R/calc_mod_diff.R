@@ -114,21 +114,21 @@ calc_mod_diff <- function(mod_db,
   mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
 
   dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", thr))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA temp_directory='%s';", temp_dir))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA memory_limit='%s';", mem))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA threads=%d;", thr))
 
   # check for input table
-  if (!dbExistsTable(mod_db$con, input_table)) {
+  if (!dbExistsTable(.get_con(mod_db), input_table)) {
     stop(input_table, " table does not exist. Build it with summarize_mod_positions(), ",
          "summarize_mod_regions(), or summarize_mod_windows().")
   }
 
   # Minimum column check
-  .modhelper_check_cols(mod_db$con, input_table, c("sample_name", "chrom", "start", "end"))
+  .modhelper_check_cols(.get_con(mod_db), input_table, c("sample_name", "chrom", "start", "end"))
 
   # Discover available *_counts columns and validate mod_type
-  cols <- colnames(dplyr::tbl(mod_db$con, input_table))
+  cols <- colnames(dplyr::tbl(.get_con(mod_db), input_table))
   counts_cols <- grep("_counts$", cols, value = TRUE)
   available_labels <- sub("_counts$", "", counts_cols)
 
@@ -157,16 +157,16 @@ calc_mod_diff <- function(mod_db,
     mod_diff_table <- output_table
   }
 
-  if (DBI::dbExistsTable(mod_db$con, mod_diff_table)) {
+  if (DBI::dbExistsTable(.get_con(mod_db), mod_diff_table)) {
     if (overwrite) {
-      DBI::dbRemoveTable(mod_db$con, mod_diff_table)
+      DBI::dbRemoveTable(.get_con(mod_db), mod_diff_table)
     } else {
       stop("Output table '", mod_diff_table, "' already exists. Set overwrite = TRUE or choose a different output_table.")
     }
   }
 
   in_dat <-
-    dplyr::tbl(mod_db$con, input_table) |>
+    dplyr::tbl(.get_con(mod_db), input_table) |>
     dplyr::select(
       sample_name,
       dplyr::any_of(c("region_name", "chrom", "start", "end", "num_sites")),
@@ -278,15 +278,15 @@ calc_mod_diff <- function(mod_db,
   # For R-backed calc types (wilcox, beta_bin), result is already a local tibble.
   if (inherits(result, "tbl_lazy")) {
     raw_sql <- as.character(dbplyr::sql_render(result))
-    DBI::dbExecute(mod_db$con, sprintf("CREATE TABLE %s AS %s", mod_diff_table, raw_sql))
+    DBI::dbExecute(.get_con(mod_db), sprintf("CREATE TABLE %s AS %s", mod_diff_table, raw_sql))
   } else {
-    DBI::dbWriteTable(mod_db$con, mod_diff_table, as.data.frame(result))
+    DBI::dbWriteTable(.get_con(mod_db), mod_diff_table, as.data.frame(result))
   }
 
   # Compute BH-adjusted p-values entirely in DuckDB using window functions.
   # Avoids collecting the full result into R for p.adjust() + arrange().
   dbl_min <- .Machine$double.xmin
-  DBI::dbExecute(mod_db$con, sprintf(
+  DBI::dbExecute(.get_con(mod_db), sprintf(
     "CREATE OR REPLACE TABLE %s AS
      WITH ranked AS (
        SELECT *, ROW_NUMBER() OVER (ORDER BY p_val) AS _r,
@@ -329,13 +329,13 @@ calc_mod_diff <- function(mod_db,
   }
 
   # Detect table type to give informative message
-  table_type <- .modhelper_detect_table_type(mod_db$con, input_table)
+  table_type <- .modhelper_detect_table_type(.get_con(mod_db), input_table)
   if (table_type == "windows") {
     message("Call collapse_mod_windows() to collapse significant windows.\n")
   }
 
   # Print a preview of what table looks like
-  result_head <- dplyr::tbl(mod_db$con, mod_diff_table) |> head() |> dplyr::collect()
+  result_head <- dplyr::tbl(.get_con(mod_db), mod_diff_table) |> head() |> dplyr::collect()
   print(result_head)
 
   mod_db$current_table <- mod_diff_table

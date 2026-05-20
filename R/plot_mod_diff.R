@@ -42,18 +42,18 @@ plot_mod_diff <- function(mod_db,
   mod_db <- .modhelper_connectDB(mod_db)
 
   # check for differential methylation table
-  if (!dbExistsTable(mod_db$con, table_name)) {
+  if (!dbExistsTable(.get_con(mod_db), table_name)) {
     stop(paste0(table_name, " table does not exist. Build it with calc_mod_diff()!"))
   }
 
   # Check required columns
-  .modhelper_check_cols(mod_db$con, table_name, c("meth_diff", "p_val"))
+  .modhelper_check_cols(.get_con(mod_db), table_name, c("meth_diff", "p_val"))
 
   # Connect to the table
-  tbl_diff <- tbl(mod_db$con, table_name)
+  tbl_diff <- tbl(.get_con(mod_db), table_name)
 
   # Plot using dbplot_raster
-  plot <- tbl(mod_db$con, table_name) |>
+  plot <- tbl(.get_con(mod_db), table_name) |>
     filter(
       !is.na(meth_diff),
       !is.nan(meth_diff),
@@ -96,6 +96,5 @@ plot_mod_diff <- function(mod_db,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
   mod_db$last_result <- plot
-  mod_db <- .modhelper_closeDB(mod_db)
   invisible(mod_db)
 }

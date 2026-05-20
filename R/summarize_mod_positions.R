@@ -132,19 +132,19 @@ summarize_mod_positions <- function(mod_db,
   mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
   
   dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", thr))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA temp_directory='%s';", temp_dir))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA memory_limit='%s';", mem))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA threads=%d;", thr))
   
-  in_id  <- as.character(DBI::dbQuoteIdentifier(mod_db$con, input_table))
-  out_id <- as.character(DBI::dbQuoteIdentifier(mod_db$con, output_table))
+  in_id  <- as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), input_table))
+  out_id <- as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), output_table))
   
-  if (DBI::dbExistsTable(mod_db$con, output_table) && overwrite)
-    DBI::dbRemoveTable(mod_db$con, output_table)
+  if (DBI::dbExistsTable(.get_con(mod_db), output_table) && overwrite)
+    DBI::dbRemoveTable(.get_con(mod_db), output_table)
   
   # Determine sample list
   samp_query <- sprintf("SELECT DISTINCT sample_name FROM %s WHERE sample_name IS NOT NULL", in_id)
-  all_samps <- DBI::dbGetQuery(mod_db$con, samp_query)[,1]
+  all_samps <- DBI::dbGetQuery(.get_con(mod_db), samp_query)[,1]
   if (!is.null(samples)) {
     all_samps <- intersect(all_samps, samples)
   }
@@ -170,12 +170,12 @@ summarize_mod_positions <- function(mod_db,
       {frac_nulls}
     WHERE 1=0;
   ")
-  DBI::dbExecute(mod_db$con, schema_sql)
+  DBI::dbExecute(.get_con(mod_db), schema_sql)
   
   # If no chromosomes specified, use all unique chroms in the data
   if (is.null(chrs)) {
     chrs <- DBI::dbGetQuery(
-      mod_db$con,
+      .get_con(mod_db),
       sprintf("SELECT DISTINCT chrom FROM %s ORDER BY chrom", in_id)
     )[, 1]
   }
@@ -200,12 +200,12 @@ summarize_mod_positions <- function(mod_db,
       WHERE sample_name = '{samp_esc}' AND start > 0{chr_clause}
       ORDER BY chrom
     ")
-    sample_chroms <- DBI::dbGetQuery(mod_db$con, chrom_q)[, 1]
+    sample_chroms <- DBI::dbGetQuery(.get_con(mod_db), chrom_q)[, 1]
     if (length(sample_chroms) == 0) next
 
     for (chr in sample_chroms) {
       chr_esc <- gsub("'", "''", chr)
-      DBI::dbExecute(mod_db$con, sprintf(
+      DBI::dbExecute(.get_con(mod_db), sprintf(
         "INSERT INTO %s
          WITH agg AS (
            SELECT sample_name, chrom, start,
@@ -225,7 +225,7 @@ summarize_mod_positions <- function(mod_db,
       ))
     }
 
-    DBI::dbExecute(mod_db$con, "CHECKPOINT")
+    DBI::dbExecute(.get_con(mod_db), "CHECKPOINT")
     message("  Sample '", samp, "' done")
   }
   
@@ -233,10 +233,9 @@ summarize_mod_positions <- function(mod_db,
   message("Positions table created as ", output_table,
           " (", round(as.numeric(end_time - start_time, "secs"), 1), "s).")
   
-  mod_db$last_result <- dplyr::tbl(mod_db$con, output_table) |>
+  mod_db$last_result <- dplyr::tbl(.get_con(mod_db), output_table) |>
     dplyr::count(sample_name) |>
     dplyr::collect()
   mod_db$current_table <- output_table
-  mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
   invisible(mod_db)
 }

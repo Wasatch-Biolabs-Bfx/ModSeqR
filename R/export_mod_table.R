@@ -34,7 +34,6 @@ export_mod_table <- function(mod_db,
 
   # Open DB connection
   mod_db <- .modhelper_connectDB(mod_db)
-  on.exit({ .modhelper_closeDB(mod_db) }, add = TRUE)
 
   # Build output path
   if (!grepl("\\.csv$", out_path, ignore.case = TRUE)) {
@@ -42,13 +41,13 @@ export_mod_table <- function(mod_db,
     out_path <- paste0(out_path, table_name, ".csv")
   }
 
-  if (!DBI::dbExistsTable(mod_db$con, table_name)) {
+  if (!DBI::dbExistsTable(.get_con(mod_db), table_name)) {
     message("Table '", table_name, "' does not exist.")
     return(invisible(mod_db))
   }
 
-  tbl_id  <- as.character(DBI::dbQuoteIdentifier(mod_db$con, table_name))
-  file_q  <- as.character(DBI::dbQuoteString(mod_db$con, out_path))
+  tbl_id  <- as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), table_name))
+  file_q  <- as.character(DBI::dbQuoteString(.get_con(mod_db), out_path))
 
   # COPY is executed entirely inside DuckDB (fast + avoids R memory)
   sql <- sprintf(
@@ -57,7 +56,7 @@ export_mod_table <- function(mod_db,
   )
 
   message("Exporting '", table_name, "' to: ", out_path)
-  n <- DBI::dbExecute(mod_db$con, sql)
+  n <- DBI::dbExecute(.get_con(mod_db), sql)
   message("Rows written: ", n)
 
   mod_db$last_result <- out_path

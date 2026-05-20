@@ -80,12 +80,12 @@ summarize_mod_reads <- function(mod_db,
   thr  <- if (is.null(threads)) caps$threads else as.integer(threads)
   mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
   dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", thr))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA temp_directory='%s';", temp_dir))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA memory_limit='%s';", mem))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA threads=%d;", thr))
 
   # Check required columns in input table
-  .modhelper_check_cols(mod_db$con, input_table, c("read_id", "sample_name", "chrom", "start", "end"))
+  .modhelper_check_cols(.get_con(mod_db), input_table, c("read_id", "sample_name", "chrom", "start", "end"))
 
   # Optionally read and upload regions table if provided
   if (!is.null(regions_table)) {
@@ -103,15 +103,15 @@ summarize_mod_reads <- function(mod_db,
       stop("Regions table must include columns: chrom, start, end")
     }
 
-    dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_regions_table;")
+    dbExecute(.get_con(mod_db), "DROP TABLE IF EXISTS temp_regions_table;")
     annotation <- annotation |> dplyr::mutate(bucket = floor(start / 10000))
-    DBI::dbWriteTable(mod_db$con, "temp_regions_table", annotation, temporary = TRUE)
+    DBI::dbWriteTable(.get_con(mod_db), "temp_regions_table", annotation, temporary = TRUE)
   }
 
   cat("Summarizing Reads...\n")
 
-  if (dbExistsTable(mod_db$con, output_table))
-    dbRemoveTable(mod_db$con, output_table)
+  if (dbExistsTable(.get_con(mod_db), output_table))
+    dbRemoveTable(.get_con(mod_db), output_table)
 
   query <- glue::glue("
     CREATE TABLE {output_table} AS
@@ -141,7 +141,7 @@ summarize_mod_reads <- function(mod_db,
     HAVING total_calls >= {min_CGs}
        AND read_length >= {min_length}")
 
-  dbExecute(mod_db$con, query)
+  dbExecute(.get_con(mod_db), query)
 
   cat("\n")
   end_time <- Sys.time()
@@ -155,10 +155,10 @@ summarize_mod_reads <- function(mod_db,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
 
-  mod_db$last_result <- dplyr::tbl(mod_db$con, output_table) |>
+  mod_db$last_result <- dplyr::tbl(.get_con(mod_db), output_table) |>
     dplyr::count(sample_name) |>
     dplyr::collect()
-  print(head(dplyr::tbl(mod_db$con, output_table)))
+  print(head(dplyr::tbl(.get_con(mod_db), output_table)))
   mod_db$current_table = output_table
   mod_db <- .modhelper_cleanup(mod_db)
   invisible(mod_db)

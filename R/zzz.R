@@ -14,20 +14,27 @@
 #'
 #' @section The mod_db object:
 #' Most ModSeqR functions accept and return an object of class \code{"mod_db"}, a named
-#' list with four slots:
+#' list with five slots:
 #' \describe{
 #'   \item{\code{db_file}}{Character. Path to the \code{.mod.db} DuckDB file on disk.}
 #'   \item{\code{current_table}}{Character or \code{NULL}. Name of the most recently
 #'     written or active table; updated automatically by pipeline functions.}
-#'   \item{\code{con}}{A DBI connection object while a function is running;
-#'     \code{"none"} when the connection has been closed.}
 #'   \item{\code{last_result}}{The most recently computed in-memory result (e.g., a
 #'     correlation matrix, a PCA list). \code{NULL} if no result has been stored yet.
 #'     Retrieve with \code{get_mod_result(mod_db)} or \code{mod_db$last_result}.}
+#'   \item{\code{config}}{Named list of DuckDB resource settings supplied at connection
+#'     time: \code{memory_limit}, \code{temp_dir}, \code{threads}. \code{NULL} values
+#'     fall back to auto-detected defaults (~75\% of RAM, a subdirectory of
+#'     \code{tempdir()}, all-but-one logical core).}
+#'   \item{\code{.conn_env}}{Environment (reference semantics) that holds the live DBI
+#'     connection (\code{con}) and the normalised file path (\code{db_key}) used by the
+#'     duplicate-connection registry. Do not access this slot directly — use
+#'     \code{\link{connect_mod_db}()}, \code{\link{disconnect_mod_db}()}, or let the
+#'     connection open lazily when the first pipeline function runs.}
 #' }
 #'
 #' Printing a \code{mod_db} object (e.g., \code{print(mod_db)} or just typing the
-#' variable name) shows all four slots:
+#' variable name) shows the key slots:
 #'
 #' \preformatted{
 #' <mod_db object>
@@ -36,7 +43,7 @@
 #' Current table:
 #'   mod_diff_windows
 #' Connection:
-#'   NULL
+#'   persistent (open)
 #' Last result: <matrix> [6 x 6]
 #' }
 #'
@@ -47,6 +54,26 @@
 #' mod_db <- make_mod_db(ch3_files, "my_db") |>
 #'   summarize_mod_windows()              |>
 #'   calc_mod_diff(cases = ..., controls = ...)
+#' }
+#'
+#' \strong{Connection lifecycle}
+#'
+#' \code{make_mod_db()} closes its build connection and returns a \emph{disconnected}
+#' object. The first pipeline call auto-opens a connection lazily. To connect to a
+#' database that already exists on disk, use \code{connect_mod_db()}. To close
+#' explicitly, use \code{disconnect_mod_db()}. The connection closes automatically
+#' when the \code{mod_db} object is garbage-collected.
+#'
+#' \preformatted{
+#' # New database — auto-connects on first pipeline call
+#' mod_db <- make_mod_db(ch3_files, "my_db") |>
+#'   summarize_mod_windows()              |>
+#'   calc_mod_diff(cases = ..., controls = ...)
+#'
+#' # Existing database — connect explicitly
+#' mod_db <- connect_mod_db("my_db.mod.db")
+#' mod_db <- summarize_mod_windows(mod_db)
+#' disconnect_mod_db(mod_db)   # or let GC handle it
 #' }
 #'
 #' Functions that compute an in-memory result (\code{calc_mod_samplecor},
@@ -74,6 +101,9 @@
 #' For bug reports and feature requests:  
 #' https://github.com/Wasatch-Biolabs-Bfx/ModSeqR
 "_PACKAGE"
+
+# Package-level registry — maps normalised db_path → .conn_env for duplicate detection.
+.active_connections <- new.env(parent = emptyenv())
 
 .onAttach <- function(lib, pkg)
 {

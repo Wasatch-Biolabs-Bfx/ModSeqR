@@ -82,31 +82,30 @@ calc_mod_samplecor <- function(mod_db,
   # Open the database connection
   mod_db <- .modhelper_connectDB(mod_db)
 
-  if (!dbExistsTable(mod_db$con, input_table)) {
+  if (!dbExistsTable(.get_con(mod_db), input_table)) {
     stop(paste0(input_table, " table does not exist in the database."))
   }
 
   # Check required columns
-  .modhelper_check_cols(mod_db$con, input_table, c("sample_name", "chrom", "start", "end"))
+  .modhelper_check_cols(.get_con(mod_db), input_table, c("sample_name", "chrom", "start", "end"))
 
   # Detect table type
-  table_type <- .modhelper_detect_table_type(mod_db$con, input_table)
+  table_type <- .modhelper_detect_table_type(.get_con(mod_db), input_table)
 
   # Retrieve data (optionally sampled)
   if (!is.null(max_rows)) {
-    row_count <- dbGetQuery(mod_db$con, paste0("SELECT COUNT(*) as n FROM ", input_table))$n
+    row_count <- dbGetQuery(.get_con(mod_db), paste0("SELECT COUNT(*) as n FROM ", input_table))$n
     if (row_count < max_rows) {
       stop(paste0("Table '", input_table, "' only has ", row_count,
                   " rows, which is fewer than max_rows = ", max_rows, ". Pick fewer rows."))
     }
-    modseq_dat <- dbGetQuery(mod_db$con, paste0("SELECT * FROM ", input_table, " ORDER BY RANDOM() LIMIT ", max_rows))
+    modseq_dat <- dbGetQuery(.get_con(mod_db), paste0("SELECT * FROM ", input_table, " ORDER BY RANDOM() LIMIT ", max_rows))
   } else {
-    modseq_dat <- dplyr::tbl(mod_db$con, input_table) |> dplyr::collect()
+    modseq_dat <- dplyr::tbl(.get_con(mod_db), input_table) |> dplyr::collect()
   }
 
   # --- New check for value column existence ---
   if (!(value_col %in% colnames(modseq_dat))) {
-    .modhelper_closeDB(mod_db)
     stop(paste0("The specified `value` column '", value_col,
                 "' does not exist in the '", input_table, "' table.\n",
                 "Available columns: ", paste(colnames(modseq_dat), collapse = ", "), "."))
@@ -115,7 +114,6 @@ calc_mod_samplecor <- function(mod_db,
 
   # Quick column presence check for the selected value column
   if (!(value_col %in% names(modseq_dat))) {
-    on.exit(.modhelper_closeDB(mod_db), add = TRUE)
     stop("Selected `value` column '", value_col, "' is not present in the '", input_table, "' table.")
   }
 
@@ -225,6 +223,5 @@ calc_mod_samplecor <- function(mod_db,
   }
 
   mod_db$last_result <- correlation_matrix
-  .modhelper_closeDB(mod_db)
   invisible(mod_db)
 }

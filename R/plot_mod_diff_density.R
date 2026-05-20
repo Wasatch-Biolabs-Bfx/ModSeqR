@@ -56,15 +56,14 @@ plot_mod_diff_density <- function(mod_db,
   }
 
   mod_db <- .modhelper_connectDB(mod_db)
-  on.exit(mod_db <- .modhelper_closeDB(mod_db), add = TRUE)
 
-  if (!DBI::dbExistsTable(mod_db$con, table_name))
+  if (!DBI::dbExistsTable(.get_con(mod_db), table_name))
     stop(table_name, " table does not exist.")
 
   # Check required columns
-  .modhelper_check_cols(mod_db$con, table_name, c("mh_frac_case", "mh_frac_control"))
+  .modhelper_check_cols(.get_con(mod_db), table_name, c("mh_frac_case", "mh_frac_control"))
 
-  df <- dplyr::tbl(mod_db$con, table_name) |>
+  df <- dplyr::tbl(.get_con(mod_db), table_name) |>
     dplyr::select(mh_frac_case, mh_frac_control) |>
     dplyr::filter(!is.na(mh_frac_case), !is.na(mh_frac_control)) |>
     dplyr::collect()

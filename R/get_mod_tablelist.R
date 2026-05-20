@@ -23,7 +23,7 @@ get_mod_tablelist <- function(mod_db) {
 
   mod_db <- .modhelper_connectDB(mod_db)
 
-  tables <- DBI::dbListTables(mod_db$con)
+  tables <- DBI::dbListTables(.get_con(mod_db))
 
   cat("Tables in database:\n")
   if (length(tables) == 0) {
@@ -32,6 +32,5 @@ get_mod_tablelist <- function(mod_db) {
     for (t in tables) cat("  ", t, "\n")
   }
 
-  .modhelper_closeDB(mod_db)
   invisible(tables)
 }

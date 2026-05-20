@@ -44,11 +44,10 @@ get_mod_cpg_count <- function(mod_db, table_name = "calls") {
   mod_db <- .modhelper_connectDB(mod_db)
   
   # Check if table exists
-  tables <- DBI::dbListTables(mod_db$con)
+  tables <- DBI::dbListTables(.get_con(mod_db))
   
   if (!(table_name %in% tables)) {
     cat("Table '", table_name, "' does not exist in the database.\n", sep = "")
-    mod_db <- .modhelper_closeDB(mod_db)
     return(invisible(NULL))
   }
   
@@ -59,10 +58,9 @@ get_mod_cpg_count <- function(mod_db, table_name = "calls") {
     ")"
   )
   
-  result <- DBI::dbGetQuery(mod_db$con, query)
+  result <- DBI::dbGetQuery(.get_con(mod_db), query)
   
   # Close DB connection
-  mod_db <- .modhelper_closeDB(mod_db)
   
   cat("=================================================\n",
       "          Unique CpG Count in Calls Table        \n",

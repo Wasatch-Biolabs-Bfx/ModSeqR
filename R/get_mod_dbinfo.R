@@ -48,18 +48,18 @@ get_mod_dbinfo <- function(mod_db)
   mod_db <- .modhelper_connectDB(mod_db)
   
   # Get DB size
-  size_df <- dbGetQuery(mod_db$con, "PRAGMA database_size")
+  size_df <- dbGetQuery(.get_con(mod_db), "PRAGMA database_size")
   size <- sum(size_df$total_blocks * size_df$block_size) / 1024 / 1024
   cat(sprintf("\nDatabase Size: %.2f MB\n", size))
   
   # What tables are in the database?
-  tables <- dbListTables(mod_db$con)
+  tables <- dbListTables(.get_con(mod_db))
   cat("\nTables in Database:\n")
   cat(paste(tables, collapse = "\n"), "\n")
   
   # Unique Sample Names (if "calls" table exists)
   if ("calls" %in% tables) {
-    sample_names <- tbl(mod_db$con, "calls") |>
+    sample_names <- tbl(.get_con(mod_db), "calls") |>
       distinct(sample_name) |>
       arrange(sample_name) |>
       collect() |>
@@ -80,6 +80,5 @@ get_mod_dbinfo <- function(mod_db)
     num_samples = length(sample_names)
   )
   
-  .modhelper_closeDB(mod_db)
   invisible(stats)
 }

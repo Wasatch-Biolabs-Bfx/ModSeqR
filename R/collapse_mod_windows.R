@@ -60,18 +60,18 @@ collapse_mod_windows <- function(mod_db,
   mod_db <- .modhelper_connectDB(mod_db)
 
   caps <- .auto_duckdb_resource_caps(0.80)
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", tempdir()))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", caps$memory_limit))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", caps$threads))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA temp_directory='%s';", tempdir()))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA memory_limit='%s';", caps$memory_limit))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA threads=%d;", caps$threads))
 
   # Check required columns in input table
-  .modhelper_check_cols(mod_db$con, input_table, c("chrom", "start", "end", "p_adjust", "meth_diff"))
+  .modhelper_check_cols(.get_con(mod_db), input_table, c("chrom", "start", "end", "p_adjust", "meth_diff"))
   
   # Quote identifiers safely for DuckDB
-  qi <- function(x) as.character(DBI::dbQuoteIdentifier(mod_db$con, x))
+  qi <- function(x) as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), x))
   
   # ---- Check input table exists ----
-  if (!DBI::dbExistsTable(mod_db$con, input_table)) {
+  if (!DBI::dbExistsTable(.get_con(mod_db), input_table)) {
     stop(glue::glue(
       "Error: Table '{input_table}' not found in the database.\n",
       "Please run 'calc_mod_diff()' (or equivalent) to generate a differential windows table first.\n"
@@ -79,7 +79,7 @@ collapse_mod_windows <- function(mod_db,
   }
   
   # ---- Validate required columns exist in the chosen input table ----
-  cols <- DBI::dbListFields(mod_db$con, input_table)
+  cols <- DBI::dbListFields(.get_con(mod_db), input_table)
   required <- c("chrom", "start", "end", "p_adjust", "meth_diff")
   missing <- setdiff(required, cols)
   if (length(missing) > 0) {
@@ -147,7 +147,7 @@ collapse_mod_windows <- function(mod_db,
      ORDER BY {qi('chrom')}, {qi('start')};"
   )
   
-  DBI::dbExecute(mod_db$con, query)
+  DBI::dbExecute(.get_con(mod_db), query)
   
   end_time <- Sys.time()
   total_seconds <- as.numeric(end_time - start_time, units = "secs")
@@ -160,11 +160,11 @@ collapse_mod_windows <- function(mod_db,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
 
-  cols <- DBI::dbListFields(mod_db$con, output_table)
+  cols <- DBI::dbListFields(.get_con(mod_db), output_table)
   mod_db$last_result <- if ("sample_name" %in% cols) {
-    dplyr::tbl(mod_db$con, output_table) |> dplyr::count(sample_name) |> dplyr::collect()
+    dplyr::tbl(.get_con(mod_db), output_table) |> dplyr::count(sample_name) |> dplyr::collect()
   } else {
-    DBI::dbGetQuery(mod_db$con, sprintf("SELECT COUNT(*) AS n FROM %s", output_table))$n
+    DBI::dbGetQuery(.get_con(mod_db), sprintf("SELECT COUNT(*) AS n FROM %s", output_table))$n
   }
   mod_db$current_table <- output_table
   mod_db <- .modhelper_cleanup(mod_db)

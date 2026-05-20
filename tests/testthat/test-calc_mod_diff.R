@@ -7,7 +7,16 @@
 # ---- shared helper -------------------------------------------------------
 
 .make_mod_db <- function(con, dbfile) {
-  obj <- list(db_file = dbfile, current_table = NULL, con = con, last_result = NULL)
+  env        <- new.env(parent = emptyenv())
+  env$con    <- con
+  env$db_key <- normalizePath(dbfile, mustWork = FALSE)
+  obj <- list(
+    db_file       = dbfile,
+    current_table = NULL,
+    last_result   = NULL,
+    config        = list(memory_limit = NULL, temp_dir = NULL, threads = NULL),
+    .conn_env     = env
+  )
   class(obj) <- "mod_db"
   obj
 }

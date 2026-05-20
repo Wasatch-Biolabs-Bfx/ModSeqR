@@ -15,7 +15,7 @@
 #' Current table:
 #'   mod_diff_windows
 #' Connection:
-#'   NULL
+#'   persistent (open)
 #' Last result: <matrix> [6 x 6]
 #' }
 #'
@@ -45,16 +45,10 @@ print.mod_db <- function(mod_db) {
   cat("  ", ifelse(is.null(mod_db$current_table), "NULL", mod_db$current_table), "\n")
   
   cat("Connection:\n")
-
-  if (is.character(mod_db$con) && mod_db$con == "none") {
-    cat("  NULL\n")
-  } else if (!dbIsValid(mod_db$con))
-  {
-    cat("  NULL\n")
-  } else
-  {
-    cat("  Active DBI connection\n")
-  }
+  env <- mod_db$.conn_env
+  con_status <- if (!is.null(env) && !is.null(env$con) && DBI::dbIsValid(env$con))
+    "persistent (open)" else "closed"
+  cat("  ", con_status, "\n")
 
   if (!is.null(mod_db$last_result)) {
     r <- mod_db$last_result

@@ -35,9 +35,9 @@ get_mod_table <- function(mod_db,
   
   dat <- tibble()  # Initialize an empty tibble to return if there's an error
   
-  if (table_name %in% dbListTables(mod_db$con)) {
+  if (table_name %in% dbListTables(.get_con(mod_db))) {
     # Reference the table
-    table_ref <- tbl(mod_db$con, table_name)
+    table_ref <- tbl(.get_con(mod_db), table_name)
     
     if (!is.null(max_rows)) {
       # Randomly sample max_rows rows (efficient with DuckDB)

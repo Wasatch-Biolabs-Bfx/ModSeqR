@@ -120,6 +120,14 @@ mod_db <- make_mod_db(
 # Retrieve the last computed result without breaking the pipe
 collapsed <- get_mod_result(mod_db)
 
+# Connect to an existing database (e.g. in a new R session)
+mod_db <- connect_mod_db("my_data.mod.db")
+
+# Optionally specify resource limits at connect time
+mod_db <- connect_mod_db("my_data.mod.db",
+                          memory_limit = "32GB",
+                          threads      = 8)
+
 # Build and analyze through separate lines
 mod_db <- make_mod_db(ch3_files = "../ch3_files_directory", db_name = "my_data")
 mod_db <- summarize_mod_windows(mod_db)
@@ -157,6 +165,12 @@ regions <- get_mod_table(mod_db, "regions")
 ModSeqR also provides a few helper utilities to make it easier to inspect and manage your database:
 
 ```r
+# Connect to an existing database (e.g. in a new R session)
+mod_db <- connect_mod_db("my_data.mod.db")
+
+# Disconnect explicitly when done (or let GC close it automatically)
+disconnect_mod_db(mod_db)
+
 # View all column names in a given table
 get_mod_cols(mod_db, "calls")
 

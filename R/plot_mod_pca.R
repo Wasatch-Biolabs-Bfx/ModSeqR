@@ -63,29 +63,27 @@ plot_mod_pca <- function(mod_db,
   value_col <- rlang::as_name(value_sym)
 
   # Check required columns
-  .modhelper_check_cols(mod_db$con, input_table, c("sample_name", "chrom", "start", "end"))
+  .modhelper_check_cols(.get_con(mod_db), input_table, c("sample_name", "chrom", "start", "end"))
 
   # Detect table type
-  table_type <- .modhelper_detect_table_type(mod_db$con, input_table)
+  table_type <- .modhelper_detect_table_type(.get_con(mod_db), input_table)
 
   # If max_rows is specified, check table size and sample rows randomly in SQL
   if (!is.null(max_rows)) {
-    row_count <- DBI::dbGetQuery(mod_db$con, paste0("SELECT COUNT(*) as n FROM ", input_table))$n
+    row_count <- DBI::dbGetQuery(.get_con(mod_db), paste0("SELECT COUNT(*) as n FROM ", input_table))$n
     if (row_count < max_rows) {
-      .modhelper_closeDB(mod_db)
       stop(paste0("Table '", input_table, "' only has ", row_count,
                   " rows, which is fewer than max_rows = ", max_rows, ". Pick fewer rows."))
     }
     # Use SQL random sampling with ORDER BY RANDOM()
-    modseq_dat <- DBI::dbGetQuery(mod_db$con, paste0("SELECT * FROM ", input_table, " ORDER BY RANDOM() LIMIT ", max_rows))
+    modseq_dat <- DBI::dbGetQuery(.get_con(mod_db), paste0("SELECT * FROM ", input_table, " ORDER BY RANDOM() LIMIT ", max_rows))
   } else {
     # Retrieve full table if max_rows is not specified
-    modseq_dat <- dplyr::tbl(mod_db$con, input_table) |> dplyr::collect()
+    modseq_dat <- dplyr::tbl(.get_con(mod_db), input_table) |> dplyr::collect()
   }
 
   # --- Check that the requested `value` column exists ---
   if (!(value_col %in% colnames(modseq_dat))) {
-    .modhelper_closeDB(mod_db)
     stop(paste0(
       "The specified `value` column '", value_col, "' does not exist in the '", input_table, "' table.\n",
       "Available columns: ", paste(colnames(modseq_dat), collapse = ", "), "."
@@ -118,7 +116,6 @@ plot_mod_pca <- function(mod_db,
 
   # Ensure the collected data has the correct structure
   if (ncol(test_wide) <= 1) {
-    .modhelper_closeDB(mod_db)
     stop("The data doesn't have enough columns for PCA after processing.")
   }
 
@@ -160,6 +157,5 @@ plot_mod_pca <- function(mod_db,
   message("Time elapsed: ", end_time - start_time, "\n")
 
   mod_db$last_result <- list(pca = pca_result, scores = pca_data)
-  .modhelper_closeDB(mod_db)
   invisible(mod_db)
 }

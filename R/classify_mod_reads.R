@@ -83,18 +83,18 @@ classify_mod_reads <- function(mod_db,
   mod_db <- .modhelper_connectDB(mod_db)
 
   caps <- .auto_duckdb_resource_caps(0.80)
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", tempdir()))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", caps$memory_limit))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", caps$threads))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA temp_directory='%s';", tempdir()))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA memory_limit='%s';", caps$memory_limit))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA threads=%d;", caps$threads))
 
   # Check if reads table exists
-  if (!dbExistsTable(mod_db$con, input_table)) {
+  if (!dbExistsTable(.get_con(mod_db), input_table)) {
     stop(glue("Error: Reads table not found in the database.
                      Please run 'summarize_mod_reads()' on database first to generate it."))
   }
 
   # Check required columns
-  .modhelper_check_cols(mod_db$con, input_table, c("sample_name", "read_id", "mh_frac"))
+  .modhelper_check_cols(.get_con(mod_db), input_table, c("sample_name", "read_id", "mh_frac"))
 
   # Read in key_table and make sure the key_table looks like collapsed_windows...
   file_ext <- file_ext(key_table)
@@ -123,11 +123,11 @@ classify_mod_reads <- function(mod_db,
   }
 
   # Upload annotation as a temporary table
-  dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_key_table;")
-  dbWriteTable(mod_db$con, "temp_key_table", annotation, temporary = TRUE)
+  dbExecute(.get_con(mod_db), "DROP TABLE IF EXISTS temp_key_table;")
+  dbWriteTable(.get_con(mod_db), "temp_key_table", annotation, temporary = TRUE)
 
-  if (dbExistsTable(mod_db$con, output_table))
-    dbRemoveTable(mod_db$con, output_table)
+  if (dbExistsTable(.get_con(mod_db), output_table))
+    dbRemoveTable(.get_con(mod_db), output_table)
 
   query <- glue("
     CREATE TABLE {output_table} AS
@@ -151,10 +151,10 @@ classify_mod_reads <- function(mod_db,
       AND r.first_cpg_pos <= k.end
       AND r.last_cpg_pos >= k.start")
 
-  dbExecute(mod_db$con, query)
+  dbExecute(.get_con(mod_db), query)
 
   # Drop temporary tables
-  dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_key_table;")
+  dbExecute(.get_con(mod_db), "DROP TABLE IF EXISTS temp_key_table;")
 
   cat("\n")
   end_time <- Sys.time()
@@ -175,13 +175,13 @@ classify_mod_reads <- function(mod_db,
             "\nTime elapsed: ", round(total_seconds, 2), " seconds\n")
   }
 
-  mod_db$last_result <- dplyr::tbl(mod_db$con, output_table) |>
+  mod_db$last_result <- dplyr::tbl(.get_con(mod_db), output_table) |>
     dplyr::count(classification) |>
     dplyr::collect()
   mod_db$current_table = output_table
 
   # print out table header for user
-  print(head(tbl(mod_db$con, output_table)))
+  print(head(tbl(.get_con(mod_db), output_table)))
 
   mod_db <- .modhelper_cleanup(mod_db)
   invisible(mod_db)

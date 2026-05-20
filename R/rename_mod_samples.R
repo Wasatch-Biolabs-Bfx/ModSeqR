@@ -91,25 +91,24 @@ rename_mod_samples <- function(mod_db,
 
   # ---- open DB, checks ----------------------------------------------------------
   mod_db <- ModSeqR:::.modhelper_connectDB(mod_db)
-  on.exit({ ModSeqR:::.modhelper_closeDB(mod_db) }, add = TRUE)
 
-  if (!DBI::dbExistsTable(mod_db$con, table_name)) {
+  if (!DBI::dbExistsTable(.get_con(mod_db), table_name)) {
     stop("Table '", table_name, "' does not exist in the database.")
   }
 
   # Check required columns
-  .modhelper_check_cols(mod_db$con, table_name, c("sample_name"))
+  .modhelper_check_cols(.get_con(mod_db), table_name, c("sample_name"))
 
-  tbl_id <- as.character(DBI::dbQuoteIdentifier(mod_db$con, table_name))
+  tbl_id <- as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), table_name))
 
   # Ensure table has a sample_name column
-  cols <- DBI::dbGetQuery(mod_db$con, sprintf("PRAGMA table_info(%s);", tbl_id))$name
+  cols <- DBI::dbGetQuery(.get_con(mod_db), sprintf("PRAGMA table_info(%s);", tbl_id))$name
   if (!"sample_name" %in% cols) {
     stop("Table '", table_name, "' has no 'sample_name' column.")
   }
 
   # Check old names exist
-  existing <- DBI::dbGetQuery(mod_db$con,
+  existing <- DBI::dbGetQuery(.get_con(mod_db),
                               sprintf("SELECT DISTINCT sample_name FROM %s;", tbl_id))$sample_name
   missing_old <- setdiff(map$old, existing)
   if (length(missing_old)) {
@@ -140,8 +139,8 @@ rename_mod_samples <- function(mod_db,
   }
 
   # ---- write temp mapping + update ---------------------------------------------
-  DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_sample_map;")
-  DBI::dbWriteTable(mod_db$con, "temp_sample_map", map, temporary = TRUE, overwrite = TRUE)
+  DBI::dbExecute(.get_con(mod_db), "DROP TABLE IF EXISTS temp_sample_map;")
+  DBI::dbWriteTable(.get_con(mod_db), "temp_sample_map", map, temporary = TRUE, overwrite = TRUE)
 
   # Perform UPDATE with join (DuckDB supports UPDATE ... FROM)
   sql_update <- sprintf("
@@ -151,12 +150,12 @@ rename_mod_samples <- function(mod_db,
     WHERE t.sample_name = m.old;
   ", tbl_id)
 
-  n_changed <- DBI::dbExecute(mod_db$con, sql_update)
-  DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_sample_map;")
+  n_changed <- DBI::dbExecute(.get_con(mod_db), sql_update)
+  DBI::dbExecute(.get_con(mod_db), "DROP TABLE IF EXISTS temp_sample_map;")
 
   # ---- preview after (single stream) -------------------------------------------
   if (preview) {
-    after <- DBI::dbGetQuery(mod_db$con,
+    after <- DBI::dbGetQuery(.get_con(mod_db),
                              sprintf("SELECT DISTINCT sample_name FROM %s;", tbl_id))$sample_name
     message("\nAfter rename: distinct sample names in '", table_name, "':")
     if (length(after)) {
@@ -170,7 +169,7 @@ rename_mod_samples <- function(mod_db,
   }
 
   mod_db$last_result <- DBI::dbGetQuery(
-    mod_db$con,
+    .get_con(mod_db),
     sprintf("SELECT DISTINCT sample_name FROM %s ORDER BY sample_name", tbl_id)
   )$sample_name
   mod_db$current_table <- table_name

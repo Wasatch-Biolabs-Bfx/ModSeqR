@@ -33,11 +33,10 @@ get_mod_tableinfo <- function(mod_db,
   }
 
   mod_db <- .modhelper_connectDB(mod_db)
-  tables <- DBI::dbListTables(mod_db$con)
+  tables <- DBI::dbListTables(.get_con(mod_db))
 
   if (!(table_name %in% tables)) {
     cat("Table '", table_name, "' does not exist in the database.\n", sep = "")
-    .modhelper_closeDB(mod_db)
     return(invisible(NULL))
   }
 
@@ -49,16 +48,16 @@ get_mod_tableinfo <- function(mod_db,
   cat("Table:", table_name, "\n")
 
   num_records <- DBI::dbGetQuery(
-    mod_db$con, paste0("SELECT COUNT(*) AS n FROM ", table_name))$n
+    .get_con(mod_db), paste0("SELECT COUNT(*) AS n FROM ", table_name))$n
 
   cat("\nTotal Number of Records:", num_records, "\n")
 
-  col_names     <- DBI::dbListFields(mod_db$con, table_name)
+  col_names     <- DBI::dbListFields(.get_con(mod_db), table_name)
   sample_counts <- NULL
 
   if ("sample_name" %in% col_names) {
     sample_counts <- DBI::dbGetQuery(
-      mod_db$con,
+      .get_con(mod_db),
       paste0("SELECT sample_name, COUNT(*) AS n FROM ", table_name,
              " GROUP BY sample_name ORDER BY sample_name")
     )
@@ -77,6 +76,5 @@ get_mod_tableinfo <- function(mod_db,
     columns       = col_names
   )
 
-  .modhelper_closeDB(mod_db)
   invisible(info)
 }

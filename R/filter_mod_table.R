@@ -44,7 +44,7 @@ filter_mod_table <- function(mod_db, input_table, output_table, ...) {
   mod_db <- .modhelper_connectDB(mod_db)
   
   # Create a lazy DuckDB table
-  tbl_expr <- tbl(mod_db$con, input_table)
+  tbl_expr <- tbl(.get_con(mod_db), input_table)
   # Apply filters lazily via dbplyr (this generates SQL, not local evaluation)
   filtered_expr <- tryCatch({
     filter(tbl_expr, !!!conditions)
@@ -57,23 +57,23 @@ filter_mod_table <- function(mod_db, input_table, output_table, ...) {
   
   # Stage results in a persistent (not TEMP) table so DuckDB can page it to disk.
   temp_table <- paste0("_filter_staging_", as.integer(Sys.time()))
-  dbExecute(mod_db$con, sprintf("DROP TABLE IF EXISTS %s", temp_table))
-  dbExecute(mod_db$con, sprintf("CREATE TABLE %s AS %s", temp_table, sql_query))
+  dbExecute(.get_con(mod_db), sprintf("DROP TABLE IF EXISTS %s", temp_table))
+  dbExecute(.get_con(mod_db), sprintf("CREATE TABLE %s AS %s", temp_table, sql_query))
 
   # Write to output_table, then clean up staging table
-  dbExecute(mod_db$con, sprintf("CREATE OR REPLACE TABLE %s AS SELECT * FROM %s", output_table, temp_table))
-  dbExecute(mod_db$con, sprintf("DROP TABLE IF EXISTS %s", temp_table))
+  dbExecute(.get_con(mod_db), sprintf("CREATE OR REPLACE TABLE %s AS SELECT * FROM %s", output_table, temp_table))
+  dbExecute(.get_con(mod_db), sprintf("DROP TABLE IF EXISTS %s", temp_table))
   
   cat("\n")
   end_time <- Sys.time()
   
   message("Filter complete! Time elapsed: ", end_time - start_time, "\n")
 
-  cols <- DBI::dbListFields(mod_db$con, output_table)
+  cols <- DBI::dbListFields(.get_con(mod_db), output_table)
   mod_db$last_result <- if ("sample_name" %in% cols) {
-    dplyr::tbl(mod_db$con, output_table) |> dplyr::count(sample_name) |> dplyr::collect()
+    dplyr::tbl(.get_con(mod_db), output_table) |> dplyr::count(sample_name) |> dplyr::collect()
   } else {
-    DBI::dbGetQuery(mod_db$con, sprintf("SELECT COUNT(*) AS n FROM %s", output_table))$n
+    DBI::dbGetQuery(.get_con(mod_db), sprintf("SELECT COUNT(*) AS n FROM %s", output_table))$n
   }
 
   mod_db$current_table <- output_table

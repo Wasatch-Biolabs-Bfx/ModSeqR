@@ -156,19 +156,19 @@ summarize_mod_regions <- function(mod_db,
   mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
   
   dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", thr))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA temp_directory='%s';", temp_dir))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA memory_limit='%s';", mem))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA threads=%d;", thr))
   
-  in_id  <- as.character(DBI::dbQuoteIdentifier(mod_db$con, input_table))
-  out_id <- as.character(DBI::dbQuoteIdentifier(mod_db$con, output_table))
+  in_id  <- as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), input_table))
+  out_id <- as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), output_table))
   
-  if (DBI::dbExistsTable(mod_db$con, output_table) && overwrite)
-    DBI::dbRemoveTable(mod_db$con, output_table)
+  if (DBI::dbExistsTable(.get_con(mod_db), output_table) && overwrite)
+    DBI::dbRemoveTable(.get_con(mod_db), output_table)
   
   # ---- Determine sample list ---------------------------------------------------
   samp_query <- sprintf("SELECT DISTINCT sample_name FROM %s WHERE sample_name IS NOT NULL", in_id)
-  all_samps <- DBI::dbGetQuery(mod_db$con, samp_query)[,1]
+  all_samps <- DBI::dbGetQuery(.get_con(mod_db), samp_query)[,1]
   if (!is.null(samples)) {
     all_samps <- intersect(all_samps, samples)
   }
@@ -199,16 +199,16 @@ summarize_mod_regions <- function(mod_db,
       {frac_nulls}
     WHERE 1=0;
   ")
-  DBI::dbExecute(mod_db$con, schema_sql)
+  DBI::dbExecute(.get_con(mod_db), schema_sql)
   
   # ---- Upload annotation to temp table -----------------------------------------
-  DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_annotation;")
-  DBI::dbWriteTable(mod_db$con, "temp_annotation", annotation, temporary = TRUE)
+  DBI::dbExecute(.get_con(mod_db), "DROP TABLE IF EXISTS temp_annotation;")
+  DBI::dbWriteTable(.get_con(mod_db), "temp_annotation", annotation, temporary = TRUE)
   
   # If no chromosomes specified, use all unique chroms in the data
   if (is.null(chrs)) {
     chrs <- DBI::dbGetQuery(
-      mod_db$con,
+      .get_con(mod_db),
       sprintf("SELECT DISTINCT chrom FROM %s ORDER BY chrom", in_id)
     )[, 1]
   }
@@ -218,7 +218,7 @@ summarize_mod_regions <- function(mod_db,
   
   # ---- Harmonize 'chr' prefix if needed (simple heuristic) ---------------------
   # Check whether positions have 'chr' prefix
-  has_chr_positions <- DBI::dbGetQuery(mod_db$con, sprintf("
+  has_chr_positions <- DBI::dbGetQuery(.get_con(mod_db), sprintf("
     SELECT CASE WHEN EXISTS (
       SELECT 1 FROM %s WHERE chrom LIKE 'chr%%' LIMIT 1
     ) THEN 1 ELSE 0 END AS v
@@ -228,15 +228,15 @@ summarize_mod_regions <- function(mod_db,
   
   if (has_chr_positions && !has_chr_annot) {
     # add 'chr' to annotation
-    DBI::dbExecute(mod_db$con, "UPDATE temp_annotation SET chrom = 'chr' || CAST(chrom AS VARCHAR);")
+    DBI::dbExecute(.get_con(mod_db), "UPDATE temp_annotation SET chrom = 'chr' || CAST(chrom AS VARCHAR);")
   } else if (!has_chr_positions && has_chr_annot) {
     # strip 'chr' from annotation
-    DBI::dbExecute(mod_db$con, "UPDATE temp_annotation SET chrom = REGEXP_REPLACE(chrom, '^chr', '');")
+    DBI::dbExecute(.get_con(mod_db), "UPDATE temp_annotation SET chrom = REGEXP_REPLACE(chrom, '^chr', '');")
   }
 
-  DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS temp_annotation_batched;")
+  DBI::dbExecute(.get_con(mod_db), "DROP TABLE IF EXISTS temp_annotation_batched;")
   # Validate annotation was loaded
-  total_regions <- DBI::dbGetQuery(mod_db$con,
+  total_regions <- DBI::dbGetQuery(.get_con(mod_db),
                                    "SELECT COUNT(*) AS n FROM temp_annotation")$n[1]
   if (!is.finite(total_regions) || total_regions == 0) {
     stop("No regions found in region_file after parsing.")
@@ -263,15 +263,15 @@ summarize_mod_regions <- function(mod_db,
       WHERE sample_name = '{samp_esc}' AND start > 0{chr_clause}
       ORDER BY chrom
     ")
-    sample_chroms <- DBI::dbGetQuery(mod_db$con, chrom_q)[, 1]
+    sample_chroms <- DBI::dbGetQuery(.get_con(mod_db), chrom_q)[, 1]
     if (length(sample_chroms) == 0) next
 
     for (chr in sample_chroms) {
       chr_esc <- gsub("'", "''", chr)
 
       # Aggregate per-position counts into a persistent staging table
-      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS _staging_pos")
-      DBI::dbExecute(mod_db$con, sprintf(
+      DBI::dbExecute(.get_con(mod_db), "DROP TABLE IF EXISTS _staging_pos")
+      DBI::dbExecute(.get_con(mod_db), sprintf(
         "CREATE TABLE _staging_pos AS
          SELECT sample_name, chrom, start, \"end\",
            COUNT(*) AS num_calls,
@@ -283,7 +283,7 @@ summarize_mod_regions <- function(mod_db,
       ))
 
       # Join positions to annotation for this chromosome and insert into output
-      DBI::dbExecute(mod_db$con, sprintf(
+      DBI::dbExecute(.get_con(mod_db), sprintf(
         "INSERT INTO %s
          SELECT
            p.sample_name,
@@ -305,10 +305,10 @@ summarize_mod_regions <- function(mod_db,
         out_id, sum_counts, frac_cols, join_kw, chr_esc, min_num_calls
       ))
 
-      DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS _staging_pos")
+      DBI::dbExecute(.get_con(mod_db), "DROP TABLE IF EXISTS _staging_pos")
     }
 
-    DBI::dbExecute(mod_db$con, "CHECKPOINT")
+    DBI::dbExecute(.get_con(mod_db), "CHECKPOINT")
     message("  Sample '", samp, "' done")
   }
   
@@ -316,7 +316,7 @@ summarize_mod_regions <- function(mod_db,
   message("Regions table created as ", output_table,
           " (", round(as.numeric(Sys.time() - start_time, "secs"), 1), "s).")
   
-  mod_db$last_result <- dplyr::tbl(mod_db$con, output_table) |>
+  mod_db$last_result <- dplyr::tbl(.get_con(mod_db), output_table) |>
     dplyr::count(sample_name) |>
     dplyr::collect()
   mod_db$current_table <- output_table

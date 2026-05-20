@@ -128,15 +128,15 @@ summarize_mod_windows <- function(mod_db,
   mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
   
   dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA temp_directory='%s';", temp_dir))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA memory_limit='%s';", mem))
-  DBI::dbExecute(mod_db$con, sprintf("PRAGMA threads=%d;", thr))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA temp_directory='%s';", temp_dir))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA memory_limit='%s';", mem))
+  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA threads=%d;", thr))
   
-  in_id  <- as.character(DBI::dbQuoteIdentifier(mod_db$con, input_table))
-  out_id <- as.character(DBI::dbQuoteIdentifier(mod_db$con, output_table))
+  in_id  <- as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), input_table))
+  out_id <- as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), output_table))
 
-  if (DBI::dbExistsTable(mod_db$con, output_table) && overwrite)
-    DBI::dbRemoveTable(mod_db$con, output_table)
+  if (DBI::dbExistsTable(.get_con(mod_db), output_table) && overwrite)
+    DBI::dbRemoveTable(.get_con(mod_db), output_table)
 
   # Build sample filter clause for SQL pushdown (avoids R-side sample loop)
   samp_clause <- if (!is.null(samples)) {
@@ -167,7 +167,7 @@ summarize_mod_windows <- function(mod_db,
       {frac_nulls}
     WHERE 1=0;
   ")
-  DBI::dbExecute(mod_db$con, schema_sql)
+  DBI::dbExecute(.get_con(mod_db), schema_sql)
 
   # Per-label SQL fragments for window aggregation
   p_counts   <- paste(sprintf("p.%s_counts", labels), collapse = ", ")
@@ -183,7 +183,7 @@ summarize_mod_windows <- function(mod_db,
   # Determine chromosome list (respects chrs filter and sample filter)
   if (is.null(chrs)) {
     chrs <- DBI::dbGetQuery(
-      mod_db$con,
+      .get_con(mod_db),
       sprintf("SELECT DISTINCT chrom FROM %s WHERE start > 0 %s ORDER BY chrom",
               in_id, samp_clause)
     )[, 1]
@@ -198,8 +198,8 @@ summarize_mod_windows <- function(mod_db,
 
     # Aggregate per-position counts for all (filtered) samples on this chromosome.
     # Persistent table (not TEMP) lets DuckDB page it to disk under memory pressure.
-    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS _staging_chr_pos")
-    DBI::dbExecute(mod_db$con, sprintf(
+    DBI::dbExecute(.get_con(mod_db), "DROP TABLE IF EXISTS _staging_chr_pos")
+    DBI::dbExecute(.get_con(mod_db), sprintf(
       "CREATE TABLE _staging_chr_pos AS
        SELECT sample_name, start,
          COUNT(*) AS num_calls,
@@ -212,7 +212,7 @@ summarize_mod_windows <- function(mod_db,
 
     # All offsets handled in one INSERT via CROSS JOIN + unnest,
     # avoiding N redundant scans of the staging table.
-    DBI::dbExecute(mod_db$con, sprintf(
+    DBI::dbExecute(.get_con(mod_db), sprintf(
       "INSERT INTO %s
        WITH offsets(win_offset) AS (
          SELECT unnest([%s])
@@ -237,8 +237,8 @@ summarize_mod_windows <- function(mod_db,
       chr_esc, window_size, sum_counts, frac_exprs, min_num_calls
     ))
 
-    DBI::dbExecute(mod_db$con, "DROP TABLE IF EXISTS _staging_chr_pos")
-    DBI::dbExecute(mod_db$con, "CHECKPOINT")
+    DBI::dbExecute(.get_con(mod_db), "DROP TABLE IF EXISTS _staging_chr_pos")
+    DBI::dbExecute(.get_con(mod_db), "CHECKPOINT")
     message("  [", ci, "/", length(chrs), "] ", chr, " done")
   }
 
@@ -246,7 +246,7 @@ summarize_mod_windows <- function(mod_db,
   message("Windows table created as ", output_table,
           " (", round(as.numeric(end_time - start_time, "mins"), 2), " min).")
   
-  mod_db$last_result <- dplyr::tbl(mod_db$con, output_table) |>
+  mod_db$last_result <- dplyr::tbl(.get_con(mod_db), output_table) |>
     dplyr::count(sample_name) |>
     dplyr::collect()
   mod_db$current_table <- output_table

@@ -32,23 +32,20 @@ peek_mod_table <- function(mod_db, table_name = NULL, n = 6) {
   if (is.null(table_name)) {
     table_name <- mod_db$current_table
     if (is.null(table_name)) {
-      .modhelper_closeDB(mod_db)
       stop("No table_name supplied and mod_db$current_table is NULL.")
     }
   }
 
-  if (!(table_name %in% DBI::dbListTables(mod_db$con))) {
-    .modhelper_closeDB(mod_db)
+  if (!(table_name %in% DBI::dbListTables(.get_con(mod_db)))) {
     stop(paste0("Table '", table_name, "' does not exist in the database."))
   }
 
-  result <- dplyr::tbl(mod_db$con, table_name) |>
+  result <- dplyr::tbl(.get_con(mod_db), table_name) |>
     head(n) |>
     dplyr::collect()
 
   cat("Table:", table_name, "(first", n, "rows)\n")
   print(result)
 
-  .modhelper_closeDB(mod_db)
   invisible(result)
 }

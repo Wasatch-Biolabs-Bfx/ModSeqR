@@ -78,14 +78,13 @@ trim_mod_reads <- function(mod_db,
   mod_db <- ModSeqR:::.modhelper_connectDB(mod_db)
   
   # Helper for quoting identifiers
-  qi <- function(x) as.character(DBI::dbQuoteIdentifier(mod_db$con, x))
+  qi <- function(x) as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), x))
   
   # ---- Validate columns ----
-  cols <- DBI::dbListFields(mod_db$con, input_table)
+  cols <- DBI::dbListFields(.get_con(mod_db), input_table)
   required <- c("read_position", "read_length")
   missing <- setdiff(required, cols)
   if (length(missing) > 0) {
-    mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
     stop(glue::glue(
       "Input table '{input_table}' is missing required column(s): ",
       paste(missing, collapse = ", "), "."
@@ -113,18 +112,16 @@ trim_mod_reads <- function(mod_db,
   # ---- Optional sample restriction: trim ONLY selected samples, keep others intact ----
   if (!is.null(samples)) {
     if (!"sample_name" %in% cols) {
-      mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
       stop(glue::glue(
         "samples was provided, but input table '{input_table}' has no 'sample_name' column."
       ))
     }
     samples <- as.character(samples)
     if (length(samples) == 0) {
-      mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
       stop("samples was provided but is empty. Use NULL to trim all samples.")
     }
     
-    sample_sql <- paste(DBI::dbQuoteString(mod_db$con, samples), collapse = ", ")
+    sample_sql <- paste(DBI::dbQuoteString(.get_con(mod_db), samples), collapse = ", ")
     
     # Keep all rows for non-target samples; trim only target samples
     where_clause <- glue::glue("
@@ -150,7 +147,7 @@ trim_mod_reads <- function(mod_db,
     WHERE {where_clause}
   ")
   
-  DBI::dbExecute(mod_db$con, query)
+  DBI::dbExecute(.get_con(mod_db), query)
   
   elapsed <- Sys.time() - start_time
   message(sprintf(
@@ -160,10 +157,9 @@ trim_mod_reads <- function(mod_db,
     as.numeric(elapsed, units = "secs")
   ))
   
-  mod_db$last_result <- dplyr::tbl(mod_db$con, output_table) |>
+  mod_db$last_result <- dplyr::tbl(.get_con(mod_db), output_table) |>
     dplyr::count(sample_name) |>
     dplyr::collect()
   mod_db$current_table <- output_table
-  mod_db <- ModSeqR:::.modhelper_closeDB(mod_db)
   invisible(mod_db)
 }
