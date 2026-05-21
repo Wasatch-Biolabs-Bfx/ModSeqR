@@ -24,11 +24,6 @@
 #'   All methods except \code{"beta_bin"} run entirely in DuckDB and do not load
 #'   locus-level data into R. \code{"beta_bin"} collects data into R one chromosome
 #'   at a time; avoid it on memory-constrained hardware with large datasets.
-#' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
-#' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic
-#'   (typically all-but-one core) is used.
-#' @param memory_limit DuckDB memory limit string (e.g. \code{"16384MB"}).
-#'   If \code{NULL}, an internal heuristic (~80\% of RAM) is used.
 #' @param min_sites Minimum number of distinct modification sites (e.g., CpGs)
 #'   required per sample within a window. Windows where any sample has fewer
 #'   than this many sites with calls are dropped before testing. This filters
@@ -53,9 +48,6 @@
 #' counts). On datasets with many loci or many samples, \code{beta_bin} can still consume
 #' substantial RAM; consider \code{fast_fisher} or \code{wilcox} on memory-constrained
 #' hardware.
-#'
-#' Resource pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}) are set
-#' via internal heuristics unless overridden.
 #'
 #' @return Invisibly returns the updated \code{"mod_db"} object with \code{current_table} set to
 #'   the output table name and \code{last_result} set to a data frame preview (head) of the result
@@ -90,9 +82,6 @@ calc_mod_diff <- function(mod_db,
                           controls,
                           mod_type = "mh",
                           calc_type = NULL,
-                          temp_dir = tempdir(),
-                          threads = NULL,
-                          memory_limit = NULL,
                           min_sites = NULL,
                           overwrite = TRUE,
                           call_type = NULL)
@@ -108,15 +97,6 @@ calc_mod_diff <- function(mod_db,
     input_table <- call_type
   }
 
-  # Resource caps
-  caps <- .auto_duckdb_resource_caps(0.80)
-  thr  <- if (is.null(threads)) caps$threads else threads
-  mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
-
-  dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA temp_directory='%s';", temp_dir))
-  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA memory_limit='%s';", mem))
-  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA threads=%d;", thr))
 
   # check for input table
   if (!dbExistsTable(.get_con(mod_db), input_table)) {

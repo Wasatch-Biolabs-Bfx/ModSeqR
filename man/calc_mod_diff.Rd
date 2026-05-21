@@ -12,9 +12,6 @@ calc_mod_diff(
   controls,
   mod_type = "mh",
   calc_type = NULL,
-  temp_dir = tempdir(),
-  threads = NULL,
-  memory_limit = NULL,
   min_sites = NULL,
   overwrite = TRUE,
   call_type = NULL
@@ -48,14 +45,6 @@ Options: \code{"wilcox"}, \code{"beta_bin"}, \code{"fast_fisher"}, \code{"r_fish
 All methods except \code{"beta_bin"} run entirely in DuckDB and do not load
 locus-level data into R. \code{"beta_bin"} collects data into R one chromosome
 at a time; avoid it on memory-constrained hardware with large datasets.}
-
-\item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
-
-\item{threads}{Integer DuckDB thread count. If \code{NULL}, an internal heuristic
-(typically all-but-one core) is used.}
-
-\item{memory_limit}{DuckDB memory limit string (e.g. \code{"16384MB"}).
-If \code{NULL}, an internal heuristic (~80\% of RAM) is used.}
 
 \item{min_sites}{Minimum number of distinct modification sites (e.g., CpGs)
 required per sample within a window. Windows where any sample has fewer
@@ -93,9 +82,6 @@ for the likelihood-ratio test are fetched (per-sample read counts and modificati
 counts). On datasets with many loci or many samples, \code{beta_bin} can still consume
 substantial RAM; consider \code{fast_fisher} or \code{wilcox} on memory-constrained
 hardware.
-
-Resource pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}) are set
-via internal heuristics unless overridden.
 }
 \examples{
 \dontrun{

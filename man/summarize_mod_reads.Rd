@@ -11,9 +11,6 @@ summarize_mod_reads(
   regions_table = NULL,
   min_length = 100,
   min_CGs = 5,
-  temp_dir = tempdir(),
-  threads = NULL,
-  memory_limit = NULL,
   input_calls_table = NULL,
   output_reads_table = NULL
 )
@@ -36,14 +33,6 @@ genomic regions to filter reads by. Must include columns: \code{chrom},
 \item{min_length}{An integer specifying the the minimum read_length.}
 
 \item{min_CGs}{An integer specifying the minimum number of CG sites required for a read to be included in the summary.}
-
-\item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
-
-\item{threads}{Integer DuckDB thread count. If \code{NULL}, an internal heuristic
-(typically all-but-one core) is used.}
-
-\item{memory_limit}{DuckDB memory limit string (e.g. \code{"16384MB"}).
-If \code{NULL}, an internal heuristic (~80\% of RAM) is used.}
 
 \item{input_calls_table}{Deprecated. Use \code{input_table} instead.}
 

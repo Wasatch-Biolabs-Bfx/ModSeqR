@@ -18,11 +18,6 @@
 #'   \code{start}, \code{end}.
 #' @param min_length An integer specifying the the minimum read_length.
 #' @param min_CGs An integer specifying the minimum number of CG sites required for a read to be included in the summary.
-#' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
-#' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic
-#'   (typically all-but-one core) is used.
-#' @param memory_limit DuckDB memory limit string (e.g. \code{"16384MB"}).
-#'   If \code{NULL}, an internal heuristic (~80\% of RAM) is used.
 #' @param input_calls_table Deprecated. Use \code{input_table} instead.
 #' @param output_reads_table Deprecated. Use \code{output_table} instead.
 #'
@@ -56,9 +51,6 @@ summarize_mod_reads <- function(mod_db,
                                 regions_table = NULL,
                                 min_length = 100,
                                 min_CGs = 5,
-                                temp_dir = tempdir(),
-                                threads = NULL,
-                                memory_limit = NULL,
                                 input_calls_table = NULL,
                                 output_reads_table = NULL)
 {
@@ -75,14 +67,6 @@ summarize_mod_reads <- function(mod_db,
 
   # Open the database connection
   mod_db <- .modhelper_connectDB(mod_db)
-
-  caps <- .auto_duckdb_resource_caps(0.80)
-  thr  <- if (is.null(threads)) caps$threads else as.integer(threads)
-  mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
-  dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA temp_directory='%s';", temp_dir))
-  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA memory_limit='%s';", mem))
-  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA threads=%d;", thr))
 
   # Check required columns in input table
   .modhelper_check_cols(.get_con(mod_db), input_table, c("read_id", "sample_name", "chrom", "start", "end"))

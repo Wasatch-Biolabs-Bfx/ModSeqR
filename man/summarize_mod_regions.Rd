@@ -17,9 +17,6 @@ summarize_mod_regions(
   unmod_label = "c",
   min_num_calls = 1,
   batch_size = NULL,
-  temp_dir = tempdir(),
-  threads = NULL,
-  memory_limit = NULL,
   overwrite = TRUE
 )
 }
@@ -59,14 +56,6 @@ all samples present in \code{input_table} are processed.}
 processes one chromosome at a time (positions and annotation), issuing a
 \code{CHECKPOINT} after each sample, so manual batching is unnecessary.}
 
-\item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
-
-\item{threads}{Integer DuckDB thread count. If \code{NULL}, an internal heuristic
-(typically all-but-one core) is used.}
-
-\item{memory_limit}{DuckDB memory limit string (e.g. \code{"16384MB"}).
-If \code{NULL}, an internal heuristic (~80\% of RAM) is used.}
-
 \item{overwrite}{If \code{TRUE} and \code{output_table} exists, it is dropped before writing.}
 }
 \value{
@@ -96,7 +85,6 @@ The function:
   \item Reads \code{region_file} (CSV/TSV/BED) and normalizes columns. If \code{region_name}
         is absent, it is synthesized. Basic chromosome-prefix harmonization is performed when
         DB positions and annotation disagree on presence of a \code{"chr"} prefix.
-  \item Configures DuckDB pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}).
   \item For each sample, iterates chromosome by chromosome: aggregates positions into a
         persistent staging table (not a temporary table, so DuckDB can page it to disk),
         then immediately joins to the annotation for that chromosome and inserts results

@@ -15,9 +15,6 @@ summarize_mod_positions(
   unmod_label = "c",
   min_num_calls = 1,
   batch_size = NULL,
-  temp_dir = tempdir(),
-  threads = NULL,
-  memory_limit = NULL,
   overwrite = TRUE
 )
 }
@@ -51,14 +48,6 @@ Default: \code{c("m","h","m + h")}.}
 inserts directly per chromosome and issues a \code{CHECKPOINT} after each
 sample, making row-level batching unnecessary.}
 
-\item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
-
-\item{threads}{Integer DuckDB thread count. If \code{NULL}, uses an internal heuristic
-(typically all-but-one core).}
-
-\item{memory_limit}{DuckDB memory limit string (e.g., \code{"16384MB"}). If \code{NULL},
-an internal heuristic (~80\% of RAM) is used.}
-
 \item{overwrite}{If \code{TRUE} and \code{output_table} exists, it is dropped before writing.}
 }
 \value{
@@ -82,7 +71,6 @@ user-defined modification codes and/or combinations (e.g., \code{"m"}, \code{"h"
 \details{
 The function:
 \enumerate{
-  \item Opens a DB connection and configures DuckDB pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}).
   \item Determines the list of samples to process (all by default, or the intersection with \code{samples}).
   \item For each sample, iterates chromosome by chromosome and inserts directly
         into \code{output_table} using a single CTE that aggregates per position

@@ -36,11 +36,6 @@
 #' @param batch_size Ignored. Kept for backward compatibility. The function now
 #'   processes one chromosome at a time and issues a \code{CHECKPOINT} after each,
 #'   so manual batching is unnecessary.
-#' @param temp_dir Directory for DuckDB temporary files (default \code{tempdir()}).
-#' @param threads Integer DuckDB thread count. If \code{NULL}, an internal heuristic
-#'   (typically all-but-one core) is used.
-#' @param memory_limit DuckDB memory limit string (e.g. \code{"16384MB"}).
-#'   If \code{NULL}, an internal heuristic (~80\% of RAM) is used.
 #' @param overwrite If \code{TRUE} and \code{output_table} exists, it is dropped before writing.
 #'
 #' @details
@@ -55,8 +50,6 @@
 #'         \code{CHECKPOINT} to flush completed work to disk before moving on.
 #' }
 #' Window assignment uses: \deqn{win\_start = start - ((start - offset) \bmod window\_size).}
-#' Resource pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}) are set
-#' via internal heuristics unless overridden.
 #'
 #' @return (Invisibly) a \code{"mod_db"} object pointing to the same DB file with
 #'   \code{current_table} set to \code{output_table}. The created table has columns:
@@ -114,23 +107,10 @@ summarize_mod_windows <- function(mod_db,
                                   unmod_label = "c",
                                   min_num_calls = 1,
                                   batch_size = NULL,
-                                  temp_dir = tempdir(),
-                                  threads = NULL,             # default: all-but-one
-                                  memory_limit = NULL,        # default: ~80% RAM
                                   overwrite = TRUE)
 {
   start_time <- Sys.time()
   mod_db <- ModSeqR:::.modhelper_connectDB(mod_db)
-  
-  # Resource caps
-  caps <- .auto_duckdb_resource_caps(0.80)
-  thr  <- if (is.null(threads)) caps$threads else threads
-  mem  <- if (is.null(memory_limit)) caps$memory_limit else memory_limit
-  
-  dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
-  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA temp_directory='%s';", temp_dir))
-  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA memory_limit='%s';", mem))
-  DBI::dbExecute(.get_con(mod_db), sprintf("PRAGMA threads=%d;", thr))
   
   in_id  <- as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), input_table))
   out_id <- as.character(DBI::dbQuoteIdentifier(.get_con(mod_db), output_table))

@@ -17,9 +17,6 @@ summarize_mod_windows(
   unmod_label = "c",
   min_num_calls = 1,
   batch_size = NULL,
-  temp_dir = tempdir(),
-  threads = NULL,
-  memory_limit = NULL,
   overwrite = TRUE
 )
 }
@@ -57,14 +54,6 @@ all samples present in \code{input_table} are processed.}
 processes one chromosome at a time and issues a \code{CHECKPOINT} after each,
 so manual batching is unnecessary.}
 
-\item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
-
-\item{threads}{Integer DuckDB thread count. If \code{NULL}, an internal heuristic
-(typically all-but-one core) is used.}
-
-\item{memory_limit}{DuckDB memory limit string (e.g. \code{"16384MB"}).
-If \code{NULL}, an internal heuristic (~80\% of RAM) is used.}
-
 \item{overwrite}{If \code{TRUE} and \code{output_table} exists, it is dropped before writing.}
 }
 \value{
@@ -99,8 +88,6 @@ The function processes one chromosome at a time. For each chromosome it:
         \code{CHECKPOINT} to flush completed work to disk before moving on.
 }
 Window assignment uses: \deqn{win\_start = start - ((start - offset) \bmod window\_size).}
-Resource pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}) are set
-via internal heuristics unless overridden.
 }
 \section{How modification codes work}{
 
