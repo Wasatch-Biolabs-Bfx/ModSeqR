@@ -39,12 +39,15 @@ Default is "mh" for methylation/hydroxymethylation. Other codes include
   Bare numeric codes are automatically prefixed with "m_".}
 
 \item{calc_type}{A string specifying the statistical method to use.
-Options: "wilcox", "beta_bin", "fast_fisher", "r_fisher", "log_reg".
-Default is NULL, in which case:
+Options: \code{"wilcox"}, \code{"beta_bin"}, \code{"fast_fisher"}, \code{"r_fisher"},
+\code{"log_reg"}. Default is \code{NULL}, in which case:
 \itemize{
-  \item "wilcox" if both groups have >= 5 samples
-  \item "fast_fisher" if either group has fewer than 5 samples
-}}
+  \item \code{"wilcox"} if both groups have >= 5 samples
+  \item \code{"fast_fisher"} if either group has fewer than 5 samples
+}
+All methods except \code{"beta_bin"} run entirely in DuckDB and do not load
+locus-level data into R. \code{"beta_bin"} collects data into R one chromosome
+at a time; avoid it on memory-constrained hardware with large datasets.}
 
 \item{temp_dir}{Directory for DuckDB temporary files (default \code{tempdir()}).}
 
@@ -78,13 +81,21 @@ The results are stored in a DuckDB database for further analysis.
 \details{
 The function connects to the specified DuckDB database, retrieves methylation data from
 \code{input_table}, and summarizes it for cases and controls. For SQL-backed calc types
-(\code{fast_fisher}, \code{r_fisher}, \code{log_reg}), the statistical results are written
-directly from DuckDB to the output table without passing through R memory. BH p-value
-adjustment and final sorting are performed entirely in DuckDB using window functions.
-For R-backed calc types (\code{wilcox}, \code{beta_bin}), per-locus tests require
-collecting data into R, then writing results back to the database before the SQL-side BH
-step. Resource pragmas (\code{temp_directory}, \code{threads},
-\code{memory_limit}) are set via internal heuristics unless overridden.
+(\code{fast_fisher}, \code{r_fisher}, \code{log_reg}, \code{wilcox}), all computation
+stays inside DuckDB and no locus-level data enters R memory. BH p-value adjustment and
+final sorting are also performed entirely in DuckDB using window functions.
+
+\strong{Memory warning:} \code{beta_bin} is the only method that collects data into R,
+because it requires \code{stats::optim()} for maximum-likelihood fitting of the
+beta-binomial model — an iterative algorithm with no SQL equivalent. To limit peak
+memory usage, data are pulled one chromosome at a time and only the columns required
+for the likelihood-ratio test are fetched (per-sample read counts and modification
+counts). On datasets with many loci or many samples, \code{beta_bin} can still consume
+substantial RAM; consider \code{fast_fisher} or \code{wilcox} on memory-constrained
+hardware.
+
+Resource pragmas (\code{temp_directory}, \code{threads}, \code{memory_limit}) are set
+via internal heuristics unless overridden.
 }
 \examples{
 \dontrun{

@@ -2,26 +2,21 @@
 % Please edit documentation in R/modhelper_connectDB.R
 \name{.modhelper_connectDB}
 \alias{.modhelper_connectDB}
-\title{Connect to a Database}
+\title{Connect to a Database (internal)}
 \usage{
 .modhelper_connectDB(mod_db)
 }
 \arguments{
-\item{mod_db}{A character string representing the file path to the DuckDB database or an object of class `mod_db`.}
+\item{mod_db}{An object of class \code{mod_db}.}
 }
 \value{
-A database connection object.
+The same \code{mod_db} object with a live connection in
+  \code{.conn_env$con}.
 }
 \description{
-This internal function establishes a connection to a DuckDB database. It can handle both a character file name 
-or an object of class `mod_db` to open the database.
-}
-\details{
-This function checks the class of `mod_db` and attempts to connect to the database. If `mod_db` is a character string, 
-it will create an object of class `mod_db`. If `mod_db` is already of class `mod_db`, it will directly establish a 
-connection to the database.
-}
-\note{
-This function is intended for internal use within the package.
+Ensures that \code{mod_db} has an open DuckDB connection. If the connection
+is already live it is reused; otherwise one is opened lazily. Bare character
+strings are no longer accepted — callers must pass a \code{mod_db} object
+created by \code{make_mod_db()} or \code{connect_mod_db()}.
 }
 \keyword{internal}

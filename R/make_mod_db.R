@@ -115,8 +115,7 @@
 #' \code{\link{get_mod_dbinfo}}, \code{\link{get_mod_tableinfo}},
 #' \code{\link{calc_mod_diff}}
 #'
-#' @importFrom DBI dbConnect dbDisconnect dbExecute dbListTables dbWriteTable
-#'   dbQuoteIdentifier dbGetQuery
+#' @importFrom DBI dbConnect dbDisconnect dbExecute dbListTables dbWriteTable dbQuoteIdentifier dbGetQuery
 #' @importFrom duckdb duckdb
 #' @importFrom glue glue
 #' @importFrom parallel detectCores

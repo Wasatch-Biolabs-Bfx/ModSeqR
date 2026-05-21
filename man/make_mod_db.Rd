@@ -14,6 +14,7 @@ make_mod_db(
   flag = NULL,
   threads = NULL,
   memory_limit = NULL,
+  temp_dir = NULL,
   batch_size = NULL
 )
 }
@@ -39,24 +40,24 @@ If \code{NULL}, all chromosomes are included.}
 \item{flag}{Optional numeric flag value to require; if \code{NULL}, no flag filter.}
 
 \item{threads}{Integer DuckDB thread count. If \code{NULL}, an internal heuristic
-(typically all-but-one core) is used.}
+(all-but-one core) is used.}
 
 \item{memory_limit}{DuckDB memory limit string (e.g. \code{"16384MB"}).
-If \code{NULL}, an internal heuristic (~50\% of RAM) is used.}
+If \code{NULL}, an internal heuristic (~75\% of detected RAM) is used.}
+
+\item{temp_dir}{Directory DuckDB uses for spill-to-disk scratch files.
+If \code{NULL}, a subdirectory of \code{tempdir()} is used.}
 
 \item{batch_size}{Optional integer number of \code{.ch3} files to process per batch.
 If \code{NULL}, all files are processed in one batch.}
 }
 \value{
-(Invisibly) a list of class \code{"mod_db"} with elements:
-  \itemize{
-    \item \code{db_file}: path to the created DuckDB file,
-    \item \code{current_table}: \code{NULL} (set by downstream functions),
-    \item \code{con}: connection is closed by cleanup and set to \code{"none"}.
-  }
-  The database contains at least the \code{calls} table.
-  \code{last_result} is set to a tibble with columns \code{sample_name} and \code{n}
-  (row count per sample in the \code{calls} table).
+(Invisibly) a disconnected \code{mod_db} object with five slots:
+  \code{db_file}, \code{current_table} (\code{"calls"}), \code{last_result}
+  (tibble of row counts per sample), \code{config}, and \code{.conn_env}
+  (connection environment, initially closed). Pass the result to any pipeline
+  function — the connection opens automatically on first use — or call
+  \code{\link{connect_mod_db}()} to open it explicitly.
 }
 \description{
 Build a DuckDB database containing filtered modification call data from one or
@@ -65,13 +66,19 @@ more \code{.ch3} parquet files. Inputs may be individual files, directories
 names are used as \code{sample_name}s in the output.
 }
 \details{
+The function opens a private DuckDB connection for the build, writes the
+\code{calls} table, then closes that connection and returns a
+\emph{disconnected} \code{mod_db} object. The connection is opened lazily
+the first time a pipeline function is called, or explicitly via
+\code{\link{connect_mod_db}()}.
+
+
 \strong{What it does}
 \itemize{
   \item Expands \code{ch3_files} (handling directories and named entries) into a mapping
         of source files and optional \code{sample_name}s.
-  \item Configures DuckDB pragmas for temp directory, thread count (all-but-one core),
-        and a memory limit (~50% of detected RAM), unless \code{threads}/\code{memory_limit}
-        are explicitly provided.
+  \item Configures DuckDB resource limits (memory, threads, temp directory) at
+        connection time so spill-to-disk is active from the first query.
   \item Drops any existing tables in the target DB.
   \item Reads all input \code{.ch3} parquet files in a single pass and creates a
         table \code{calls} with columns:
@@ -86,7 +93,7 @@ names are used as \code{sample_name}s in the output.
 \strong{Side effects and performance}
 \itemize{
   \item Creates (or overwrites) a DuckDB file at \code{db_name}.
-  \item Uses a temp directory for DuckDB spills under \code{tempdir()}.
+  \item Uses a temp directory for DuckDB spills (controlled by \code{temp_dir}).
   \item A temporary in-memory table \code{file_map} may be created for input mapping.
 }
 }
@@ -104,36 +111,42 @@ names are used as \code{sample_name}s in the output.
 \examples{
 \dontrun{
 # 1) Directory of CH3 files (non-recursive scan for *.ch3)
-make_mod_db(ch3_files = "path/to/ch3_dir",
-            db_name   = "my_db")
+mod_db <- make_mod_db(ch3_files = "path/to/ch3_dir",
+                       db_name   = "my_db")
 
 # 2) Explicit files (auto-sample names from stems)
-make_mod_db(ch3_files = c("A.ch3", "B.ch3"),
-            db_name   = "two_samples.mod.db",
-            min_read_length = 100, min_base_qual = 10)
+mod_db <- make_mod_db(ch3_files = c("A.ch3", "B.ch3"),
+                       db_name   = "two_samples.mod.db",
+                       min_read_length = 100, min_base_qual = 10)
 
 # 3) Named inputs (sample_name set from names)
-make_mod_db(
+mod_db <- make_mod_db(
   ch3_files = c(
-    Sample1      = "../CH3/Sample1.ch3",
-    Sample2  = "../CH3/Sample2.ch3"
+    Sample1 = "../CH3/Sample1.ch3",
+    Sample2 = "../CH3/Sample2.ch3"
   ),
   db_name = "My_DB",
   min_base_qual = 10,
   min_read_length = 100
 )
 
-# 4) Filter to specific chromosomes
-make_mod_db(
-  ch3_files = c(S1 = "A.mod", S2 = "B.mod"),
-  db_name   = "chr1_chrX_only",
-  chrom     = c("chr1","chrX")
+# 4) Filter to specific chromosomes, explicit resource caps
+mod_db <- make_mod_db(
+  ch3_files    = c(S1 = "A.ch3", S2 = "B.ch3"),
+  db_name      = "chr1_chrX_only",
+  chrom        = c("chr1","chrX"),
+  memory_limit = "32GB",
+  threads      = 8
 )
+
+# 5) Connect to the same database later in a new session
+mod_db <- connect_mod_db("My_DB.mod.db")
 }
 
 }
 \seealso{
-\code{\link{summarize_mod_positions}}, \code{\link{summarize_mod_regions}},
-\code{\link{summarize_mod_windows}}, \code{\link{get_mod_dbinfo}},
-\code{\link{get_mod_tableinfo}}, \code{\link{calc_mod_diff}}
+\code{\link{connect_mod_db}}, \code{\link{summarize_mod_positions}},
+\code{\link{summarize_mod_regions}}, \code{\link{summarize_mod_windows}},
+\code{\link{get_mod_dbinfo}}, \code{\link{get_mod_tableinfo}},
+\code{\link{calc_mod_diff}}
 }

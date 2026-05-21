@@ -26,7 +26,7 @@ Database file:
 Current table:
   mod_diff_windows
 Connection:
-  NULL
+  persistent (open)
 Last result: <matrix> [6 x 6]
 }
 
