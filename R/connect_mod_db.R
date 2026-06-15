@@ -175,10 +175,13 @@ disconnect_mod_db <- function(mod_db)
 .resolve_duckdb_config <- function(user_cfg) {
   caps     <- .auto_duckdb_resource_caps(0.75)
   tmp_path <- file.path(tempdir(), "modseqr_duckdb_tmp")
-  dir.create(tmp_path, recursive = TRUE, showWarnings = FALSE)
+  # Resolve the spill directory (a user-supplied temp_dir wins) and ensure it
+  # exists, so pointing DuckDB at a roomier volume works without a manual mkdir.
+  temp_directory <- user_cfg$temp_dir %||% tmp_path
+  dir.create(temp_directory, recursive = TRUE, showWarnings = FALSE)
   list(
     memory_limit   = user_cfg$memory_limit %||% caps$memory_limit,
-    temp_directory = user_cfg$temp_dir     %||% tmp_path,
+    temp_directory = temp_directory,
     threads        = as.character(user_cfg$threads %||% caps$threads)
   )
 }

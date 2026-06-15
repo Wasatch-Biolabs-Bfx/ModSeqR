@@ -262,7 +262,7 @@ test_that("calc_mod_diff beta_bin produces valid p-values and correct directions
   expect_gt(out$meth_diff[1], 0)
 })
 
-test_that("beta_bin collects only needed columns and batches by chromosome", {
+test_that("beta_bin (single slice) prunes unneeded columns and returns one row per locus", {
   skip_if_not_installed("duckdb")
   skip_if_not_installed("dplyr")
   skip_if_not_installed("dbplyr")
@@ -292,7 +292,11 @@ test_that("beta_bin collects only needed columns and batches by chromosome", {
   DBI::dbWriteTable(con, "test_in", dat)
   in_dat <- dplyr::tbl(con, "test_in")
 
-  res <- suppressWarnings(ModSeqR:::.calc_diff_betabin(in_dat))
+  # .calc_diff_betabin now processes a single (already chrom-filtered) slice;
+  # the chromosome loop lives in .calc_diff_stream_by_chrom (tested separately).
+  res <- suppressWarnings(
+    ModSeqR:::.calc_diff_betabin(in_dat, group_vars = c("chrom", "start", "end"))
+  )
 
   # One row per locus, three loci
   expect_equal(nrow(res), 3)
@@ -302,6 +306,68 @@ test_that("beta_bin collects only needed columns and batches by chromosome", {
 
   # All three chromosomes present
   expect_setequal(res$chrom, c("chr1", "chr2", "chr3"))
+})
+
+# ---- per-chromosome streaming (.calc_diff_stream_by_chrom) ---------------
+
+test_that("fast_fisher streams per chromosome and matches a direct Fisher computation", {
+  skip_if_not_installed("duckdb")
+  skip_if_not_installed("dplyr")
+
+  tmpdir <- withr::local_tempdir()
+  dbfile <- file.path(tmpdir, "test.mod.db")
+  con    <- DBI::dbConnect(duckdb::duckdb(dbfile))
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+
+  set.seed(11)
+  cases    <- paste0("case", 1:4)
+  controls <- paste0("ctrl", 1:4)
+  samps    <- c(cases, controls)
+  grid <- expand.grid(chrom = c("chr1", "chr2", "chr3"),
+                      start = c(100L, 200L),
+                      sample_name = samps, stringsAsFactors = FALSE)
+  grid$end       <- grid$start + 1L
+  grid$num_sites <- 5L
+  grid$num_calls <- sample(20:40, nrow(grid), replace = TRUE)
+  grid$m_counts  <- mapply(function(n) sample(0:n, 1), grid$num_calls)
+  DBI::dbWriteTable(con, "windows", grid)
+  mod_db_obj <- .make_mod_db(con, dbfile)
+
+  testthat::with_mocked_bindings(.package = "ModSeqR",
+    .modhelper_connectDB = function(x) x,
+    .modhelper_cleanup   = function(x) x,
+    calc_mod_diff(mod_db_obj, "windows", output_table = "diff",
+                 cases = cases, controls = controls,
+                 mod_type = "m", calc_type = "fast_fisher")
+  )
+
+  out <- dplyr::tbl(con, "diff") |> dplyr::arrange(chrom, start) |> dplyr::collect()
+
+  # One row per locus, every chromosome streamed in
+  expect_equal(nrow(out), nrow(unique(grid[, c("chrom", "start")])))
+  expect_setequal(unique(out$chrom), c("chr1", "chr2", "chr3"))
+
+  # Exact match to a direct vectorized fast_fisher (per-chrom streaming must
+  # not change any p-value: each locus is fully contained in one chromosome).
+  ff <- function(q, m, n, k) {
+    dh <- 0.5 * dhyper(q, m, n, k)
+    pr <- phyper(q, m, n, k, lower.tail = FALSE) + dh
+    pl <- phyper(q - 1, m, n, k, lower.tail = TRUE) + dh
+    pmin(pr, pl) * 2
+  }
+  expdf <- grid |>
+    dplyr::mutate(grp = ifelse(sample_name %in% cases, "case", "control")) |>
+    dplyr::group_by(chrom, start) |>
+    dplyr::summarise(nc_case = sum(num_calls[grp == "case"]),
+                     nc_ctrl = sum(num_calls[grp == "control"]),
+                     m_case  = sum(m_counts[grp == "case"]),
+                     m_ctrl  = sum(m_counts[grp == "control"]),
+                     .groups = "drop") |>
+    dplyr::mutate(exp_p = ff(m_case, m_case + m_ctrl,
+                             (nc_case - m_case) + (nc_ctrl - m_ctrl), nc_case)) |>
+    dplyr::arrange(chrom, start)
+
+  expect_equal(out$p_val, expdf$exp_p, tolerance = 1e-12)
 })
 
 # ---- calc_mod_diff: log_reg ----------------------------------------------

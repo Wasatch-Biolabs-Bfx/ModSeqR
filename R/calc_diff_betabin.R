@@ -226,17 +226,13 @@
 # ===========================================================================
 # Main entry point: .calc_diff_betabin()
 #
-# Matches the signature pattern of .calc_diff_wilcox / .calc_diff_fisher
-# so it integrates directly into calc_mod_diff()'s switch() statement.
+# Called once per chromosome by .calc_diff_stream_by_chrom() (in calc_mod_diff.R),
+# which handles the chromosome loop and streams each chromosome's result to the
+# output table. This function processes the single (already chrom-filtered) slice
+# it is handed and returns a locus-level data.frame.
 # ===========================================================================
-.calc_diff_betabin <- function(in_dat)
+.calc_diff_betabin <- function(in_dat, group_vars)
 {
-  # Determine grouping columns without collecting any data
-  group_vars <- setdiff(
-    colnames(in_dat),
-    c("sample_name", "exp_group", "num_calls", "mod_counts", "num_sites")
-  )
-
   # Only pull the columns the LRT actually needs — skip all pre-computed
   # fraction/count columns that may be wide in position/window tables.
   needed <- c(group_vars, "sample_name", "exp_group", "num_calls", "mod_counts")
@@ -284,20 +280,7 @@
       )
   }
 
-  # If chrom is a grouping column, process one chromosome at a time so only
-  # one chromosome's rows are in R memory at once.
-  if ("chrom" %in% group_vars) {
-    chroms <- dplyr::pull(dplyr::distinct(dplyr::select(slim, chrom)))
-
-    chunks <- lapply(chroms, function(chr) {
-      slim |>
-        dplyr::filter(chrom == chr) |>
-        dplyr::collect() |>
-        .run_lrt()
-    })
-
-    do.call(rbind, chunks)
-  } else {
-    dplyr::collect(slim) |> .run_lrt()
-  }
+  dat <- dplyr::collect(slim)
+  if (nrow(dat) == 0) return(data.frame())
+  .run_lrt(dat)
 }

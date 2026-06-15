@@ -21,9 +21,12 @@
 #'     \item \code{"wilcox"} if both groups have >= 5 samples
 #'     \item \code{"fast_fisher"} if either group has fewer than 5 samples
 #'   }
-#'   All methods except \code{"beta_bin"} run entirely in DuckDB and do not load
-#'   locus-level data into R. \code{"beta_bin"} collects data into R one chromosome
-#'   at a time; avoid it on memory-constrained hardware with large datasets.
+#'   \code{"wilcox"} runs entirely in DuckDB and never loads locus-level data
+#'   into R. \code{"fast_fisher"}, \code{"r_fisher"}, \code{"log_reg"}, and
+#'   \code{"beta_bin"} require R for their per-locus statistics and so collect
+#'   data, but they do so \strong{one chromosome at a time}, streaming each
+#'   chromosome's results to the output table before the next chromosome is read,
+#'   so peak R memory is bounded to a single chromosome rather than the whole genome.
 #' @param min_sites Minimum number of distinct modification sites (e.g., CpGs)
 #'   required per sample within a window. Windows where any sample has fewer
 #'   than this many sites with calls are dropped before testing. This filters
@@ -35,19 +38,18 @@
 #'
 #' @details
 #' The function connects to the specified DuckDB database, retrieves methylation data from
-#' \code{input_table}, and summarizes it for cases and controls. For SQL-backed calc types
-#' (\code{fast_fisher}, \code{r_fisher}, \code{log_reg}, \code{wilcox}), all computation
-#' stays inside DuckDB and no locus-level data enters R memory. BH p-value adjustment and
-#' final sorting are also performed entirely in DuckDB using window functions.
+#' \code{input_table}, and summarizes it for cases and controls. \code{wilcox} runs
+#' entirely inside DuckDB (no locus-level data enters R). \code{fast_fisher},
+#' \code{r_fisher}, \code{log_reg}, and \code{beta_bin} compute their per-locus statistics
+#' in R, but are processed \strong{one chromosome at a time} (see
+#' \code{.calc_diff_stream_by_chrom}): each chromosome is aggregated/collected, tested, and
+#' its results streamed to the output table before the next chromosome is read, so only one
+#' chromosome ever resides in R. BH p-value adjustment and final sorting are performed
+#' entirely in DuckDB using window functions.
 #'
-#' \strong{Memory warning:} \code{beta_bin} is the only method that collects data into R,
-#' because it requires \code{stats::optim()} for maximum-likelihood fitting of the
-#' beta-binomial model — an iterative algorithm with no SQL equivalent. To limit peak
-#' memory usage, data are pulled one chromosome at a time and only the columns required
-#' for the likelihood-ratio test are fetched (per-sample read counts and modification
-#' counts). On datasets with many loci or many samples, \code{beta_bin} can still consume
-#' substantial RAM; consider \code{fast_fisher} or \code{wilcox} on memory-constrained
-#' hardware.
+#' \strong{Memory note:} per-chromosome streaming bounds peak R memory to the largest
+#' single chromosome. On datasets with very many samples or loci, \code{wilcox} remains the
+#' cheapest option since it never leaves DuckDB.
 #'
 #' @return Invisibly returns the updated \code{"mod_db"} object with \code{current_table} set to
 #'   the output table name and \code{last_result} set to a data frame preview (head) of the result
@@ -240,27 +242,30 @@ calc_mod_diff <- function(mod_db,
 
   message("Running differential analysis...\n")
 
-  # Compute p-values / diffs
-  result <- switch(calc_type,
-                   wilcox      = .calc_diff_wilcox(in_dat),
-                   beta_bin    = .calc_diff_betabin(in_dat),
-                   fast_fisher = .calc_diff_fisher(in_dat, calc_type = "fast_fisher"),
-                   r_fisher    = .calc_diff_fisher(in_dat, calc_type = "r_fisher"),
-                   log_reg     = .calc_diff_logreg(in_dat),
-                   stop("Unknown calc_type: ", calc_type,
-                        ". Use 'beta_bin', 'fast_fisher', 'r_fisher', 'wilcox', or 'log_reg'.")
-  ) |>
-    dplyr::rename_with(~ gsub("^mod", mod_type, .x))
+  con <- .get_con(mod_db)
 
-  # Write raw results to the output table.
-  # For SQL-backed calc types (fast_fisher, r_fisher, log_reg), result is a lazy
-  # DuckDB reference: render and execute directly — no R memory involved.
-  # For R-backed calc types (wilcox, beta_bin), result is already a local tibble.
-  if (inherits(result, "tbl_lazy")) {
+  # Compute p-values / diffs and populate `mod_diff_table`.
+  #   * wilcox stays fully lazy in DuckDB: render its query straight into the
+  #     table -- no locus-level data ever enters R.
+  #   * fast_fisher / r_fisher / beta_bin / log_reg need R for their per-locus
+  #     statistics, so they are streamed one chromosome at a time via
+  #     .calc_diff_stream_by_chrom(), which writes each chromosome's results to
+  #     the table before reading the next (peak R memory = one chromosome).
+  if (identical(calc_type, "wilcox")) {
+    result <- .calc_diff_wilcox(in_dat) |>
+      dplyr::rename_with(~ gsub("^mod", mod_type, .x))
     raw_sql <- as.character(dbplyr::sql_render(result))
-    DBI::dbExecute(.get_con(mod_db), sprintf("CREATE TABLE %s AS %s", mod_diff_table, raw_sql))
+    DBI::dbExecute(con, sprintf("CREATE TABLE %s AS %s", mod_diff_table, raw_sql))
   } else {
-    DBI::dbWriteTable(.get_con(mod_db), mod_diff_table, as.data.frame(result))
+    per_chrom_fun <- switch(calc_type,
+      fast_fisher = function(slice, gv) .calc_diff_fisher(slice, gv, calc_type = "fast_fisher"),
+      r_fisher    = function(slice, gv) .calc_diff_fisher(slice, gv, calc_type = "r_fisher"),
+      beta_bin    = function(slice, gv) .calc_diff_betabin(slice, gv),
+      log_reg     = function(slice, gv) .calc_diff_logreg(slice, gv),
+      stop("Unknown calc_type: ", calc_type,
+           ". Use 'beta_bin', 'fast_fisher', 'r_fisher', 'wilcox', or 'log_reg'.")
+    )
+    .calc_diff_stream_by_chrom(in_dat, con, mod_diff_table, mod_type, per_chrom_fun)
   }
 
   # Compute BH-adjusted p-values entirely in DuckDB using window functions.
@@ -324,6 +329,49 @@ calc_mod_diff <- function(mod_db,
   invisible(mod_db)
 }
 
+
+
+## Stream an R-backed differential test one chromosome at a time.
+##
+## For calc types that must compute their per-locus statistic in R
+## (fast_fisher, r_fisher, beta_bin, log_reg), this iterates over the
+## chromosomes present in `in_dat`, hands each chromosome's lazy slice to
+## `per_chrom_fun(slice, group_vars)` (which returns a locus-level data.frame),
+## applies the mod_type column rename, and appends that chromosome's rows
+## straight into `out_table` before moving on. Only one chromosome's data is
+## ever materialized in R, and the full result never accumulates in memory.
+##
+## If `in_dat` has no `chrom` grouping column (it always does for positions /
+## windows / regions tables), the whole table is processed as a single chunk.
+.calc_diff_stream_by_chrom <- function(in_dat, con, out_table, mod_type, per_chrom_fun)
+{
+  group_vars <- setdiff(colnames(in_dat),
+                        c("sample_name", "exp_group", "num_calls", "mod_counts", "num_sites"))
+
+  if ("chrom" %in% group_vars) {
+    chroms <- in_dat |> dplyr::distinct(chrom) |> dplyr::pull(chrom)
+  } else {
+    chroms <- NA_character_   # single pass over the whole table
+  }
+
+  wrote_any <- FALSE
+  for (chr in chroms) {
+    slice <- if (is.na(chr)) in_dat else dplyr::filter(in_dat, chrom == chr)
+
+    res <- per_chrom_fun(slice, group_vars)
+    if (is.null(res) || nrow(res) == 0) next
+
+    res <- dplyr::rename_with(res, ~ gsub("^mod", mod_type, .x))
+    DBI::dbWriteTable(con, out_table, as.data.frame(res), append = wrote_any)
+    wrote_any <- TRUE
+  }
+
+  if (!wrote_any) {
+    stop("calc_mod_diff(): no loci had calls in both groups (or all were ",
+         "removed by filtering). Nothing was written to '", out_table, "'.")
+  }
+  invisible(out_table)
+}
 
 
 ## Calculate p-values using Wilcoxon rank-sum test, fully in DuckDB SQL.
@@ -460,17 +508,14 @@ calc_mod_diff <- function(mod_db,
 }
 
 
-## Calculate p-values using Fisher exact test.
-## Runs a single SQL conditional aggregation over the full dataset (no pivot_wider,
-## no per-chromosome loop). Collects the compact result into R — one row per locus,
-## already pivoted — then runs vectorized Fisher and returns a data frame.
-## DuckDB's connection-time spill-to-disk config handles datasets where the
-## aggregated result is larger than available RAM.
-.calc_diff_fisher <- function(in_dat, calc_type)
+## Calculate p-values using Fisher exact test, for one chromosome's slice.
+## Called once per chromosome by .calc_diff_stream_by_chrom(). Runs a single SQL
+## conditional aggregation over the slice (one row per locus, already pivoted),
+## collects that compact result into R, runs vectorized Fisher, and returns a
+## data frame. Peak R memory is bounded to a single chromosome's loci.
+.calc_diff_fisher <- function(in_dat, group_vars, calc_type)
 {
-  con        <- dbplyr::remote_con(in_dat)
-  group_vars <- setdiff(colnames(in_dat),
-                        c("sample_name", "exp_group", "num_calls", "mod_counts", "num_sites"))
+  con <- dbplyr::remote_con(in_dat)
 
   qi <- function(nms) paste(
     vapply(nms, function(nm) as.character(DBI::dbQuoteIdentifier(con, nm)), character(1)),
@@ -570,15 +615,14 @@ calc_mod_diff <- function(mod_db,
 }
 
 
-.calc_diff_logreg <- function(in_dat)
+.calc_diff_logreg <- function(in_dat, group_vars)
 {
-  group_vars <- setdiff(colnames(in_dat),
-                        c("sample_name", "exp_group", "num_calls", "mod_counts", "num_sites"))
-
   dat <- in_dat |>
     dplyr::select(dplyr::any_of(c(group_vars, "sample_name", "exp_group",
                                   "num_calls", "mod_counts"))) |>
     dplyr::collect()
+
+  if (nrow(dat) == 0) return(data.frame())
 
   dat |>
     dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
