@@ -1,3 +1,36 @@
+# ModSeqR v1.3.0 Release Notes
+
+---
+
+## New statistical methods (calc_mod_diff)
+
+- **`calc_type = "welch_t"`** — Welch's (unequal-variance) t-test on per-sample
+  modification fractions, computed entirely in DuckDB. Per-sample (no
+  pseudoreplication); the t statistic is mapped to a normal deviate via the
+  Wallace approximation. Validated against `t.test` (cor 1.000, max |Δp| ~3e-4).
+- **`calc_type = "prop_z"`** — pooled two-proportion z / chi-square test, fully
+  in DuckDB. Fast; pooled, so it shares Fisher's read-as-observation caveat.
+  Matches `chisq.test(correct = FALSE)` to ~1e-5.
+- **`calc_type = "quasi_bin"`** — closed-form, fully-in-DuckDB overdispersion-
+  corrected proportion test (quasi-likelihood / Rao-Scott): a pooled-count z
+  deflated by sqrt(Pearson dispersion, floored at 1). Approximates the exact
+  `beta_bin` LRT without per-locus optimisation (cor ~0.99 with `beta_bin` on
+  test data); use it as a fast screen and `beta_bin` for final small-sample
+  inference. Reports the estimated `overdispersion` per locus.
+
+## Parallelism
+
+- **`calc_mod_diff(n_cores = )`** parallelises the R-backed tests (`fast_fisher`,
+  `r_fisher`, `beta_bin`, `log_reg`) across cores. Because this DuckDB build
+  locks a `.mod.db` exclusively even for read-only access, the parent exports the
+  labelled input to a chromosome-partitioned Parquet dataset (one scan) and each
+  PSOCK worker reads one chromosome's partition through its own in-memory DuckDB,
+  tests it, and returns the compact result. Output is identical to the serial
+  path (verified bit-for-bit). Default `n_cores = 1` (serial). The in-DuckDB
+  tests (`wilcox`, `welch_t`, `prop_z`, `quasi_bin`) ignore `n_cores`.
+
+---
+
 # ModSeqR v1.2.3 Release Notes
 
 ---

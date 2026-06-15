@@ -16,18 +16,21 @@
 #'   Bare numeric codes are automatically prefixed with "m_".
 #' @param calc_type A string specifying the statistical method to use.
 #'   Options: \code{"wilcox"}, \code{"beta_bin"}, \code{"fast_fisher"}, \code{"r_fisher"},
-#'   \code{"log_reg"}. Default is \code{NULL}, in which case:
+#'   \code{"log_reg"}, \code{"welch_t"}, \code{"prop_z"}, \code{"quasi_bin"}.
+#'   Default is \code{NULL}, in which case:
 #'   \itemize{
 #'     \item \code{"wilcox"} if both groups have >= 5 samples
 #'     \item \code{"fast_fisher"} if either group has fewer than 5 samples
 #'   }
-#'   All methods are processed \strong{one chromosome at a time}, streaming each
-#'   chromosome's results to the output table before the next chromosome is read,
-#'   so peak memory is bounded to a single chromosome rather than the whole genome.
-#'   \code{"wilcox"} computes its rank-sum entirely in DuckDB and only collects
-#'   the compact per-window result for each chromosome. \code{"fast_fisher"},
-#'   \code{"r_fisher"}, \code{"log_reg"}, and \code{"beta_bin"} require R for their
-#'   per-locus statistics.
+#'   \strong{Fully in DuckDB} (closed form, no R, ignore \code{n_cores}):
+#'   \code{"wilcox"} (rank-sum), \code{"welch_t"} (per-sample Welch t-test),
+#'   \code{"prop_z"} (pooled two-proportion z / chi-square), and \code{"quasi_bin"}
+#'   (overdispersion-corrected proportion test that approximates \code{beta_bin}).
+#'   \strong{R-backed} (per-locus statistics in R, processed one chromosome at a
+#'   time and optionally parallelised with \code{n_cores}): \code{"fast_fisher"},
+#'   \code{"r_fisher"}, \code{"log_reg"}, and \code{"beta_bin"} (exact
+#'   beta-binomial likelihood-ratio test). Peak memory is bounded to a single
+#'   chromosome regardless of method.
 #' @param min_sites Minimum number of distinct modification sites (e.g., CpGs)
 #'   required per sample within a window. Windows where any sample has fewer
 #'   than this many sites with calls are dropped before testing. This filters
@@ -40,6 +43,13 @@
 #'   denominator. Loci where either group has no covered samples are always removed
 #'   (the test is undefined there) regardless of this setting. Default is
 #'   \code{NULL}, which applies only the always-on empty-group removal (min 1 per group).
+#' @param n_cores Number of CPU cores for the R-backed tests (\code{fast_fisher},
+#'   \code{r_fisher}, \code{beta_bin}, \code{log_reg}). When > 1, the genome is
+#'   split into balanced position chunks and tested in parallel via a fork-based
+#'   worker pool (each worker opens its own read-only DuckDB connection; results
+#'   are written by the parent). Default 1 (serial). Ignored by the in-DuckDB
+#'   tests (\code{wilcox}, \code{welch_t}, \code{prop_z}, \code{quasi_bin}).
+#'   Uses \code{parallel::mclapply} (no effect on Windows).
 #' @param overwrite If TRUE and output_table exists, it is dropped before writing.
 #' @param call_type Deprecated. Use \code{input_table} instead.
 #'
@@ -77,6 +87,7 @@
 #'
 #' @importFrom DBI dbConnect dbDisconnect dbExistsTable dbRemoveTable dbExecute dbWriteTable dbGetQuery dbListFields
 #' @importFrom duckdb duckdb
+#' @importFrom parallel makeCluster stopCluster clusterCall parLapply
 #' @importFrom dplyr tbl select any_of mutate case_when filter pull summarize inner_join join_by rename_with collect arrange distinct
 #' @importFrom dbplyr sql_render remote_con
 #' @importFrom glue glue
@@ -93,6 +104,7 @@ calc_mod_diff <- function(mod_db,
                           calc_type = NULL,
                           min_sites = NULL,
                           min_samples = NULL,
+                          n_cores = 1L,
                           overwrite = TRUE,
                           call_type = NULL)
 {
@@ -252,27 +264,52 @@ calc_mod_diff <- function(mod_db,
 
   con <- .get_con(mod_db)
 
-  # Compute p-values / diffs and populate `mod_diff_table` one chromosome at a
-  # time via .calc_diff_stream_by_chrom(), which tests each chromosome and writes
-  # its results to the table before reading the next, so peak memory is bounded
-  # to a single chromosome rather than the whole genome.
-  #   * wilcox computes its rank-sum entirely in DuckDB, but per chromosome: only
-  #     the compact per-window result (one row per locus) is collected into R
-  #     before being appended. Ranking is PARTITION BY the locus group_vars
-  #     (chrom, start, end), so per-chromosome slicing is exactly equivalent to a
-  #     genome-wide pass -- no window spans chromosomes.
-  #   * fast_fisher / r_fisher / beta_bin / log_reg compute their per-locus
-  #     statistic in R, also one chromosome at a time.
-  per_chrom_fun <- switch(calc_type,
-    wilcox      = function(slice, gv) dplyr::collect(.calc_diff_wilcox(slice)),
-    fast_fisher = function(slice, gv) .calc_diff_fisher(slice, gv, calc_type = "fast_fisher"),
-    r_fisher    = function(slice, gv) .calc_diff_fisher(slice, gv, calc_type = "r_fisher"),
-    beta_bin    = function(slice, gv) .calc_diff_betabin(slice, gv),
-    log_reg     = function(slice, gv) .calc_diff_logreg(slice, gv),
-    stop("Unknown calc_type: ", calc_type,
-         ". Use 'beta_bin', 'fast_fisher', 'r_fisher', 'wilcox', or 'log_reg'.")
+  # Fully-in-DuckDB closed-form tests render straight into the table: they are
+  # aggregation-based (GROUP BY locus, no global sort) and need no R round-trip.
+  indb_lazy <- list(
+    welch_t   = .calc_diff_welch_t,
+    prop_z    = .calc_diff_prop_z,
+    quasi_bin = .calc_diff_quasi_bin
   )
-  .calc_diff_stream_by_chrom(in_dat, con, mod_diff_table, mod_type, per_chrom_fun)
+
+  if (calc_type %in% names(indb_lazy)) {
+    result  <- indb_lazy[[calc_type]](in_dat) |>
+      dplyr::rename_with(~ gsub("^mod", mod_type, .x))
+    raw_sql <- as.character(dbplyr::sql_render(result))
+    DBI::dbExecute(con, sprintf("CREATE TABLE %s AS %s", mod_diff_table, raw_sql))
+  } else {
+    # Remaining tests populate `mod_diff_table` one chromosome at a time via
+    # .calc_diff_stream_by_chrom(), so peak memory is bounded to a single
+    # chromosome rather than the whole genome.
+    #   * wilcox computes its rank-sum in DuckDB but per chromosome: only the
+    #     compact per-window result is collected into R before being appended.
+    #     Ranking is PARTITION BY the locus group_vars, so per-chromosome slicing
+    #     is exactly equivalent to a genome-wide pass -- no window spans chroms.
+    #   * fast_fisher / r_fisher / beta_bin / log_reg compute their per-locus
+    #     statistic in R. With n_cores > 1 these are spread across a fork-based
+    #     worker pool (see .calc_diff_stream_parallel); n_cores = 1 runs serially.
+    per_chrom_fun <- switch(calc_type,
+      wilcox      = function(slice, gv) dplyr::collect(.calc_diff_wilcox(slice)),
+      fast_fisher = function(slice, gv) .calc_diff_fisher(slice, gv, calc_type = "fast_fisher"),
+      r_fisher    = function(slice, gv) .calc_diff_fisher(slice, gv, calc_type = "r_fisher"),
+      beta_bin    = function(slice, gv) .calc_diff_betabin(slice, gv),
+      log_reg     = function(slice, gv) .calc_diff_logreg(slice, gv),
+      stop("Unknown calc_type: ", calc_type,
+           ". Use 'beta_bin', 'fast_fisher', 'r_fisher', 'log_reg', 'wilcox', ",
+           "'welch_t', 'prop_z', or 'quasi_bin'.")
+    )
+
+    use_parallel <- !identical(calc_type, "wilcox") &&
+      !is.null(n_cores) && n_cores > 1L
+    if (use_parallel) {
+      .calc_diff_stream_parallel(mod_db, input_table, mod_counts_col,
+                                 cases, controls, min_sites,
+                                 con, mod_diff_table, mod_type,
+                                 calc_type, n_cores)
+    } else {
+      .calc_diff_stream_by_chrom(in_dat, con, mod_diff_table, mod_type, per_chrom_fun)
+    }
+  }
 
   # Coverage filter: drop loci that cannot support a meaningful comparison --
   # either group has no covered samples (num_samples_* is NULL) or fewer than
@@ -412,6 +449,142 @@ calc_mod_diff <- function(mod_db,
          "removed by filtering). Nothing was written to '", out_table, "'.")
   }
   invisible(out_table)
+}
+
+
+## Rebuild the differential input lazy tbl from scratch on a given connection.
+## Mirrors the in_dat construction in calc_mod_diff() (column select, exp_group
+## labelling, optional min_sites filter) so a parallel worker -- which has its
+## own connection and cannot inherit the parent's lazy tbl -- reconstructs an
+## identical view. Kept side-effect free (no messaging).
+.build_diff_in_dat <- function(con, input_table, mod_counts_col, cases, controls, min_sites)
+{
+  cols <- colnames(dplyr::tbl(con, input_table))
+  d <- dplyr::tbl(con, input_table) |>
+    dplyr::select(
+      sample_name,
+      dplyr::any_of(c("region_name", "chrom", "start", "end", "num_sites")),
+      num_calls,
+      mod_counts = dplyr::all_of(mod_counts_col)
+    ) |>
+    dplyr::mutate(
+      exp_group = dplyr::case_when(
+        sample_name %in% cases ~ "case",
+        sample_name %in% controls ~ "control",
+        TRUE ~ NA_character_
+      )
+    ) |>
+    dplyr::filter(!is.na(exp_group))
+
+  if (!is.null(min_sites) && min_sites > 0 && "num_sites" %in% cols) {
+    d <- dplyr::filter(d, num_sites >= min_sites)
+  }
+  d
+}
+
+
+## Parallel variant of .calc_diff_stream_by_chrom for the R-backed tests.
+##
+## This DuckDB build takes an exclusive lock on a .mod.db file even for
+## read-only access, so worker processes cannot open the shared database
+## concurrently. Instead the parent exports the per-sample input (already
+## labelled with exp_group and min_sites-filtered) to a chrom-partitioned
+## Parquet dataset in a single scan; each PSOCK worker then reads ONE
+## chromosome's Parquet partition through its own in-memory DuckDB (Parquet
+## files carry no lock and are safe to read concurrently), tests it, and returns
+## the compact per-locus data.frame. The parent's connection is never dropped.
+## Work is chunked by chromosome; the largest human chromosome is ~8% of loci,
+## comfortably under 1/n_cores for typical core counts, so load stays balanced.
+.calc_diff_stream_parallel <- function(mod_db, input_table, mod_counts_col,
+                                       cases, controls, min_sites,
+                                       con, out_table, mod_type, calc_type, n_cores)
+{
+  base_tmp <- mod_db$config$temp_dir %||% file.path(tempdir(), "modseqr_duckdb_tmp")
+
+  in_dat <- .build_diff_in_dat(con, input_table, mod_counts_col,
+                               cases, controls, min_sites)
+  if (!"chrom" %in% colnames(in_dat)) {
+    # No chromosome column to partition on: fall back to serial.
+    per_chrom_fun <- switch(calc_type,
+      fast_fisher = function(s, gv) .calc_diff_fisher(s, gv, calc_type = "fast_fisher"),
+      r_fisher    = function(s, gv) .calc_diff_fisher(s, gv, calc_type = "r_fisher"),
+      beta_bin    = function(s, gv) .calc_diff_betabin(s, gv),
+      log_reg     = function(s, gv) .calc_diff_logreg(s, gv))
+    .calc_diff_stream_by_chrom(in_dat, con, out_table, mod_type, per_chrom_fun)
+    return(con)
+  }
+
+  chroms <- sort(dplyr::pull(dplyr::distinct(in_dat, chrom), chrom))
+  if (length(chroms) == 0) {
+    stop("calc_mod_diff(): input table '", input_table, "' has no rows to test.")
+  }
+
+  # Export the labelled per-sample input to a chrom-partitioned Parquet dataset.
+  export_dir <- file.path(base_tmp,
+                          sprintf("modseqr_paralleldiff_%d_%d",
+                                  Sys.getpid(), as.integer(Sys.time())))
+  unlink(export_dir, recursive = TRUE)
+  dir.create(export_dir, recursive = TRUE, showWarnings = FALSE)
+  src_sql <- as.character(dbplyr::sql_render(in_dat))
+  DBI::dbExecute(con, sprintf(
+    "COPY (%s) TO '%s' (FORMAT parquet, PARTITION_BY (chrom), OVERWRITE_OR_IGNORE)",
+    src_sql, export_dir))
+  on.exit(unlink(export_dir, recursive = TRUE), add = TRUE)
+
+  cl <- parallel::makeCluster(min(as.integer(n_cores), length(chroms)))
+  on.exit(parallel::stopCluster(cl), add = TRUE)
+  parallel::clusterCall(cl, function(libs) {
+    .libPaths(libs)
+    suppressMessages(requireNamespace("ModSeqR", quietly = TRUE))
+    invisible(NULL)
+  }, .libPaths())
+
+  results <- parallel::parLapply(cl, chroms, .calc_diff_parallel_worker,
+                                 export_dir = export_dir, mod_type = mod_type,
+                                 calc_type = calc_type)
+
+  wrote_any <- FALSE
+  for (res in results) {
+    if (is.null(res) || nrow(res) == 0) next
+    DBI::dbWriteTable(con, out_table, res, append = wrote_any)
+    wrote_any <- TRUE
+  }
+  if (!wrote_any) {
+    stop("calc_mod_diff(): no loci had calls in both groups (or all were removed ",
+         "by filtering). Nothing was written to '", out_table, "'.")
+  }
+  con
+}
+
+
+## One PSOCK worker: read a single chromosome's Parquet partition via a private
+## in-memory DuckDB (no shared-file lock), test it, return the per-locus frame.
+## Top-level (not a closure) so it serialises by namespace reference. The
+## exported Parquet already carries exp_group and the renamed `mod_counts`
+## column, and hive partitioning restores `chrom`.
+.calc_diff_parallel_worker <- function(chrom, export_dir, mod_type, calc_type)
+{
+  wcon <- DBI::dbConnect(duckdb::duckdb())   # in-memory: no file lock
+  on.exit(tryCatch(DBI::dbDisconnect(wcon, shutdown = TRUE), error = function(e) NULL),
+          add = TRUE)
+
+  glob <- file.path(export_dir, "**", "*.parquet")
+  q <- sprintf(
+    "SELECT * FROM read_parquet('%s', hive_partitioning = true) WHERE chrom = '%s'",
+    glob, gsub("'", "''", chrom))
+  in_dat <- dplyr::tbl(wcon, dplyr::sql(q))
+  gv <- setdiff(colnames(in_dat),
+                c("sample_name", "exp_group", "num_calls", "mod_counts", "num_sites"))
+
+  res <- switch(calc_type,
+    fast_fisher = .calc_diff_fisher(in_dat, gv, calc_type = "fast_fisher"),
+    r_fisher    = .calc_diff_fisher(in_dat, gv, calc_type = "r_fisher"),
+    beta_bin    = .calc_diff_betabin(in_dat, gv),
+    log_reg     = .calc_diff_logreg(in_dat, gv),
+    stop("Unknown calc_type: ", calc_type))
+
+  if (is.null(res) || nrow(res) == 0) return(NULL)
+  as.data.frame(dplyr::rename_with(res, ~ gsub("^mod", mod_type, .x)))
 }
 
 

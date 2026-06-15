@@ -14,6 +14,7 @@ calc_mod_diff(
   calc_type = NULL,
   min_sites = NULL,
   min_samples = NULL,
+  n_cores = 1L,
   overwrite = TRUE,
   call_type = NULL
 )
@@ -38,18 +39,21 @@ Default is "mh" for methylation/hydroxymethylation. Other codes include
 
 \item{calc_type}{A string specifying the statistical method to use.
 Options: \code{"wilcox"}, \code{"beta_bin"}, \code{"fast_fisher"}, \code{"r_fisher"},
-\code{"log_reg"}. Default is \code{NULL}, in which case:
+\code{"log_reg"}, \code{"welch_t"}, \code{"prop_z"}, \code{"quasi_bin"}.
+Default is \code{NULL}, in which case:
 \itemize{
   \item \code{"wilcox"} if both groups have >= 5 samples
   \item \code{"fast_fisher"} if either group has fewer than 5 samples
 }
-All methods are processed \strong{one chromosome at a time}, streaming each
-chromosome's results to the output table before the next chromosome is read,
-so peak memory is bounded to a single chromosome rather than the whole genome.
-\code{"wilcox"} computes its rank-sum entirely in DuckDB and only collects
-the compact per-window result for each chromosome. \code{"fast_fisher"},
-\code{"r_fisher"}, \code{"log_reg"}, and \code{"beta_bin"} require R for their
-per-locus statistics.}
+\strong{Fully in DuckDB} (closed form, no R, ignore \code{n_cores}):
+\code{"wilcox"} (rank-sum), \code{"welch_t"} (per-sample Welch t-test),
+\code{"prop_z"} (pooled two-proportion z / chi-square), and \code{"quasi_bin"}
+(overdispersion-corrected proportion test that approximates \code{beta_bin}).
+\strong{R-backed} (per-locus statistics in R, processed one chromosome at a
+time and optionally parallelised with \code{n_cores}): \code{"fast_fisher"},
+\code{"r_fisher"}, \code{"log_reg"}, and \code{"beta_bin"} (exact
+beta-binomial likelihood-ratio test). Peak memory is bounded to a single
+chromosome regardless of method.}
 
 \item{min_sites}{Minimum number of distinct modification sites (e.g., CpGs)
 required per sample within a window. Windows where any sample has fewer
@@ -64,6 +68,14 @@ dropped \emph{before} BH correction so they do not inflate the multiple-testing
 denominator. Loci where either group has no covered samples are always removed
 (the test is undefined there) regardless of this setting. Default is
 \code{NULL}, which applies only the always-on empty-group removal (min 1 per group).}
+
+\item{n_cores}{Number of CPU cores for the R-backed tests (\code{fast_fisher},
+\code{r_fisher}, \code{beta_bin}, \code{log_reg}). When > 1, the genome is
+split into balanced position chunks and tested in parallel via a fork-based
+worker pool (each worker opens its own read-only DuckDB connection; results
+are written by the parent). Default 1 (serial). Ignored by the in-DuckDB
+tests (\code{wilcox}, \code{welch_t}, \code{prop_z}, \code{quasi_bin}).
+Uses \code{parallel::mclapply} (no effect on Windows).}
 
 \item{overwrite}{If TRUE and output_table exists, it is dropped before writing.}
 
