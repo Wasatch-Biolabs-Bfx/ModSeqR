@@ -34,6 +34,12 @@
 #'   out windows with poor breadth of coverage. Only applies when the input
 #'   table contains a \code{num_sites} column (i.e., windows).
 #'   Default is \code{NULL} (no filtering).
+#' @param min_samples Minimum number of covered samples required in \strong{each}
+#'   group (case and control) at a locus for it to be tested. Loci below this are
+#'   dropped \emph{before} BH correction so they do not inflate the multiple-testing
+#'   denominator. Loci where either group has no covered samples are always removed
+#'   (the test is undefined there) regardless of this setting. Default is
+#'   \code{NULL}, which applies only the always-on empty-group removal (min 1 per group).
 #' @param overwrite If TRUE and output_table exists, it is dropped before writing.
 #' @param call_type Deprecated. Use \code{input_table} instead.
 #'
@@ -86,6 +92,7 @@ calc_mod_diff <- function(mod_db,
                           mod_type = "mh",
                           calc_type = NULL,
                           min_sites = NULL,
+                          min_samples = NULL,
                           overwrite = TRUE,
                           call_type = NULL)
 {
@@ -267,31 +274,66 @@ calc_mod_diff <- function(mod_db,
   )
   .calc_diff_stream_by_chrom(in_dat, con, mod_diff_table, mod_type, per_chrom_fun)
 
+  # Coverage filter: drop loci that cannot support a meaningful comparison --
+  # either group has no covered samples (num_samples_* is NULL) or fewer than
+  # min_samples covered samples. This is applied BEFORE the BH step so that
+  # under-powered/degenerate loci do not inflate the multiple-testing denominator.
+  # Loci with an empty group are always removed (a test there is undefined);
+  # min_samples adds a stricter per-group minimum when supplied.
+  if (DBI::dbExistsTable(con, mod_diff_table) &&
+      all(c("num_samples_case", "num_samples_control") %in%
+          DBI::dbListFields(con, mod_diff_table))) {
+    floor_n <- if (!is.null(min_samples) && min_samples > 0) as.integer(min_samples) else 1L
+    n_pre <- DBI::dbGetQuery(con, sprintf("SELECT COUNT(*) AS n FROM %s", mod_diff_table))$n
+    DBI::dbExecute(con, sprintf(
+      "DELETE FROM %s
+       WHERE num_samples_case IS NULL OR num_samples_control IS NULL
+          OR num_samples_case < %d OR num_samples_control < %d",
+      mod_diff_table, floor_n, floor_n))
+    n_post <- DBI::dbGetQuery(con, sprintf("SELECT COUNT(*) AS n FROM %s", mod_diff_table))$n
+    if (n_post < n_pre) {
+      message("Coverage filter (min_samples = ", floor_n, " per group): kept ",
+              format(n_post, big.mark = ","), " of ", format(n_pre, big.mark = ","),
+              " loci (dropped ", format(n_pre - n_post, big.mark = ","), ").")
+    }
+    if (n_post == 0) {
+      stop("calc_mod_diff(): every locus was removed by the coverage filter ",
+           "(min_samples = ", floor_n, "). Lower min_samples or check sample coverage.")
+    }
+  }
+
   # Compute BH-adjusted p-values entirely in DuckDB using window functions.
   # Avoids collecting the full result into R for p.adjust() + arrange().
+  # Only non-NULL p-values are ranked and counted toward the BH denominator;
+  # any locus with a NULL p-value (e.g. zero-variance rank-sum) keeps NULL for
+  # both p_val and p_adjust rather than being coerced to a tiny value.
   dbl_min <- .Machine$double.xmin
   DBI::dbExecute(.get_con(mod_db), sprintf(
     "CREATE OR REPLACE TABLE %s AS
      WITH ranked AS (
-       SELECT *, ROW_NUMBER() OVER (ORDER BY p_val) AS _r,
-                 COUNT(*)       OVER ()              AS _n
+       SELECT *,
+         CASE WHEN p_val IS NOT NULL
+              THEN ROW_NUMBER() OVER (ORDER BY p_val NULLS LAST) END AS _r,
+         COUNT(p_val) OVER () AS _n
        FROM %s
      ),
      bh AS (
-       SELECT *, LEAST(p_val * CAST(_n AS DOUBLE) / _r, 1.0) AS _bh_raw
+       SELECT *,
+         CASE WHEN p_val IS NOT NULL
+              THEN LEAST(p_val * CAST(_n AS DOUBLE) / _r, 1.0) END AS _bh_raw
        FROM ranked
      ),
      bh_cummin AS (
        SELECT *,
-         MIN(_bh_raw) OVER (ORDER BY _r DESC
+         MIN(_bh_raw) OVER (ORDER BY _r DESC NULLS LAST
                             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _p_adj
        FROM bh
      )
      SELECT * EXCLUDE (_r, _n, _bh_raw, _p_adj, p_val),
-       GREATEST(p_val,  %.17g) AS p_val,
-       GREATEST(_p_adj, %.17g) AS p_adjust
+       CASE WHEN p_val IS NULL THEN NULL ELSE GREATEST(p_val,  %.17g) END AS p_val,
+       CASE WHEN p_val IS NULL THEN NULL ELSE GREATEST(_p_adj, %.17g) END AS p_adjust
      FROM bh_cummin
-     ORDER BY _p_adj",
+     ORDER BY _p_adj NULLS LAST",
     mod_diff_table, mod_diff_table, dbl_min, dbl_min
   ))
 

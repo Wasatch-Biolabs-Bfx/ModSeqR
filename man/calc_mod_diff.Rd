@@ -13,6 +13,7 @@ calc_mod_diff(
   mod_type = "mh",
   calc_type = NULL,
   min_sites = NULL,
+  min_samples = NULL,
   overwrite = TRUE,
   call_type = NULL
 )
@@ -56,6 +57,13 @@ than this many sites with calls are dropped before testing. This filters
 out windows with poor breadth of coverage. Only applies when the input
 table contains a \code{num_sites} column (i.e., windows).
 Default is \code{NULL} (no filtering).}
+
+\item{min_samples}{Minimum number of covered samples required in \strong{each}
+group (case and control) at a locus for it to be tested. Loci below this are
+dropped \emph{before} BH correction so they do not inflate the multiple-testing
+denominator. Loci where either group has no covered samples are always removed
+(the test is undefined there) regardless of this setting. Default is
+\code{NULL}, which applies only the always-on empty-group removal (min 1 per group).}
 
 \item{overwrite}{If TRUE and output_table exists, it is dropped before writing.}
 

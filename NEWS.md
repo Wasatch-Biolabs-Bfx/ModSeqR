@@ -1,4 +1,24 @@
-# ModSeqR v1.2.2 Release Notes
+# ModSeqR v1.2.3 Release Notes
+
+---
+
+## Bug fixes
+
+- **BH correction no longer mislabels NULL p-values as maximally significant.**
+  The in-DuckDB BH step wrapped p-values in `GREATEST(p_val, dbl_min)`, but DuckDB's
+  `GREATEST` skips NULLs, so any locus with a NULL p-value (e.g. a degenerate
+  rank-sum where a group has no covered samples) was coerced to `dbl_min`
+  (2.2e-308) — i.e. flagged the *most* significant. NULL p-values are now preserved
+  through ranking, the BH denominator (`COUNT(p_val)`), and the output: such loci
+  keep NULL for both `p_val` and `p_adjust`.
+
+## New features
+
+- **`calc_mod_diff(min_samples=)` coverage filter.** Drops loci with fewer than
+  `min_samples` covered samples in either group *before* BH correction, so
+  under-powered loci don't inflate the multiple-testing denominator. Loci where a
+  group has zero covered samples are now always removed (the test is undefined
+  there), independent of `min_samples`.
 
 ---
 
