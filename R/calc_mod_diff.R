@@ -21,12 +21,13 @@
 #'     \item \code{"wilcox"} if both groups have >= 5 samples
 #'     \item \code{"fast_fisher"} if either group has fewer than 5 samples
 #'   }
-#'   \code{"wilcox"} runs entirely in DuckDB and never loads locus-level data
-#'   into R. \code{"fast_fisher"}, \code{"r_fisher"}, \code{"log_reg"}, and
-#'   \code{"beta_bin"} require R for their per-locus statistics and so collect
-#'   data, but they do so \strong{one chromosome at a time}, streaming each
+#'   All methods are processed \strong{one chromosome at a time}, streaming each
 #'   chromosome's results to the output table before the next chromosome is read,
-#'   so peak R memory is bounded to a single chromosome rather than the whole genome.
+#'   so peak memory is bounded to a single chromosome rather than the whole genome.
+#'   \code{"wilcox"} computes its rank-sum entirely in DuckDB and only collects
+#'   the compact per-window result for each chromosome. \code{"fast_fisher"},
+#'   \code{"r_fisher"}, \code{"log_reg"}, and \code{"beta_bin"} require R for their
+#'   per-locus statistics.
 #' @param min_sites Minimum number of distinct modification sites (e.g., CpGs)
 #'   required per sample within a window. Windows where any sample has fewer
 #'   than this many sites with calls are dropped before testing. This filters
@@ -38,18 +39,18 @@
 #'
 #' @details
 #' The function connects to the specified DuckDB database, retrieves methylation data from
-#' \code{input_table}, and summarizes it for cases and controls. \code{wilcox} runs
-#' entirely inside DuckDB (no locus-level data enters R). \code{fast_fisher},
-#' \code{r_fisher}, \code{log_reg}, and \code{beta_bin} compute their per-locus statistics
-#' in R, but are processed \strong{one chromosome at a time} (see
-#' \code{.calc_diff_stream_by_chrom}): each chromosome is aggregated/collected, tested, and
-#' its results streamed to the output table before the next chromosome is read, so only one
-#' chromosome ever resides in R. BH p-value adjustment and final sorting are performed
-#' entirely in DuckDB using window functions.
+#' \code{input_table}, and summarizes it for cases and controls. All calc types are
+#' processed \strong{one chromosome at a time} (see \code{.calc_diff_stream_by_chrom}):
+#' each chromosome is tested and its results streamed to the output table before the next
+#' chromosome is read, so only one chromosome's results ever reside in R. \code{wilcox}
+#' computes its rank-sum inside DuckDB per chromosome and collects only the compact
+#' per-window result; \code{fast_fisher}, \code{r_fisher}, \code{log_reg}, and
+#' \code{beta_bin} compute their per-locus statistics in R. BH p-value adjustment and final
+#' sorting are performed entirely in DuckDB using window functions.
 #'
-#' \strong{Memory note:} per-chromosome streaming bounds peak R memory to the largest
-#' single chromosome. On datasets with very many samples or loci, \code{wilcox} remains the
-#' cheapest option since it never leaves DuckDB.
+#' \strong{Memory note:} per-chromosome streaming bounds peak memory to the largest
+#' single chromosome. \code{wilcox} remains the cheapest option since its locus-level
+#' ranking stays in DuckDB and only per-window summaries are collected.
 #'
 #' @return Invisibly returns the updated \code{"mod_db"} object with \code{current_table} set to
 #'   the output table name and \code{last_result} set to a data frame preview (head) of the result
@@ -244,29 +245,27 @@ calc_mod_diff <- function(mod_db,
 
   con <- .get_con(mod_db)
 
-  # Compute p-values / diffs and populate `mod_diff_table`.
-  #   * wilcox stays fully lazy in DuckDB: render its query straight into the
-  #     table -- no locus-level data ever enters R.
-  #   * fast_fisher / r_fisher / beta_bin / log_reg need R for their per-locus
-  #     statistics, so they are streamed one chromosome at a time via
-  #     .calc_diff_stream_by_chrom(), which writes each chromosome's results to
-  #     the table before reading the next (peak R memory = one chromosome).
-  if (identical(calc_type, "wilcox")) {
-    result <- .calc_diff_wilcox(in_dat) |>
-      dplyr::rename_with(~ gsub("^mod", mod_type, .x))
-    raw_sql <- as.character(dbplyr::sql_render(result))
-    DBI::dbExecute(con, sprintf("CREATE TABLE %s AS %s", mod_diff_table, raw_sql))
-  } else {
-    per_chrom_fun <- switch(calc_type,
-      fast_fisher = function(slice, gv) .calc_diff_fisher(slice, gv, calc_type = "fast_fisher"),
-      r_fisher    = function(slice, gv) .calc_diff_fisher(slice, gv, calc_type = "r_fisher"),
-      beta_bin    = function(slice, gv) .calc_diff_betabin(slice, gv),
-      log_reg     = function(slice, gv) .calc_diff_logreg(slice, gv),
-      stop("Unknown calc_type: ", calc_type,
-           ". Use 'beta_bin', 'fast_fisher', 'r_fisher', 'wilcox', or 'log_reg'.")
-    )
-    .calc_diff_stream_by_chrom(in_dat, con, mod_diff_table, mod_type, per_chrom_fun)
-  }
+  # Compute p-values / diffs and populate `mod_diff_table` one chromosome at a
+  # time via .calc_diff_stream_by_chrom(), which tests each chromosome and writes
+  # its results to the table before reading the next, so peak memory is bounded
+  # to a single chromosome rather than the whole genome.
+  #   * wilcox computes its rank-sum entirely in DuckDB, but per chromosome: only
+  #     the compact per-window result (one row per locus) is collected into R
+  #     before being appended. Ranking is PARTITION BY the locus group_vars
+  #     (chrom, start, end), so per-chromosome slicing is exactly equivalent to a
+  #     genome-wide pass -- no window spans chromosomes.
+  #   * fast_fisher / r_fisher / beta_bin / log_reg compute their per-locus
+  #     statistic in R, also one chromosome at a time.
+  per_chrom_fun <- switch(calc_type,
+    wilcox      = function(slice, gv) dplyr::collect(.calc_diff_wilcox(slice)),
+    fast_fisher = function(slice, gv) .calc_diff_fisher(slice, gv, calc_type = "fast_fisher"),
+    r_fisher    = function(slice, gv) .calc_diff_fisher(slice, gv, calc_type = "r_fisher"),
+    beta_bin    = function(slice, gv) .calc_diff_betabin(slice, gv),
+    log_reg     = function(slice, gv) .calc_diff_logreg(slice, gv),
+    stop("Unknown calc_type: ", calc_type,
+         ". Use 'beta_bin', 'fast_fisher', 'r_fisher', 'wilcox', or 'log_reg'.")
+  )
+  .calc_diff_stream_by_chrom(in_dat, con, mod_diff_table, mod_type, per_chrom_fun)
 
   # Compute BH-adjusted p-values entirely in DuckDB using window functions.
   # Avoids collecting the full result into R for p.adjust() + arrange().

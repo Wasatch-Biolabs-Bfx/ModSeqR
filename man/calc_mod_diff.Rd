@@ -42,9 +42,13 @@ Options: \code{"wilcox"}, \code{"beta_bin"}, \code{"fast_fisher"}, \code{"r_fish
   \item \code{"wilcox"} if both groups have >= 5 samples
   \item \code{"fast_fisher"} if either group has fewer than 5 samples
 }
-All methods except \code{"beta_bin"} run entirely in DuckDB and do not load
-locus-level data into R. \code{"beta_bin"} collects data into R one chromosome
-at a time; avoid it on memory-constrained hardware with large datasets.}
+All methods are processed \strong{one chromosome at a time}, streaming each
+chromosome's results to the output table before the next chromosome is read,
+so peak memory is bounded to a single chromosome rather than the whole genome.
+\code{"wilcox"} computes its rank-sum entirely in DuckDB and only collects
+the compact per-window result for each chromosome. \code{"fast_fisher"},
+\code{"r_fisher"}, \code{"log_reg"}, and \code{"beta_bin"} require R for their
+per-locus statistics.}
 
 \item{min_sites}{Minimum number of distinct modification sites (e.g., CpGs)
 required per sample within a window. Windows where any sample has fewer
@@ -69,19 +73,18 @@ The results are stored in a DuckDB database for further analysis.
 }
 \details{
 The function connects to the specified DuckDB database, retrieves methylation data from
-\code{input_table}, and summarizes it for cases and controls. For SQL-backed calc types
-(\code{fast_fisher}, \code{r_fisher}, \code{log_reg}, \code{wilcox}), all computation
-stays inside DuckDB and no locus-level data enters R memory. BH p-value adjustment and
-final sorting are also performed entirely in DuckDB using window functions.
+\code{input_table}, and summarizes it for cases and controls. All calc types are
+processed \strong{one chromosome at a time} (see \code{.calc_diff_stream_by_chrom}):
+each chromosome is tested and its results streamed to the output table before the next
+chromosome is read, so only one chromosome's results ever reside in R. \code{wilcox}
+computes its rank-sum inside DuckDB per chromosome and collects only the compact
+per-window result; \code{fast_fisher}, \code{r_fisher}, \code{log_reg}, and
+\code{beta_bin} compute their per-locus statistics in R. BH p-value adjustment and final
+sorting are performed entirely in DuckDB using window functions.
 
-\strong{Memory warning:} \code{beta_bin} is the only method that collects data into R,
-because it requires \code{stats::optim()} for maximum-likelihood fitting of the
-beta-binomial model — an iterative algorithm with no SQL equivalent. To limit peak
-memory usage, data are pulled one chromosome at a time and only the columns required
-for the likelihood-ratio test are fetched (per-sample read counts and modification
-counts). On datasets with many loci or many samples, \code{beta_bin} can still consume
-substantial RAM; consider \code{fast_fisher} or \code{wilcox} on memory-constrained
-hardware.
+\strong{Memory note:} per-chromosome streaming bounds peak memory to the largest
+single chromosome. \code{wilcox} remains the cheapest option since its locus-level
+ranking stays in DuckDB and only per-window summaries are collected.
 }
 \examples{
 \dontrun{

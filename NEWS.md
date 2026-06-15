@@ -1,3 +1,20 @@
+# ModSeqR v1.2.2 Release Notes
+
+---
+
+## Performance & Memory
+
+- **`wilcox` now streams per chromosome again** — the single full-dataset CTE
+  (v1.2.1) ranked the entire genome-wide window table in one DuckDB query, which
+  spilled tens of GB and could exhaust memory on large cohorts. `calc_mod_diff()`
+  now routes `wilcox` through `.calc_diff_stream_by_chrom()` like the other R-backed
+  methods: each chromosome's rank-sum is computed in DuckDB and its compact
+  per-window result appended before the next chromosome is read, bounding peak
+  memory to a single chromosome. Results are identical — ranking partitions by the
+  locus (chrom, start, end), so no window spans chromosomes.
+
+---
+
 # ModSeqR v1.2.1 Release Notes
 
 ---

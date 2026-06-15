@@ -1,7 +1,7 @@
 Package: ModSeqR
 Type: Package
 Title: Process and Analyze Nanopore Sequencing Methylation Data
-Version: 1.2.1
+Version: 1.2.2
 Authors@R:
     c(
       person(given = "Hailey", family = "Zimmerman", email = "hailey@renewbt.com", role = c("aut", "cre")),
@@ -37,3 +37,4 @@ URL: https://github.com/Wasatch-Biolabs-Bfx/ModSeqR, https://wasatch-biolabs-bfx
 biocViews: Software, Sequencing, Epigenetics, Methylation
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0
+RoxygenNote: 7.3.3
