@@ -203,9 +203,12 @@
 ## quasi-likelihood dispersion estimated from between-sample variability around
 ## each group's mean. phi_hat is floored at 1 (no under-dispersion credit).
 ## This captures the beta-binomial's key feature (down-weighting for replicate
-## variability) without per-locus optimisation. It is a score/Wald-type
-## approximation to the LRT and differs from it most in small samples and near
-## methylation boundaries -- use beta_bin for final inference there.
+## variability) without per-locus optimisation. The statistic is a SCORE-type
+## (Rao-Scott / quasi-likelihood) test -- the variance uses the pooled (null)
+## proportion, not the unpooled (alternative) variance of a Wald test -- so it is
+## robust near the 0/1 boundary. It approximates the beta-binomial LRT and differs
+## from it most when phi_hat floors at 1 in small samples (then it reduces to the
+## pooled score test and is anti-conservative) -- use beta_bin for final inference.
 .calc_diff_quasi_bin <- function(in_dat)
 {
   con        <- dbplyr::remote_con(in_dat)
