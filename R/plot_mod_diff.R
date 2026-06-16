@@ -24,13 +24,21 @@
 #' plot_mod_diff("my_methylation.mod.db", "mod_diff_windows")
 #' }
 #'
+#' @param fdr_cutoff Numeric. FDR (BH-adjusted p) threshold used to mark genome-wide
+#'   significance on the plot. When the table has a \code{p_adjust} column, the plot adds a
+#'   dashed line at the raw-p level corresponding to this FDR cutoff (the largest \code{p_val}
+#'   among windows passing it) and a subtitle stating how many windows are significant. This
+#'   prevents the raw-p volcano from implying signal that does not survive multiple-testing
+#'   correction. Default \code{0.05}.
+#'
 #' @importFrom dplyr filter mutate
 #' @importFrom dbplot dbplot_raster
-#' @importFrom ggplot2 scale_fill_viridis_c labs theme_minimal
-#' @importFrom DBI dbExistsTable
+#' @importFrom ggplot2 scale_fill_viridis_c labs theme_minimal geom_hline annotate aes
+#' @importFrom DBI dbExistsTable dbListFields dbGetQuery
 #' @export
 plot_mod_diff <- function(mod_db,
                           table_name,
+                          fdr_cutoff = 0.05,
                           table = NULL) {
   if (!is.null(table)) {
     warning("'table' is deprecated; use 'table_name' instead.", call. = FALSE)
@@ -52,6 +60,23 @@ plot_mod_diff <- function(mod_db,
   # Connect to the table
   tbl_diff <- tbl(.get_con(mod_db), table_name)
 
+  # FDR-significance summary: the volcano axis is RAW -log10(p), which always looks
+  # "significant" because ~fdr_cutoff of windows clear raw p by chance. If p_adjust is
+  # available, compute how many windows survive BH-FDR and the raw-p line corresponding to
+  # that cutoff, so the plot honestly shows the genome-wide-significant threshold.
+  con      <- .get_con(mod_db)
+  has_padj <- "p_adjust" %in% DBI::dbListFields(con, table_name)
+  sig_line <- NA_real_; sub <- NULL
+  if (has_padj) {
+    s <- DBI::dbGetQuery(con, sprintf(
+      "SELECT COUNT(*) FILTER (WHERE p_adjust < %1$g) AS n_sig,
+              MAX(p_val) FILTER (WHERE p_adjust < %1$g) AS crit_p
+       FROM %2$s WHERE p_val > 0 AND p_val IS NOT NULL", fdr_cutoff, table_name))
+    sub <- sprintf("%s of the tested windows significant at FDR < %g",
+                   format(s$n_sig, big.mark = ","), fdr_cutoff)
+    if (!is.na(s$crit_p) && s$crit_p > 0) sig_line <- -log10(s$crit_p)
+  }
+
   # Plot using dbplot_raster
   plot <- tbl(.get_con(mod_db), table_name) |>
     filter(
@@ -66,15 +91,21 @@ plot_mod_diff <- function(mod_db,
   plot <- plot +
     scale_fill_viridis_c(option = "rocket", direction = -1, begin = 0.2, end = 0.9) +  # Fancy color gradient- add option = "mako"
     labs(
-      title = "Differential Methylation Volcano Plot",
+      title    = "Differential Methylation Volcano Plot",
+      subtitle = sub,
       x = "Methylation Difference (case-control)",
       y = "-log10(p-value)",
       fill = "Count"
     ) +
-    theme_minimal()  #+
-    #geom_hline(yintercept = -log10(0.05), linetype = "dashed", color = "red") +
-    #annotate("text", x = 0.9, y = -log10(0.05) + 5, label = "p = 0.05", color = "red", size = 4)
+    theme_minimal()
 
+  # Genome-wide significance line (raw-p level meeting the FDR cutoff), if any window passes.
+  if (!is.na(sig_line)) {
+    plot <- plot +
+      geom_hline(yintercept = sig_line, linetype = "dashed", colour = "red") +
+      annotate("text", x = Inf, y = sig_line, hjust = 1.05, vjust = -0.5,
+               label = sprintf("FDR < %g", fdr_cutoff), colour = "red", size = 3.5)
+  }
 
   print(plot)
 

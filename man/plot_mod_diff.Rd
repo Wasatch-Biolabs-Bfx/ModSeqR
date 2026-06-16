@@ -4,7 +4,7 @@
 \alias{plot_mod_diff}
 \title{Plot Differential Methylation Volcano Raster}
 \usage{
-plot_mod_diff(mod_db, table_name, table = NULL)
+plot_mod_diff(mod_db, table_name, fdr_cutoff = 0.05, table = NULL)
 }
 \arguments{
 \item{mod_db}{A `mod_db` object or a character string representing the file path to a DuckDB database.
@@ -12,6 +12,13 @@ The database must contain a table with differential methylation results.}
 
 \item{table_name}{A character string specifying the name of the table in the database containing
 the differential methylation data. Required columns: \code{meth_diff} and \code{p_val}.}
+
+\item{fdr_cutoff}{Numeric. FDR (BH-adjusted p) threshold used to mark genome-wide
+significance on the plot. When the table has a \code{p_adjust} column, the plot adds a
+dashed line at the raw-p level corresponding to this FDR cutoff (the largest \code{p_val}
+among windows passing it) and a subtitle stating how many windows are significant. This
+prevents the raw-p volcano from implying signal that does not survive multiple-testing
+correction. Default \code{0.05}.}
 
 \item{table}{Deprecated. Use \code{table_name} instead.}
 }

@@ -1,3 +1,18 @@
+# ModSeqR v1.3.1 Release Notes
+
+---
+
+## Plot fix
+
+- **`plot_mod_diff()` is now FDR-aware.** The volcano plots raw `-log10(p_val)`, which always
+  looks "significant" because ~5% of windows clear raw p by chance. When the table has a
+  `p_adjust` column, the plot now adds a subtitle stating how many windows are significant at
+  `fdr_cutoff` (default 0.05) and, if any pass, a dashed red line at the corresponding raw-p
+  level. This stops the volcano from implying genome-wide signal that does not survive
+  multiple-testing correction (e.g. the beta_bin AD-only result: "0 ... significant at FDR < 0.05").
+
+---
+
 # ModSeqR v1.3.0 Release Notes
 
 ---
