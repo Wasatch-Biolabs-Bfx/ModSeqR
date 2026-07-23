@@ -16,7 +16,8 @@ calc_mod_diff(
   threads = NULL,
   memory_limit = NULL,
   min_sites = NULL,
-  min_cov = NULL,
+  min_cov_sample = NULL,
+  min_cov_group = NULL,
   overwrite = TRUE
 )
 }
@@ -61,13 +62,20 @@ out windows with poor breadth of coverage. Only applies when the input
 table contains a \code{num_sites} column (i.e., windows).
 Default is \code{NULL} (no filtering).}
 
-\item{min_cov}{Minimum average coverage per modification site,
-estimated as \code{num_calls / num_sites} for each sample in each window.
-Windows where any sample falls below this threshold are dropped before
-testing. For example, \code{min_cov = 5} requires an average of
-at least 5 calls per CpG site per sample. Only applies when the input
-table contains both \code{num_calls} and \code{num_sites} columns.
-Default is \code{NULL} (no filtering).}
+\item{min_cov_sample}{Minimum average coverage per modification site,
+estimated as \code{num_calls / num_sites}, required for each INDIVIDUAL
+SAMPLE in a window. Sample-window rows falling below this threshold are
+dropped before testing (other samples in the same window are unaffected).
+Only applies when the input table contains both \code{num_calls} and
+\code{num_sites} columns. Default is \code{NULL} (no filtering).}
+
+\item{min_cov_group}{Minimum average coverage per modification site,
+estimated as \code{sum(num_calls) / sum(num_sites)} pooled across all
+samples within a GROUP (cases or controls), for a given window. If
+either group's pooled coverage falls below this threshold for a window,
+the entire window is dropped (all samples, both groups). Only applies
+when the input table contains both \code{num_calls} and \code{num_sites}
+columns. Default is \code{NULL} (no filtering).}
 
 \item{overwrite}{If TRUE and output_table exists, it is dropped before writing.}
 }

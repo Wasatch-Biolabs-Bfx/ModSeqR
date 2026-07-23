@@ -32,13 +32,19 @@
 #'   out windows with poor breadth of coverage. Only applies when the input
 #'   table contains a \code{num_sites} column (i.e., windows).
 #'   Default is \code{NULL} (no filtering).
-#' @param min_cov Minimum average coverage per modification site,
-#'   estimated as \code{num_calls / num_sites} for each sample in each window.
-#'   Windows where any sample falls below this threshold are dropped before
-#'   testing. For example, \code{min_cov = 5} requires an average of
-#'   at least 5 calls per CpG site per sample. Only applies when the input
-#'   table contains both \code{num_calls} and \code{num_sites} columns.
-#'   Default is \code{NULL} (no filtering).
+#' @param min_cov_sample Minimum average coverage per modification site,
+#'   estimated as \code{num_calls / num_sites}, required for each INDIVIDUAL
+#'   SAMPLE in a window. Sample-window rows falling below this threshold are
+#'   dropped before testing (other samples in the same window are unaffected).
+#'   Only applies when the input table contains both \code{num_calls} and
+#'   \code{num_sites} columns. Default is \code{NULL} (no filtering).
+#' @param min_cov_group Minimum average coverage per modification site,
+#'   estimated as \code{sum(num_calls) / sum(num_sites)} pooled across all
+#'   samples within a GROUP (cases or controls), for a given window. If
+#'   either group's pooled coverage falls below this threshold for a window,
+#'   the entire window is dropped (all samples, both groups). Only applies
+#'   when the input table contains both \code{num_calls} and \code{num_sites}
+#'   columns. Default is \code{NULL} (no filtering).
 #' @param overwrite If TRUE and output_table exists, it is dropped before writing.
 #'
 #' @details
@@ -63,7 +69,7 @@
 #'                
 #' @importFrom DBI dbConnect dbDisconnect dbExistsTable dbRemoveTable dbExecute dbWriteTable
 #' @importFrom duckdb duckdb
-#' @importFrom dplyr tbl select any_of mutate case_when filter pull summarize inner_join join_by rename_with collect arrange
+#' @importFrom dplyr tbl select any_of mutate case_when filter pull summarize inner_join anti_join join_by rename_with collect arrange distinct
 #' @importFrom tidyr pivot_wider
 #' @importFrom stats fisher.test p.adjust dhyper phyper glm.fit pchisq optim plogis qlogis var
 #'
@@ -80,7 +86,8 @@ calc_mod_diff <- function(mod_db,
                           threads = NULL,
                           memory_limit = NULL,
                           min_sites = NULL, 
-                          min_cov = NULL,
+                          min_cov_sample = NULL,
+                          min_cov_group = NULL,
                           overwrite = TRUE)
 {
   start_time <- Sys.time()
@@ -205,10 +212,10 @@ calc_mod_diff <- function(mod_db,
     }
   }
   
-  # Filter windows with insufficient per-site coverage
-  if (!is.null(min_cov) && min_cov > 0) {
+  # Filter individual sample-windows with insufficient per-site coverage
+  if (!is.null(min_cov_sample) && min_cov_sample > 0) {
     if (!"num_sites" %in% cols) {
-      warning("min_cov was set but '", call_type,
+      warning("min_cov_sample was set but '", call_type,
               "' has no 'num_sites' column. Filter skipped.")
     } else {
       n_before <- in_dat |> dplyr::count() |> dplyr::pull(n)
@@ -216,20 +223,20 @@ calc_mod_diff <- function(mod_db,
       in_dat <- in_dat |>
         dplyr::filter(num_sites > 0) |>
         dplyr::mutate(cov_per_site = num_calls / num_sites) |>
-        dplyr::filter(cov_per_site >= min_cov)
+        dplyr::filter(cov_per_site >= min_cov_sample)
       
       n_after <- in_dat |> dplyr::count() |> dplyr::pull(n)
       
       message(
-        "Coverage filter (min_cov = ", min_cov, "): ",
+        "Sample coverage filter (min_cov_sample = ", min_cov_sample, "): ",
         format(n_after, big.mark = ","), " of ",
         format(n_before, big.mark = ","), " sample-windows passed ",
         "(dropped ", format(n_before - n_after, big.mark = ","), ")."
       )
       
       if (n_after == 0) {
-        stop("All windows were removed by the min_cov filter. ",
-             "Try a lower value (current: ", min_cov, ").")
+        stop("All windows were removed by the min_cov_sample filter. ",
+             "Try a lower value (current: ", min_cov_sample, ").")
       }
       
       remaining_samples <- in_dat |>
@@ -240,14 +247,84 @@ calc_mod_diff <- function(mod_db,
       missing_ctrls <- controls[!controls %in% remaining_samples$sample_name]
       
       if (length(missing_cases) > 0) {
-        warning("min_cov filter removed ALL windows for case sample(s): ",
+        warning("min_cov_sample filter removed ALL windows for case sample(s): ",
                 paste(missing_cases, collapse = ", "),
-                ". Consider lowering min_cov.")
+                ". Consider lowering min_cov_sample.")
       }
       if (length(missing_ctrls) > 0) {
-        warning("min_cov filter removed ALL windows for control sample(s): ",
+        warning("min_cov_sample filter removed ALL windows for control sample(s): ",
                 paste(missing_ctrls, collapse = ", "),
-                ". Consider lowering min_cov.")
+                ". Consider lowering min_cov_sample.")
+      }
+    }
+  }
+  
+  # Filter entire windows with insufficient POOLED per-group coverage
+  if (!is.null(min_cov_group) && min_cov_group > 0) {
+    if (!"num_sites" %in% cols) {
+      warning("min_cov_group was set but '", call_type,
+              "' has no 'num_sites' column. Filter skipped.")
+    } else {
+      # Genomic-unit key columns present in this table (region_name and/or chrom/start/end)
+      window_key <- intersect(colnames(in_dat), c("region_name", "chrom", "start", "end"))
+      
+      if (length(window_key) == 0) {
+        warning("min_cov_group was set but no window/region key columns ",
+                "(region_name / chrom+start+end) were found in '", call_type,
+                "'. Filter skipped.")
+      } else {
+        n_before <- in_dat |> dplyr::count() |> dplyr::pull(n)
+        
+        # Pool coverage across all samples within each group, per window
+        group_cov <- in_dat |>
+          dplyr::filter(num_sites > 0) |>
+          dplyr::summarize(
+            .by = c(exp_group, dplyr::all_of(window_key)),
+            num_calls_grp = sum(num_calls, na.rm = TRUE),
+            num_sites_grp = sum(num_sites, na.rm = TRUE)
+          ) |>
+          dplyr::mutate(cov_per_site_grp = num_calls_grp / num_sites_grp)
+        
+        # Windows where EITHER group's pooled coverage misses the bar
+        failing_windows <- group_cov |>
+          dplyr::filter(cov_per_site_grp < min_cov_group) |>
+          dplyr::distinct(dplyr::across(dplyr::all_of(window_key)))
+        
+        # Drop those windows entirely (all samples, both groups)
+        in_dat <- in_dat |>
+          dplyr::anti_join(failing_windows, by = window_key)
+        
+        n_after <- in_dat |> dplyr::count() |> dplyr::pull(n)
+        
+        message(
+          "Group coverage filter (min_cov_group = ", min_cov_group, "): ",
+          format(n_after, big.mark = ","), " of ",
+          format(n_before, big.mark = ","), " sample-windows passed ",
+          "(dropped ", format(n_before - n_after, big.mark = ","), ")."
+        )
+        
+        if (n_after == 0) {
+          stop("All windows were removed by the min_cov_group filter. ",
+               "Try a lower value (current: ", min_cov_group, ").")
+        }
+        
+        remaining_samples <- in_dat |>
+          dplyr::distinct(sample_name, exp_group) |>
+          dplyr::collect()
+        
+        missing_cases <- cases[!cases %in% remaining_samples$sample_name]
+        missing_ctrls <- controls[!controls %in% remaining_samples$sample_name]
+        
+        if (length(missing_cases) > 0) {
+          warning("min_cov_group filter removed ALL windows for case sample(s): ",
+                  paste(missing_cases, collapse = ", "),
+                  ". Consider lowering min_cov_group.")
+        }
+        if (length(missing_ctrls) > 0) {
+          warning("min_cov_group filter removed ALL windows for control sample(s): ",
+                  paste(missing_ctrls, collapse = ", "),
+                  ". Consider lowering min_cov_group.")
+        }
       }
     }
   }
