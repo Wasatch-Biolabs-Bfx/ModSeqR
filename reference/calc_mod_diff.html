@@ -54,7 +54,8 @@ The results are stored in a DuckDB database for further analysis.</p>
 <span>  threads <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  memory_limit <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  min_sites <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  min_cov <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  min_cov_sample <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  min_cov_group <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  overwrite <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -123,14 +124,23 @@ table contains a <code>num_sites</code> column (i.e., windows).
 Default is <code>NULL</code> (no filtering).</p></dd>
 
 
-<dt id="arg-min-cov">min_cov<a class="anchor" aria-label="anchor" href="#arg-min-cov"></a></dt>
+<dt id="arg-min-cov-sample">min_cov_sample<a class="anchor" aria-label="anchor" href="#arg-min-cov-sample"></a></dt>
 <dd><p>Minimum average coverage per modification site,
-estimated as <code>num_calls / num_sites</code> for each sample in each window.
-Windows where any sample falls below this threshold are dropped before
-testing. For example, <code>min_cov = 5</code> requires an average of
-at least 5 calls per CpG site per sample. Only applies when the input
-table contains both <code>num_calls</code> and <code>num_sites</code> columns.
-Default is <code>NULL</code> (no filtering).</p></dd>
+estimated as <code>num_calls / num_sites</code>, required for each INDIVIDUAL
+SAMPLE in a window. Sample-window rows falling below this threshold are
+dropped before testing (other samples in the same window are unaffected).
+Only applies when the input table contains both <code>num_calls</code> and
+<code>num_sites</code> columns. Default is <code>NULL</code> (no filtering).</p></dd>
+
+
+<dt id="arg-min-cov-group">min_cov_group<a class="anchor" aria-label="anchor" href="#arg-min-cov-group"></a></dt>
+<dd><p>Minimum average coverage per modification site,
+estimated as <code>sum(num_calls) / sum(num_sites)</code> pooled across all
+samples within a GROUP (cases or controls), for a given window. If
+either group's pooled coverage falls below this threshold for a window,
+the entire window is dropped (all samples, both groups). Only applies
+when the input table contains both <code>num_calls</code> and <code>num_sites</code>
+columns. Default is <code>NULL</code> (no filtering).</p></dd>
 
 
 <dt id="arg-overwrite">overwrite<a class="anchor" aria-label="anchor" href="#arg-overwrite"></a></dt>
@@ -162,7 +172,7 @@ It summarizes the data for cases and controls, calculates p-values based on the 
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
     </footer></div>

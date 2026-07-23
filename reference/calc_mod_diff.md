@@ -19,7 +19,8 @@ calc_mod_diff(
   threads = NULL,
   memory_limit = NULL,
   min_sites = NULL,
-  min_cov = NULL,
+  min_cov_sample = NULL,
+  min_cov_group = NULL,
   overwrite = TRUE
 )
 ```
@@ -93,14 +94,24 @@ calc_mod_diff(
   table contains a `num_sites` column (i.e., windows). Default is `NULL`
   (no filtering).
 
-- min_cov:
+- min_cov_sample:
 
   Minimum average coverage per modification site, estimated as
-  `num_calls / num_sites` for each sample in each window. Windows where
-  any sample falls below this threshold are dropped before testing. For
-  example, `min_cov = 5` requires an average of at least 5 calls per CpG
-  site per sample. Only applies when the input table contains both
-  `num_calls` and `num_sites` columns. Default is `NULL` (no filtering).
+  `num_calls / num_sites`, required for each INDIVIDUAL SAMPLE in a
+  window. Sample-window rows falling below this threshold are dropped
+  before testing (other samples in the same window are unaffected). Only
+  applies when the input table contains both `num_calls` and `num_sites`
+  columns. Default is `NULL` (no filtering).
+
+- min_cov_group:
+
+  Minimum average coverage per modification site, estimated as
+  `sum(num_calls) / sum(num_sites)` pooled across all samples within a
+  GROUP (cases or controls), for a given window. If either group's
+  pooled coverage falls below this threshold for a window, the entire
+  window is dropped (all samples, both groups). Only applies when the
+  input table contains both `num_calls` and `num_sites` columns. Default
+  is `NULL` (no filtering).
 
 - overwrite:
 
