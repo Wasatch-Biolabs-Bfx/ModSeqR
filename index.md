@@ -4,7 +4,7 @@
 
 ## Version 1.1.3
 
-**(Updated May 20th 2026)**
+**(Updated July 23rd 2026)**
 
 **Publication:** If you use ModSeqR in your research, please cite our
 paper in *BMC Genomics*:  

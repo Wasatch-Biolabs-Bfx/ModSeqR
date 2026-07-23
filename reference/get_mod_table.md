@@ -46,7 +46,7 @@ regardless of success or failure.
 mod_db <- system.file("my_data.mod.db", package = "ModSeqR")
 positions = get_mod_table(mod_db, "positions")
 #> duckdb is keeping downloaded extensions in a temporary directory:
-#> ℹ /tmp/RtmpjnDowN/duckdb/extensions
+#> ℹ /tmp/RtmpV9o0kg/duckdb/extensions
 #> This is removed when the R session ends, so extensions are re-downloaded each session.
 #> ℹ To keep them, point `options(duckdb.extension_directory =)` or the `DUCKDB_EXTENSION_DIRECTORY` environment variable at a permanent path.
 #> Table 'positions' does not exist in the database.
