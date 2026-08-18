@@ -28,9 +28,18 @@
 #'   (overdispersion-corrected proportion test that approximates \code{beta_bin}).
 #'   \strong{R-backed} (per-locus statistics in R, processed one chromosome at a
 #'   time and optionally parallelised with \code{n_cores}): \code{"fast_fisher"},
-#'   \code{"r_fisher"}, \code{"log_reg"}, and \code{"beta_bin"} (exact
-#'   beta-binomial likelihood-ratio test). Peak memory is bounded to a single
-#'   chromosome regardless of method.
+#'   \code{"r_fisher"}, \code{"log_reg"}, \code{"beta_bin"} (exact
+#'   beta-binomial likelihood-ratio test), and \code{"eb_beta_bin"} (empirical-Bayes
+#'   beta-binomial). Peak memory is bounded to a single chromosome regardless of method.
+#'
+#'   \code{"eb_beta_bin"} is a \strong{hybrid}: the per-locus dispersion is estimated
+#'   by method-of-moments, shrunk toward the genome-wide median (empirical Bayes), and
+#'   computed entirely in DuckDB SQL; the likelihood-ratio test then runs a
+#'   logit-link beta-binomial GLM per locus in R with the dispersion \emph{held fixed}
+#'   at the shrunk value (only the mean coefficients are optimised). This stabilises
+#'   small-sample inference relative to \code{"quasi_bin"} (noisy dispersion floored at
+#'   1) and \code{"beta_bin"} (dispersion estimated freely per locus), and supports
+#'   covariate adjustment via \code{covariates} / \code{sample_meta}.
 #' @param min_sites Minimum number of distinct modification sites (e.g., CpGs)
 #'   required per sample within a window. Windows where any sample has fewer
 #'   than this many sites with calls are dropped before testing. This filters
@@ -65,6 +74,19 @@
 #'   Uses \code{parallel::mclapply} (no effect on Windows).
 #' @param overwrite If TRUE and output_table exists, it is dropped before writing.
 #' @param call_type Deprecated. Use \code{input_table} instead.
+#' @param covariates Character vector of covariate column names to adjust for in the
+#'   \code{"eb_beta_bin"} GLM (e.g. \code{"age"}). The full model is
+#'   intercept + group + covariates and the null drops the group term. Values are
+#'   taken from \code{sample_meta} and coerced to numeric. Default \code{NULL}
+#'   (group-only test). Ignored by all other \code{calc_type}s.
+#' @param sample_meta Data frame with a \code{sample_name} column plus one column per
+#'   entry in \code{covariates}, giving per-sample covariate values. Required when
+#'   \code{covariates} is supplied for \code{"eb_beta_bin"}. Default \code{NULL}.
+#' @param eb_df_prior Prior weight (pseudo-sample count) for the empirical-Bayes
+#'   dispersion shrinkage in \code{"eb_beta_bin"}:
+#'   \eqn{\tilde\rho = (\hat\rho\, s + \rho_{prior}\, d_0)/(s + d_0)} with
+#'   \eqn{d_0 = } \code{eb_df_prior}. Larger values shrink harder toward the
+#'   genome-wide median. Default \code{10}.
 #'
 #' @details
 #' The function connects to the specified DuckDB database, retrieves methylation data from
@@ -121,7 +143,10 @@ calc_mod_diff <- function(mod_db,
                           min_cov_group = NULL,
                           n_cores = 1L,
                           overwrite = TRUE,
-                          call_type = NULL)
+                          call_type = NULL,
+                          covariates = NULL,
+                          sample_meta = NULL,
+                          eb_df_prior = 10)
 {
   start_time <- Sys.time()
 
@@ -403,7 +428,47 @@ calc_mod_diff <- function(mod_db,
     quasi_bin = .calc_diff_quasi_bin
   )
 
-  if (calc_type %in% names(indb_lazy)) {
+  if (calc_type == "eb_beta_bin") {
+    # Empirical-Bayes beta-binomial: SQL EB-shrunk dispersion (pass 1) + per-locus
+    # fixed-rho GLM LRT in R (pass 2). See calc_diff_eb.R.
+    covariate_cols <- character(0)
+    if (!is.null(covariates) && length(covariates) > 0) {
+      if (is.null(sample_meta)) {
+        stop("calc_type = 'eb_beta_bin' with covariates requires 'sample_meta' ",
+             "(a data.frame with 'sample_name' plus the covariate column(s)).")
+      }
+      covariate_cols <- as.character(covariates)
+      miss <- setdiff(c("sample_name", covariate_cols), colnames(sample_meta))
+      if (length(miss) > 0) {
+        stop("sample_meta is missing required column(s): ",
+             paste(miss, collapse = ", "), ".")
+      }
+    }
+
+    # Join numeric covariates onto the per-sample input.
+    if (length(covariate_cols) > 0) {
+      meta <- as.data.frame(sample_meta)[, c("sample_name", covariate_cols), drop = FALSE]
+      for (cc in covariate_cols) meta[[cc]] <- as.numeric(meta[[cc]])
+      DBI::dbExecute(con, "DROP TABLE IF EXISTS _eb_sample_meta")
+      DBI::dbWriteTable(con, "_eb_sample_meta", meta, temporary = TRUE)
+      in_dat <- in_dat |>
+        dplyr::left_join(dplyr::tbl(con, "_eb_sample_meta"), by = "sample_name")
+    }
+
+    group_vars <- setdiff(colnames(in_dat),
+                          c("sample_name", "exp_group", "num_calls", "mod_counts",
+                            "num_sites", "_rho_shrunk", covariate_cols))
+
+    # Pass 1 (SQL): per-locus MoM dispersion -> median prior -> shrinkage.
+    in_dat_eb <- .eb_shrunk_dispersion(in_dat, group_vars, df_prior = eb_df_prior)
+
+    # Pass 2 (R): fixed-rho beta-binomial GLM LRT, streamed by chromosome.
+    .calc_diff_eb_run(mod_db, in_dat_eb, con, mod_diff_table, mod_type,
+                      group_vars, covariate_cols, n_cores = n_cores)
+
+    DBI::dbExecute(con, "DROP TABLE IF EXISTS _eb_disp")
+    DBI::dbExecute(con, "DROP TABLE IF EXISTS _eb_sample_meta")
+  } else if (calc_type %in% names(indb_lazy)) {
     result  <- indb_lazy[[calc_type]](in_dat) |>
       dplyr::rename_with(~ gsub("^mod", mod_type, .x))
     raw_sql <- as.character(dbplyr::sql_render(result))

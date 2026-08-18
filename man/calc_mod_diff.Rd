@@ -18,7 +18,10 @@ calc_mod_diff(
   min_cov_group = NULL,
   n_cores = 1L,
   overwrite = TRUE,
-  call_type = NULL
+  call_type = NULL,
+  covariates = NULL,
+  sample_meta = NULL,
+  eb_df_prior = 10
 )
 }
 \arguments{
@@ -40,22 +43,31 @@ Default is "mh" for methylation/hydroxymethylation. Other codes include
   Bare numeric codes are automatically prefixed with "m_".}
 
 \item{calc_type}{A string specifying the statistical method to use.
-Options: \code{"wilcox"}, \code{"beta_bin"}, \code{"fast_fisher"}, \code{"r_fisher"},
-\code{"log_reg"}, \code{"welch_t"}, \code{"prop_z"}, \code{"quasi_bin"}.
-Default is \code{NULL}, in which case:
-\itemize{
-  \item \code{"wilcox"} if both groups have >= 5 samples
-  \item \code{"fast_fisher"} if either group has fewer than 5 samples
-}
-\strong{Fully in DuckDB} (closed form, no R, ignore \code{n_cores}):
-\code{"wilcox"} (rank-sum), \code{"welch_t"} (per-sample Welch t-test),
-\code{"prop_z"} (pooled two-proportion z / chi-square), and \code{"quasi_bin"}
-(overdispersion-corrected proportion test that approximates \code{beta_bin}).
-\strong{R-backed} (per-locus statistics in R, processed one chromosome at a
-time and optionally parallelised with \code{n_cores}): \code{"fast_fisher"},
-\code{"r_fisher"}, \code{"log_reg"}, and \code{"beta_bin"} (exact
-beta-binomial likelihood-ratio test). Peak memory is bounded to a single
-chromosome regardless of method.}
+  Options: \code{"wilcox"}, \code{"beta_bin"}, \code{"fast_fisher"}, \code{"r_fisher"},
+  \code{"log_reg"}, \code{"welch_t"}, \code{"prop_z"}, \code{"quasi_bin"}.
+  Default is \code{NULL}, in which case:
+  \itemize{
+    \item \code{"wilcox"} if both groups have >= 5 samples
+    \item \code{"fast_fisher"} if either group has fewer than 5 samples
+  }
+  \strong{Fully in DuckDB} (closed form, no R, ignore \code{n_cores}):
+  \code{"wilcox"} (rank-sum), \code{"welch_t"} (per-sample Welch t-test),
+  \code{"prop_z"} (pooled two-proportion z / chi-square), and \code{"quasi_bin"}
+  (overdispersion-corrected proportion test that approximates \code{beta_bin}).
+  \strong{R-backed} (per-locus statistics in R, processed one chromosome at a
+  time and optionally parallelised with \code{n_cores}): \code{"fast_fisher"},
+  \code{"r_fisher"}, \code{"log_reg"}, \code{"beta_bin"} (exact
+  beta-binomial likelihood-ratio test), and \code{"eb_beta_bin"} (empirical-Bayes
+  beta-binomial). Peak memory is bounded to a single chromosome regardless of method.
+
+  \code{"eb_beta_bin"} is a \strong{hybrid}: the per-locus dispersion is estimated
+  by method-of-moments, shrunk toward the genome-wide median (empirical Bayes), and
+  computed entirely in DuckDB SQL; the likelihood-ratio test then runs a
+  logit-link beta-binomial GLM per locus in R with the dispersion \emph{held fixed}
+  at the shrunk value (only the mean coefficients are optimised). This stabilises
+  small-sample inference relative to \code{"quasi_bin"} (noisy dispersion floored at
+  1) and \code{"beta_bin"} (dispersion estimated freely per locus), and supports
+  covariate adjustment via \code{covariates} / \code{sample_meta}.}
 
 \item{min_sites}{Minimum number of distinct modification sites (e.g., CpGs)
 required per sample within a window. Windows where any sample has fewer
@@ -97,6 +109,22 @@ Uses \code{parallel::mclapply} (no effect on Windows).}
 \item{overwrite}{If TRUE and output_table exists, it is dropped before writing.}
 
 \item{call_type}{Deprecated. Use \code{input_table} instead.}
+
+\item{covariates}{Character vector of covariate column names to adjust for in the
+\code{"eb_beta_bin"} GLM (e.g. \code{"age"}). The full model is
+intercept + group + covariates and the null drops the group term. Values are
+taken from \code{sample_meta} and coerced to numeric. Default \code{NULL}
+(group-only test). Ignored by all other \code{calc_type}s.}
+
+\item{sample_meta}{Data frame with a \code{sample_name} column plus one column per
+entry in \code{covariates}, giving per-sample covariate values. Required when
+\code{covariates} is supplied for \code{"eb_beta_bin"}. Default \code{NULL}.}
+
+\item{eb_df_prior}{Prior weight (pseudo-sample count) for the empirical-Bayes
+dispersion shrinkage in \code{"eb_beta_bin"}:
+\eqn{\tilde\rho = (\hat\rho\, s + \rho_{prior}\, d_0)/(s + d_0)} with
+\eqn{d_0 = } \code{eb_df_prior}. Larger values shrink harder toward the
+genome-wide median. Default \code{10}.}
 }
 \value{
 Invisibly returns the updated \code{"mod_db"} object with \code{current_table} set to

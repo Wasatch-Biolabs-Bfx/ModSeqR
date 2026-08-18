@@ -193,6 +193,111 @@
 # ===========================================================================
 # Likelihood-ratio test for one locus
 # ===========================================================================
+# ===========================================================================
+# Empirical-Bayes beta-binomial GLM with FIXED dispersion (calc_type = "eb_beta_bin")
+# ===========================================================================
+# These power the EB path (see calc_diff_eb.R). Unlike .bb_loglik / .bb_fit_*,
+# the dispersion `rho` (intra-class correlation, = phi above) is supplied FIXED
+# at the empirical-Bayes shrunk value and only the mean coefficients of a
+# logit-link GLM are optimised: logit(mu_i) = X_i^T beta, with per-sample
+#   alpha_i = mu_i (1 - rho) / rho,   beta_i = (1 - mu_i)(1 - rho) / rho.
+# Matches FerruMod ModDiff's calc_mod_diff_eb.
+
+# Fixed-rho beta-binomial log-likelihood for a GLM mean (vectorised over samples)
+.bb_loglik_glm <- function(x, n, coef, X, rho)
+{
+  eta <- as.numeric(X %*% coef)
+  mu  <- stats::plogis(eta)
+  mu  <- pmax(pmin(mu, 1 - 1e-9), 1e-9)
+  rho <- min(max(rho, 1e-6), 1 - 1e-6)
+
+  a <- mu * (1 - rho) / rho
+  b <- (1 - mu) * (1 - rho) / rho
+
+  sum(lchoose(n, x) + lbeta(x + a, n - x + b) - lbeta(a, b))
+}
+
+# Fit the GLM coefficients with rho held fixed. Warm-start from a weighted
+# binomial GLM (read counts as weights), then refine under the beta-binomial
+# likelihood with BOX-CONSTRAINED L-BFGS-B.
+#
+# The coefficients are bounded to +/-`.BB_COEF_BOUND` (logit scale). This is
+# essential: .bb_loglik_glm clamps mu to [1e-9, 1-1e-9], so the log-likelihood
+# is FLAT once any fitted mu saturates. An unbounded optimiser (BFGS) can wander
+# onto that plateau, "converge" (zero gradient) at a garbage coefficient like
+# -386, and report a far-too-low loglik -- which, for a nested null model,
+# inflates the LRT to spurious p ~ 1e-200. Bounding at +/-15 keeps every fitted
+# mu inside (3e-7, 1-3e-7) -- well clear of the clamp -- so the surface stays
+# smooth and the fit lands at the true optimum near the glm.fit warm start.
+.BB_COEF_BOUND <- 15
+
+.bb_fit_glm <- function(x, n, X, rho)
+{
+  np <- ncol(X)
+  lo <- rep(-.BB_COEF_BOUND, np); hi <- rep(.BB_COEF_BOUND, np)
+
+  start <- tryCatch({
+    fit0 <- suppressWarnings(
+      stats::glm.fit(X, x / pmax(n, 1), weights = pmax(n, 1),
+                     family = stats::binomial()))
+    cf <- fit0$coefficients
+    cf[!is.finite(cf)] <- 0
+    cf
+  }, error = function(e) rep(0, np))
+  start <- pmin(pmax(start, lo), hi)
+
+  neg_ll <- function(par) -.bb_loglik_glm(x, n, par, X, rho)
+
+  fit <- tryCatch(
+    stats::optim(start, neg_ll, method = "L-BFGS-B", lower = lo, upper = hi),
+    error = function(e) tryCatch(
+      stats::optim(start, neg_ll, method = "Nelder-Mead"),
+      error = function(e2) list(par = start, value = neg_ll(start),
+                                convergence = 1)))
+
+  # Guard against a fallback (or a pathological step) returning a worse fit than
+  # the warm start: never report a loglik below the start's.
+  start_nll <- neg_ll(start)
+  if (!is.finite(fit$value) || fit$value > start_nll) {
+    fit$par <- start; fit$value <- start_nll
+  }
+  list(coef = fit$par, loglik = -fit$value, convergence = fit$convergence)
+}
+
+# LRT for the group effect at one locus, dispersion fixed at `rho`.
+# `grp` is a 0/1 case indicator; `covmat` is a (samples x covariates) numeric
+# matrix or NULL. Full model = intercept + group + covariates; null drops group.
+.eb_bb_lrt <- function(x, n, grp, covmat, rho)
+{
+  cov_ok <- if (is.null(covmat)) rep(TRUE, length(x)) else
+    rowSums(!is.finite(covmat)) == 0
+  ok <- is.finite(x) & is.finite(n) & n > 0 & is.finite(grp) & cov_ok
+
+  na_out <- list(p_val = NA_real_, coef_group = NA_real_)
+  if (sum(ok) < 3) return(na_out)
+  grp_ok <- grp[ok]
+  if (length(unique(grp_ok)) < 2) return(na_out)
+  if (is.na(rho) || rho <= 0 || rho >= 1) return(na_out)
+
+  x_ok <- x[ok]; n_ok <- n[ok]
+  cov_ok_mat <- if (is.null(covmat)) NULL else covmat[ok, , drop = FALSE]
+
+  X_null <- cbind(1, cov_ok_mat)
+  X_full <- cbind(1, grp_ok, cov_ok_mat)
+  # Need more samples than parameters for a meaningful fit.
+  if (nrow(X_full) <= ncol(X_full)) return(na_out)
+
+  null_fit <- .bb_fit_glm(x_ok, n_ok, X_null, rho)
+  full_fit <- .bb_fit_glm(x_ok, n_ok, X_full, rho)
+
+  lr <- max(2 * (full_fit$loglik - null_fit$loglik), 0)
+  list(
+    p_val      = stats::pchisq(lr, df = 1, lower.tail = FALSE),
+    coef_group = full_fit$coef[2]   # X_full col 2 is the group indicator
+  )
+}
+
+
 .bb_lrt <- function(x_case, n_case, x_ctrl, n_ctrl)
 {
   # If all counts are zero on either side, can't test
@@ -283,4 +388,70 @@
   dat <- dplyr::collect(slim)
   if (nrow(dat) == 0) return(data.frame())
   .run_lrt(dat)
+}
+
+
+# ===========================================================================
+# Main entry point for the empirical-Bayes path: .calc_diff_eb_betabin()
+#
+# Mirrors .calc_diff_betabin() but runs the fixed-rho GLM LRT (.eb_bb_lrt). The
+# input slice carries the per-locus shrunk dispersion in `_rho_shrunk` (added by
+# .eb_shrunk_dispersion, constant within a locus) and any covariate columns.
+# Output schema matches beta_bin (plus `coef_group`) so collapse_mod_windows()
+# works unchanged. Called per chromosome by .calc_diff_eb_run() (calc_diff_eb.R).
+# ===========================================================================
+.calc_diff_eb_betabin <- function(in_dat, group_vars, covariate_cols = character(0))
+{
+  needed <- c(group_vars, "sample_name", "exp_group", "num_calls", "mod_counts",
+              "_rho_shrunk", covariate_cols)
+  slim <- dplyr::select(in_dat, dplyr::any_of(needed))
+
+  dat <- dplyr::collect(slim)
+  if (nrow(dat) == 0) return(data.frame())
+
+  dat |>
+    dplyr::group_by(dplyr::across(dplyr::all_of(group_vars))) |>
+    dplyr::summarise(
+      num_samples_case    = sum(exp_group == "case"),
+      num_samples_control = sum(exp_group == "control"),
+
+      num_calls_case     = sum(num_calls[exp_group == "case"],    na.rm = TRUE),
+      num_calls_control  = sum(num_calls[exp_group == "control"], na.rm = TRUE),
+
+      mod_counts_case    = sum(mod_counts[exp_group == "case"],    na.rm = TRUE),
+      mod_counts_control = sum(mod_counts[exp_group == "control"], na.rm = TRUE),
+
+      mod_frac_case = mean(
+        mod_counts[exp_group == "case"] / pmax(num_calls[exp_group == "case"], 1),
+        na.rm = TRUE),
+      mod_frac_control = mean(
+        mod_counts[exp_group == "control"] / pmax(num_calls[exp_group == "control"], 1),
+        na.rm = TRUE),
+
+      meth_diff = mean(
+        mod_counts[exp_group == "case"] / pmax(num_calls[exp_group == "case"], 1),
+        na.rm = TRUE) -
+        mean(
+          mod_counts[exp_group == "control"] / pmax(num_calls[exp_group == "control"], 1),
+          na.rm = TRUE),
+
+      {
+        x   <- mod_counts
+        n   <- num_calls
+        grp <- as.integer(exp_group == "case")
+        rho <- `_rho_shrunk`[1]
+        covmat <- if (length(covariate_cols) > 0)
+          as.matrix(dplyr::pick(dplyr::all_of(covariate_cols))) else NULL
+
+        res <- .eb_bb_lrt(x, n, grp, covmat, rho)
+
+        data.frame(
+          overdispersion = rho,
+          coef_group     = res$coef_group,
+          p_val          = res$p_val
+        )
+      },
+
+      .groups = "drop"
+    )
 }

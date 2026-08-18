@@ -1,3 +1,32 @@
+# ModSeqR v1.3.2 Release Notes
+
+---
+
+## New statistical method: empirical-Bayes beta-binomial (`calc_type = "eb_beta_bin"`)
+
+- **`calc_mod_diff(calc_type = "eb_beta_bin")`** adds an empirical-Bayes beta-binomial
+  differential test, ported from the approach in FerruMod's `ModDiff`. It addresses the
+  small-sample failure modes of the existing tests: `quasi_bin`'s per-locus dispersion is
+  noisy and floored at 1 (anti-conservative; produced false-positive DMRs), while `beta_bin`
+  estimates the dispersion freely per locus (also noisy at low replication).
+- **How it works (hybrid SQL + R).** Pass 1 runs entirely in DuckDB SQL: per-locus
+  method-of-moments dispersion `rho^` (intra-class correlation), a genome-wide **median**
+  prior, and shrinkage `rho~ = (rho^ * s + rho_prior * d0) / (s + d0)` (`d0 = eb_df_prior`,
+  default 10). Pass 2 runs a logit-link beta-binomial GLM likelihood-ratio test per locus in
+  R with the dispersion **held fixed** at `rho~`, so only the mean coefficients are optimised
+  (warm-started from a weighted binomial GLM). Uses the existing per-chromosome streaming and
+  `n_cores` parquet-parallel machinery; peak memory bounded to one chromosome.
+- **Covariate adjustment.** New `covariates` (column names) and `sample_meta` (data frame:
+  `sample_name` + covariate columns) arguments fit the full model intercept + group +
+  covariates vs a null dropping the group term — e.g. adjust for age. New `eb_df_prior`
+  controls shrinkage strength. Output schema matches `beta_bin` (adds `overdispersion` = `rho~`
+  and `coef_group`), so `collapse_mod_windows()` works unchanged.
+- Also adds `min_cov_sample`/`min_cov_group` coverage-ratio filters to `calc_mod_diff()`
+  (ported from `main`, wired through the memory-safe per-chromosome-streaming architecture
+  introduced in v1.2.1 and the parallel-worker path).
+
+---
+
 # ModSeqR v1.3.1 Release Notes
 
 ---
