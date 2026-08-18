@@ -19,6 +19,12 @@ reference:
       - make_mod_archive
       - make_mod_db
 
+  - title: "Connection Management"
+    desc: "Open and close persistent connections to an existing database"
+    contents:
+      - connect_mod_db
+      - disconnect_mod_db
+
   - title: "Summarize Data"
     desc: "Summarize methylation data at different resolutions"
     contents:
@@ -53,6 +59,9 @@ reference:
       - get_mod_cpg_count
       - get_mod_stats
       - get_mod_table
+      - get_mod_result
+      - get_mod_tablelist
+      - peek_mod_table
       - export_mod_table
       - remove_mod_table
       - rename_mod_samples
