@@ -2,8 +2,8 @@
 
 # ModSeqR
 
-## Version 1.2.1
-**(Updated May 20th 2026)**
+## Version 1.3.1
+**(Updated June 16th 2026)**
 
 **Publication:** If you use ModSeqR in your research, please cite our paper in *BMC Genomics*:  
 [ModSeqR: An R package for managing direct whole methylome sequencing data](https://link.springer.com/article/10.1186/s12864-026-12655-5)
@@ -41,8 +41,8 @@ If your sequencing data is coming from [Wasatch Biolabs](https://www.wasatchbiol
 These files contain methylation calls from a third-generation sequencing run. 
 Typically, one .ch3 file is created per sample, and each file compresses large amounts of raw data into a usable intermediate format.
 
-If .ch3 files were not provided, you can build them yourself using the make_ch3_archive() function in this package. 
-This takes a tab-delimited file of methylation calls (such as the output of modkit extract-calls) and compresses it into .ch3 format for downstream use.
+If .ch3 files were not provided, you can build them yourself using the `make_ch3_archive()` function in this package. 
+This takes a tab-delimited file of methylation calls (such as the output of `modkit extract-calls`) and compresses it into .ch3 format for downstream use.
 
 ```r
 # Convert a calls.tsv file to compressed .ch3 format
@@ -232,7 +232,7 @@ See the full license text in the [LICENSE](./LICENSE) file included with this re
 
 If you have any suggestions or requested features, please email Jonathon Hill at jhill@byu.edu.
 
-## Citation
+
 
 If you use ModSeqR in your research, please cite:
 

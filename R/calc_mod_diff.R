@@ -43,6 +43,19 @@
 #'   denominator. Loci where either group has no covered samples are always removed
 #'   (the test is undefined there) regardless of this setting. Default is
 #'   \code{NULL}, which applies only the always-on empty-group removal (min 1 per group).
+#' @param min_cov_sample Minimum average coverage per modification site,
+#'   estimated as \code{num_calls / num_sites}, required for each INDIVIDUAL
+#'   SAMPLE in a window. Sample-window rows falling below this threshold are
+#'   dropped before testing (other samples in the same window are unaffected).
+#'   Only applies when the input table contains both \code{num_calls} and
+#'   \code{num_sites} columns. Default is \code{NULL} (no filtering).
+#' @param min_cov_group Minimum average coverage per modification site,
+#'   estimated as \code{sum(num_calls) / sum(num_sites)} pooled across all
+#'   samples within a GROUP (cases or controls), for a given window. If
+#'   either group's pooled coverage falls below this threshold for a window,
+#'   the entire window is dropped (all samples, both groups). Only applies
+#'   when the input table contains both \code{num_calls} and \code{num_sites}
+#'   columns. Default is \code{NULL} (no filtering).
 #' @param n_cores Number of CPU cores for the R-backed tests (\code{fast_fisher},
 #'   \code{r_fisher}, \code{beta_bin}, \code{log_reg}). When > 1, the genome is
 #'   split into balanced position chunks and tested in parallel via a fork-based
@@ -88,7 +101,7 @@
 #' @importFrom DBI dbConnect dbDisconnect dbExistsTable dbRemoveTable dbExecute dbWriteTable dbGetQuery dbListFields
 #' @importFrom duckdb duckdb
 #' @importFrom parallel makeCluster stopCluster clusterCall parLapply
-#' @importFrom dplyr tbl select any_of mutate case_when filter pull summarize inner_join join_by rename_with collect arrange distinct
+#' @importFrom dplyr tbl select any_of mutate case_when filter pull summarize inner_join anti_join join_by rename_with collect arrange distinct
 #' @importFrom dbplyr sql_render remote_con
 #' @importFrom glue glue
 #' @importFrom stats fisher.test p.adjust dhyper phyper glm.fit pchisq optim plogis qlogis var
@@ -104,6 +117,8 @@ calc_mod_diff <- function(mod_db,
                           calc_type = NULL,
                           min_sites = NULL,
                           min_samples = NULL,
+                          min_cov_sample = NULL,
+                          min_cov_group = NULL,
                           n_cores = 1L,
                           overwrite = TRUE,
                           call_type = NULL)
@@ -229,6 +244,122 @@ calc_mod_diff <- function(mod_db,
       }
     }
   }
+  # Filter individual sample-windows with insufficient per-site coverage
+  if (!is.null(min_cov_sample) && min_cov_sample > 0) {
+    if (!"num_sites" %in% cols) {
+      warning("min_cov_sample was set but '", input_table,
+              "' has no 'num_sites' column. Filter skipped.")
+    } else {
+      n_before <- in_dat |> dplyr::count() |> dplyr::pull(n)
+      
+      in_dat <- in_dat |>
+        dplyr::filter(num_sites > 0) |>
+        dplyr::mutate(cov_per_site = num_calls / num_sites) |>
+        dplyr::filter(cov_per_site >= min_cov_sample)
+      
+      n_after <- in_dat |> dplyr::count() |> dplyr::pull(n)
+      
+      message(
+        "Sample coverage filter (min_cov_sample = ", min_cov_sample, "): ",
+        format(n_after, big.mark = ","), " of ",
+        format(n_before, big.mark = ","), " sample-windows passed ",
+        "(dropped ", format(n_before - n_after, big.mark = ","), ")."
+      )
+      
+      if (n_after == 0) {
+        stop("All windows were removed by the min_cov_sample filter. ",
+             "Try a lower value (current: ", min_cov_sample, ").")
+      }
+      
+      remaining_samples <- in_dat |>
+        dplyr::distinct(sample_name, exp_group) |>
+        dplyr::collect()
+      
+      missing_cases <- cases[!cases %in% remaining_samples$sample_name]
+      missing_ctrls <- controls[!controls %in% remaining_samples$sample_name]
+      
+      if (length(missing_cases) > 0) {
+        warning("min_cov_sample filter removed ALL windows for case sample(s): ",
+                paste(missing_cases, collapse = ", "),
+                ". Consider lowering min_cov_sample.")
+      }
+      if (length(missing_ctrls) > 0) {
+        warning("min_cov_sample filter removed ALL windows for control sample(s): ",
+                paste(missing_ctrls, collapse = ", "),
+                ". Consider lowering min_cov_sample.")
+      }
+    }
+  }
+  
+  # Filter entire windows with insufficient POOLED per-group coverage
+  if (!is.null(min_cov_group) && min_cov_group > 0) {
+    if (!"num_sites" %in% cols) {
+      warning("min_cov_group was set but '", input_table,
+              "' has no 'num_sites' column. Filter skipped.")
+    } else {
+      # Genomic-unit key columns present in this table (region_name and/or chrom/start/end)
+      window_key <- intersect(colnames(in_dat), c("region_name", "chrom", "start", "end"))
+      
+      if (length(window_key) == 0) {
+        warning("min_cov_group was set but no window/region key columns ",
+                "(region_name / chrom+start+end) were found in '", call_type,
+                "'. Filter skipped.")
+      } else {
+        n_before <- in_dat |> dplyr::count() |> dplyr::pull(n)
+        
+        # Pool coverage across all samples within each group, per window
+        group_cov <- in_dat |>
+          dplyr::filter(num_sites > 0) |>
+          dplyr::summarize(
+            .by = c(exp_group, dplyr::all_of(window_key)),
+            num_calls_grp = sum(num_calls, na.rm = TRUE),
+            num_sites_grp = sum(num_sites, na.rm = TRUE)
+          ) |>
+          dplyr::mutate(cov_per_site_grp = num_calls_grp / num_sites_grp)
+        
+        # Windows where EITHER group's pooled coverage misses the bar
+        failing_windows <- group_cov |>
+          dplyr::filter(cov_per_site_grp < min_cov_group) |>
+          dplyr::distinct(dplyr::across(dplyr::all_of(window_key)))
+        
+        # Drop those windows entirely (all samples, both groups)
+        in_dat <- in_dat |>
+          dplyr::anti_join(failing_windows, by = window_key)
+        
+        n_after <- in_dat |> dplyr::count() |> dplyr::pull(n)
+        
+        message(
+          "Group coverage filter (min_cov_group = ", min_cov_group, "): ",
+          format(n_after, big.mark = ","), " of ",
+          format(n_before, big.mark = ","), " sample-windows passed ",
+          "(dropped ", format(n_before - n_after, big.mark = ","), ")."
+        )
+        
+        if (n_after == 0) {
+          stop("All windows were removed by the min_cov_group filter. ",
+               "Try a lower value (current: ", min_cov_group, ").")
+        }
+        
+        remaining_samples <- in_dat |>
+          dplyr::distinct(sample_name, exp_group) |>
+          dplyr::collect()
+        
+        missing_cases <- cases[!cases %in% remaining_samples$sample_name]
+        missing_ctrls <- controls[!controls %in% remaining_samples$sample_name]
+        
+        if (length(missing_cases) > 0) {
+          warning("min_cov_group filter removed ALL windows for case sample(s): ",
+                  paste(missing_cases, collapse = ", "),
+                  ". Consider lowering min_cov_group.")
+        }
+        if (length(missing_ctrls) > 0) {
+          warning("min_cov_group filter removed ALL windows for control sample(s): ",
+                  paste(missing_ctrls, collapse = ", "),
+                  ". Consider lowering min_cov_group.")
+        }
+      }
+    }
+  }
 
   # Check sample names present
   all_samples <- unique(dplyr::pull(in_dat, sample_name))
@@ -304,6 +435,7 @@ calc_mod_diff <- function(mod_db,
     if (use_parallel) {
       .calc_diff_stream_parallel(mod_db, input_table, mod_counts_col,
                                  cases, controls, min_sites,
+                                 min_cov_sample, min_cov_group,
                                  con, mod_diff_table, mod_type,
                                  calc_type, n_cores)
     } else {
@@ -454,10 +586,13 @@ calc_mod_diff <- function(mod_db,
 
 ## Rebuild the differential input lazy tbl from scratch on a given connection.
 ## Mirrors the in_dat construction in calc_mod_diff() (column select, exp_group
-## labelling, optional min_sites filter) so a parallel worker -- which has its
-## own connection and cannot inherit the parent's lazy tbl -- reconstructs an
-## identical view. Kept side-effect free (no messaging).
-.build_diff_in_dat <- function(con, input_table, mod_counts_col, cases, controls, min_sites)
+## labelling, optional min_sites/min_cov_sample/min_cov_group filters) so a
+## parallel worker -- which has its own connection and cannot inherit the
+## parent's lazy tbl -- reconstructs an identical view. Kept side-effect free
+## (no messaging; calc_mod_diff() already reported these filters' effect on
+## the serial in_dat, which uses the same source table and predicates).
+.build_diff_in_dat <- function(con, input_table, mod_counts_col, cases, controls,
+                               min_sites, min_cov_sample = NULL, min_cov_group = NULL)
 {
   cols <- colnames(dplyr::tbl(con, input_table))
   d <- dplyr::tbl(con, input_table) |>
@@ -479,6 +614,34 @@ calc_mod_diff <- function(mod_db,
   if (!is.null(min_sites) && min_sites > 0 && "num_sites" %in% cols) {
     d <- dplyr::filter(d, num_sites >= min_sites)
   }
+
+  if (!is.null(min_cov_sample) && min_cov_sample > 0 && "num_sites" %in% cols) {
+    d <- d |>
+      dplyr::filter(num_sites > 0) |>
+      dplyr::mutate(cov_per_site = num_calls / num_sites) |>
+      dplyr::filter(cov_per_site >= min_cov_sample)
+  }
+
+  if (!is.null(min_cov_group) && min_cov_group > 0 && "num_sites" %in% cols) {
+    window_key <- intersect(colnames(d), c("region_name", "chrom", "start", "end"))
+    if (length(window_key) > 0) {
+      group_cov <- d |>
+        dplyr::filter(num_sites > 0) |>
+        dplyr::summarize(
+          .by = c(exp_group, dplyr::all_of(window_key)),
+          num_calls_grp = sum(num_calls, na.rm = TRUE),
+          num_sites_grp = sum(num_sites, na.rm = TRUE)
+        ) |>
+        dplyr::mutate(cov_per_site_grp = num_calls_grp / num_sites_grp)
+
+      failing_windows <- group_cov |>
+        dplyr::filter(cov_per_site_grp < min_cov_group) |>
+        dplyr::distinct(dplyr::across(dplyr::all_of(window_key)))
+
+      d <- d |> dplyr::anti_join(failing_windows, by = window_key)
+    }
+  }
+
   d
 }
 
@@ -497,12 +660,14 @@ calc_mod_diff <- function(mod_db,
 ## comfortably under 1/n_cores for typical core counts, so load stays balanced.
 .calc_diff_stream_parallel <- function(mod_db, input_table, mod_counts_col,
                                        cases, controls, min_sites,
+                                       min_cov_sample, min_cov_group,
                                        con, out_table, mod_type, calc_type, n_cores)
 {
   base_tmp <- mod_db$config$temp_dir %||% file.path(tempdir(), "modseqr_duckdb_tmp")
 
   in_dat <- .build_diff_in_dat(con, input_table, mod_counts_col,
-                               cases, controls, min_sites)
+                               cases, controls, min_sites,
+                               min_cov_sample, min_cov_group)
   if (!"chrom" %in% colnames(in_dat)) {
     # No chromosome column to partition on: fall back to serial.
     per_chrom_fun <- switch(calc_type,

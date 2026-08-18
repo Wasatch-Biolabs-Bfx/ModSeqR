@@ -14,6 +14,8 @@ calc_mod_diff(
   calc_type = NULL,
   min_sites = NULL,
   min_samples = NULL,
+  min_cov_sample = NULL,
+  min_cov_group = NULL,
   n_cores = 1L,
   overwrite = TRUE,
   call_type = NULL
@@ -68,6 +70,21 @@ dropped \emph{before} BH correction so they do not inflate the multiple-testing
 denominator. Loci where either group has no covered samples are always removed
 (the test is undefined there) regardless of this setting. Default is
 \code{NULL}, which applies only the always-on empty-group removal (min 1 per group).}
+
+\item{min_cov_sample}{Minimum average coverage per modification site,
+estimated as \code{num_calls / num_sites}, required for each INDIVIDUAL
+SAMPLE in a window. Sample-window rows falling below this threshold are
+dropped before testing (other samples in the same window are unaffected).
+Only applies when the input table contains both \code{num_calls} and
+\code{num_sites} columns. Default is \code{NULL} (no filtering).}
+
+\item{min_cov_group}{Minimum average coverage per modification site,
+estimated as \code{sum(num_calls) / sum(num_sites)} pooled across all
+samples within a GROUP (cases or controls), for a given window. If
+either group's pooled coverage falls below this threshold for a window,
+the entire window is dropped (all samples, both groups). Only applies
+when the input table contains both \code{num_calls} and \code{num_sites}
+columns. Default is \code{NULL} (no filtering).}
 
 \item{n_cores}{Number of CPU cores for the R-backed tests (\code{fast_fisher},
 \code{r_fisher}, \code{beta_bin}, \code{log_reg}). When > 1, the genome is
